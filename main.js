@@ -1,13 +1,16 @@
-const { app, BrowserWindow, globalShortcut } = require('electron');
+const { app, BrowserWindow, globalShortcut, screen } = require('electron');
 const path = require('path');
 const isDev = process.env.NODE_ENV === 'development';
 
 function createWindow() {
+  // Obtenemos las dimensiones de la pantalla principal
+  const { width, height } = screen.getPrimaryDisplay().workAreaSize;
+
   const win = new BrowserWindow({
-    width: 600,
-    height: 400,
-    frame: false,
-    transparent: true,
+    width: width, // Ancho completo
+    height: height, // Alto completo
+    frame: false,        // <-- Vuelve a 'false'
+    transparent: true,     // <-- Vuelve a 'true'
     alwaysOnTop: true,
     resizable: false,
     webPreferences: {
@@ -16,6 +19,7 @@ function createWindow() {
     },
   });
 
+  // La ventana ignorará los clics por defecto
   win.setIgnoreMouseEvents(true, { forward: true });
 
   const urlToLoad = isDev
@@ -24,13 +28,16 @@ function createWindow() {
 
   win.loadURL(urlToLoad);
 
-  // Atajos para la manejabilidad
+  // Atajo para entrar en "Modo Edición" (puedes hacer clic en el HUD)
   globalShortcut.register('CommandOrControl+F1', () => {
+    console.log('Modo Edición Activado: Ahora puedes hacer clic y mover los widgets.');
     win.setIgnoreMouseEvents(false);
     win.focus();
   });
   
+  // Atajo para volver a "Modo Juego" (los clics atraviesan la ventana)
   globalShortcut.register('CommandOrControl+F2', () => {
+    console.log('Modo Juego Activado: Los clics pasarán al juego.');
     win.setIgnoreMouseEvents(true, { forward: true });
   });
 
@@ -39,9 +46,7 @@ function createWindow() {
   }
 }
 
-app.whenReady().then(() => {
-  createWindow();
-});
+app.whenReady().then(createWindow);
 
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') {
