@@ -2,10 +2,10 @@
 import Draggable from 'react-draggable';
 import { useState, useEffect } from 'react';
 import { FaLock, FaUnlock } from 'react-icons/fa';
+import { useScale } from '@/context/ScaleContext';
 
-// Hook para guardar la posición en localStorage
 const useDraggablePosition = (widgetId) => {
-  const [position, setPosition] = useState({ x: 50, y: 50 }); // Posición inicial por defecto
+  const [position, setPosition] = useState({ x: 50, y: 50 });
   const [isLoaded, setIsLoaded] = useState(false);
 
   useEffect(() => {
@@ -28,8 +28,9 @@ const useDraggablePosition = (widgetId) => {
 export default function StrategicHUD() {
   const { position, handleStop, isLoaded } = useDraggablePosition('widget-strategy');
   const [isDraggable, setIsDraggable] = useState(true);
+  const { scale } = useScale();
 
-  if (!isLoaded) return null; // No renderizar hasta que la posición se haya cargado
+  if (!isLoaded) return null;
 
   return (
     <Draggable
@@ -38,15 +39,16 @@ export default function StrategicHUD() {
       onStop={handleStop}
       disabled={!isDraggable}
     >
-      <div className="cursor-pointer w-72 bg-lol-blue-dark/80 border-2 border-lol-gold rounded-md text-lol-gold-light shadow-lg backdrop-blur-sm">
-        {/* Barra para arrastrar */}
+      <div
+        className="absolute w-72 origin-top-left bg-lol-blue-dark/10 border-2 border-lol-gold rounded-md text-lol-gold-light shadow-lg backdrop-blur-sm"
+        style={{ transform: `scale(${scale})` }}
+      >
         <div className="drag-handle bg-lol-blue-dark p-2 flex justify-between items-center cursor-move">
           <h3 className="font-bold text-shadow-md">Consejos Estratégicos</h3>
           <button onClick={() => setIsDraggable(!isDraggable)} className="text-lol-gold hover:text-white">
             {isDraggable ? <FaUnlock /> : <FaLock />}
           </button>
         </div>
-        {/* Contenido del widget */}
         <div className="p-4">
           <p>Aquí irán los consejos sobre macro juego, objetivos, rotaciones, etc.</p>
           <div className="mt-2">Ej: Priorizar Dragón Infernal.</div>
