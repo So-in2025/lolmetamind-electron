@@ -1,0 +1,18 @@
+# Dependencias
+node_modules/
+
+# Archivos de build o producción
+dist/
+build/
+
+# Logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Archivos de entorno (contienen secretos y APIs keys!)
+.env
+
+# Archivos del sistema operativo
+.DS_Store
+Thumbs.db
