@@ -10,7 +10,7 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "electron": "cross-env NODE_ENV='development' electron .",
+    "electron": "electron .",
     "electron:dev": "concurrently --kill-others \"npm run dev\" \"wait-on http://localhost:3000 && npm run electron\""
   },
   "dependencies": {

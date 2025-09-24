@@ -1,10 +1,11 @@
 'use client';
 import UnifiedHUD from '@/components/widgets/UnifiedHUD';
+import { ScaleProvider } from '@/context/ScaleContext';
 
 export default function OverlayPage() {
   return (
-    <div className="min-h-screen flex flex-col space-y-4 p-4 bg-transparent">
+    <ScaleProvider>
       <UnifiedHUD />
-    </div>
+    </ScaleProvider>
   );
 }
