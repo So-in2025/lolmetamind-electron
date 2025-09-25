@@ -4,83 +4,55 @@ import { FaLock, FaUnlock } from 'react-icons/fa';
 import { useScale } from '@/context/ScaleContext';
 import { useInteractiveWidget } from '@/hooks/useInteractiveWidget';
 
-// --- FUNCIÓN DE NARRACIÓN MEJORADA CON PRIORIDAD DE VOCES ---
+// Función de narración (opcional, pero la mantenemos)
 const speak = (text) => {
-  if ('speechSynthesis' in window) {
+  if ('speechSynthesis' in window && text) {
     window.speechSynthesis.cancel();
-
     const utterance = new SpeechSynthesisUtterance(text);
-    
-    const getVoicesAndSpeak = () => {
-      const voices = window.speechSynthesis.getVoices();
-      if (voices.length === 0) {
-        window.speechSynthesis.onvoiceschanged = getVoicesAndSpeak;
-        return;
-      }
-
-      const preferredVoice = 
-        voices.find(voice => voice.name.includes('Google') && voice.lang.startsWith('es-')) ||
-        voices.find(voice => voice.name.includes('Helena') && voice.lang === 'es-ES') ||
-        voices.find(voice => voice.name.includes('Microsoft') && voice.lang.startsWith('es-')) ||
-        voices.find(voice => voice.lang.startsWith('es-'));
-
-      if (preferredVoice) {
-        utterance.voice = preferredVoice;
-        utterance.lang = preferredVoice.lang;
-      } else {
-        utterance.lang = 'es-ES';
-      }
-      
-      utterance.rate = 1.1;
-      
-      window.speechSynthesis.speak(utterance);
-    };
-
-    getVoicesAndSpeak();
-    
-  } else {
-    console.log('La síntesis de voz no es soportada en este entorno.');
+    utterance.lang = 'es-ES';
+    utterance.rate = 1.1;
+    window.speechSynthesis.speak(utterance);
   }
 };
-// --- FIN DE LA FUNCIÓN MEJORADA ---
-
 
 export default function RealtimeCoachHUD() {
   const [isDraggable, setIsDraggable] = useState(true);
   const { scale } = useScale();
-  const { position, isLoaded, handleMouseDown } = useInteractiveWidget('widget-coach', { x: 0, y: 450 });
-
-  const [eventMessage, setEventMessage] = useState('Esperando eventos del juego...');
-  const [connectionStatus, setConnectionStatus] = useState('Conectando...');
-
+  const { position, isLoaded, handleMouseDown } = useInteractiveWidget('widget-coach', { x: 0, y: 500 });
+  const [advice, setAdvice] = useState('Iniciando MetaMind...');
+  
   useEffect(() => {
-    // --- NUEVA LÍNEA PARA REPRODUCIR EL MENSAJE INICIAL ---
-    // Usamos un pequeño retraso para darle tiempo a las voces a cargar
-    const initialMessageTimer = setTimeout(() => {
-      speak('Sistema de voz iniciado. Esperando eventos del juego.');
-    }, 500);
-    // --- FIN DE LA NUEVA LÍNEA ---
-
-    const handleStatusUpdate = (event, status) => {
-      setConnectionStatus(status);
-    };
-    window.electronAPI.onWebsocketStatus(handleStatusUpdate);
-
-    const handleNewEvent = (event, data) => {
-      if (data && data.message) {
-        setEventMessage(data.message);
-        speak(data.message);
+    const handleNewEvent = (eventData) => {
+      if (eventData && eventData.message) {
+        console.log("Nuevo evento de coach:", eventData.message);
+        setAdvice(eventData.message);
+        // Opcional: solo narra los consejos importantes, no cada estado
+        // speak(eventData.message); 
       }
     };
-    window.electronAPI.onNewGameEvent(handleNewEvent);
+    
+    // --- CORRECCIÓN CLAVE: Escuchamos el nuevo canal 'new-coach-message' ---
+    const handleNewCoachMessage = (message) => {
+        console.log("Nuevo mensaje de estado/coach:", message);
+        setAdvice(message);
+    };
+
+    if (window.electronAPI) {
+        // Mantenemos el listener de eventos por si el backend los envía directamente
+        window.electronAPI.on('new-game-event', handleNewEvent);
+        // Añadimos el nuevo listener para los mensajes de estado desde main.js
+        window.electronAPI.on('new-coach-message', handleNewCoachMessage);
+    }
+    // --- FIN DE LA CORRECCIÓN ---
 
     return () => {
-      clearTimeout(initialMessageTimer); // Limpiamos el temporizador
-      window.electronAPI.removeAllListeners('websocket-status');
-      window.electronAPI.removeAllListeners('new-game-event');
+      if (window.electronAPI && typeof window.electronAPI.removeAllListeners === 'function') {
+          window.electronAPI.removeAllListeners('new-game-event');
+          window.electronAPI.removeAllListeners('new-coach-message');
+      }
       window.speechSynthesis.cancel();
     };
-  }, []); // El array vacío asegura que esto se ejecute solo una vez
+  }, []);
 
   if (!isLoaded) return null;
 
@@ -104,11 +76,7 @@ export default function RealtimeCoachHUD() {
         </button>
       </div>
       <div className="p-4 relative min-h-[5rem]">
-        <p className="font-bold text-lol-blue-accent text-lg">▶️ {eventMessage}</p>
-        
-        <p className="absolute bottom-1 right-2 text-xs text-lol-grey">
-          {connectionStatus}
-        </p>
+        <p className="font-bold text-lol-blue-accent text-lg">▶ {advice}</p>
       </div>
     </div>
   );

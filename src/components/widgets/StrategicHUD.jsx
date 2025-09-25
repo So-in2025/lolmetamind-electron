@@ -9,21 +9,25 @@ export default function StrategicHUD() {
   const { scale } = useScale();
   const { position, isLoaded, handleMouseDown } = useInteractiveWidget('widget-strategy', { x: 0, y: 250 });
 
-  // Nuevo estado para el mensaje del consejo de estrategia
   const [strategyAdvice, setStrategyAdvice] = useState('Esperando análisis estratégico...');
 
   useEffect(() => {
-    // Escuchamos los nuevos consejos de estrategia
-    const handleNewAdvice = (event, data) => {
-      // Asumimos que la respuesta del backend es algo como { advice: 'Es un buen momento para pushear bot.' }
+    const handleNewAdvice = (data) => {
       if (data && data.advice) {
         setStrategyAdvice(data.advice);
       }
     };
-    window.electronAPI.onNewStrategyAdvice(handleNewAdvice);
+
+    // --- CORRECCIÓN CLAVE: Usar la sintaxis correcta del listener ---
+    if (window.electronAPI) {
+      window.electronAPI.on('new-strategy-advice', handleNewAdvice);
+    }
+    // --- FIN DE LA CORRECCIÓN ---
 
     return () => {
-      window.electronAPI.removeAllListeners('new-strategy-advice');
+      if (window.electronAPI && typeof window.electronAPI.removeAllListeners === 'function') {
+        window.electronAPI.removeAllListeners('new-strategy-advice');
+      }
     };
   }, []);
 
@@ -49,7 +53,7 @@ export default function StrategicHUD() {
         </button>
       </div>
       <div className="p-4">
-        <p className="italic">"{strategyAdvice}"</p>
+        <p>{strategyAdvice}</p>
       </div>
     </div>
   );

@@ -9,21 +9,25 @@ export default function BuildsHUD() {
   const { scale } = useScale();
   const { position, isLoaded, handleMouseDown } = useInteractiveWidget('widget-builds', { x: 0, y: 50 });
   
-  // Nuevo estado para el mensaje del consejo de build
   const [buildAdvice, setBuildAdvice] = useState('Inicia una partida para recibir consejos.');
 
   useEffect(() => {
-    // Escuchamos los nuevos consejos de build
-    const handleNewAdvice = (event, data) => {
-      // Asumimos que la respuesta del backend es algo como { recommendedItem: 'Espada del Rey Arruinado' }
+    const handleNewAdvice = (data) => {
       if (data && data.recommendedItem) {
         setBuildAdvice(`Próximo objeto recomendado: ${data.recommendedItem}`);
       }
     };
-    window.electronAPI.onNewBuildAdvice(handleNewAdvice);
+    
+    // --- CORRECCIÓN CLAVE: Usar la sintaxis correcta del listener ---
+    if (window.electronAPI) {
+      window.electronAPI.on('new-build-advice', handleNewAdvice);
+    }
+    // --- FIN DE LA CORRECCIÓN ---
 
     return () => {
-      window.electronAPI.removeAllListeners('new-build-advice');
+      if (window.electronAPI && typeof window.electronAPI.removeAllListeners === 'function') {
+        window.electronAPI.removeAllListeners('new-build-advice');
+      }
     };
   }, []);
 
@@ -49,7 +53,7 @@ export default function BuildsHUD() {
         </button>
       </div>
       <div className="p-4">
-        <p className="font-semibold">{buildAdvice}</p>
+        <p>{buildAdvice}</p>
       </div>
     </div>
   );
