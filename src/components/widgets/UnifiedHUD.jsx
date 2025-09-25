@@ -9,23 +9,25 @@ export default function UnifiedHUD() {
   const [isEditMode, setIsEditMode] = useState(true);
 
   useEffect(() => {
-    // Escuchamos el evento 'set-edit-mode' que envía main.js a través del preload
-    const handleSetEditMode = (event, value) => {
+    const handleSetEditMode = (value) => {
       setIsEditMode(value);
     };
 
-    // Usamos el API expuesto en el preload script
-    window.electronAPI.onSetEditMode(handleSetEditMode);
+    // --- CORRECCIÓN CLAVE: Usar la sintaxis correcta del listener ---
+    if (window.electronAPI) {
+      window.electronAPI.on('set-edit-mode', handleSetEditMode);
+    }
+    // --- FIN DE LA CORRECCIÓN ---
 
-    // Limpiamos el listener cuando el componente se desmonta
     return () => {
-      window.electronAPI.removeAllListeners('set-edit-mode');
+      if (window.electronAPI && typeof window.electronAPI.removeAllListeners === 'function') {
+        window.electronAPI.removeAllListeners('set-edit-mode');
+      }
     };
   }, []);
 
   return (
     <>
-      {/* El ControlsHUD solo se muestra si isEditMode es true */}
       {isEditMode && <ControlsHUD />}
       
       <BuildsHUD />
