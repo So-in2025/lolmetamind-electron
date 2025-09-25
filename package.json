@@ -4,7 +4,8 @@
   "private": true,
   "description": "Un asistente inteligente en tiempo real para League of Legends.",
   "author": "SO->IN Soluciones informaticas",
-  "main": "main.js",
+  "main": "main.mjs",
+  "type": "module",
   "homepage": "./",
   "scripts": {
     "dev": "next dev",
