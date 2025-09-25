@@ -43,8 +43,8 @@ function createOverlayWindow() {
   }
 
   // Lógica de WebSocket y peticiones
-  const SOCKET_URL = 'wss://lolmetamind.onrender.com';
-  const BACKEND_URL = 'https://lolmetamind.onrender.com';
+  const SOCKET_URL = 'wss://lolmetamind-websockets.onrender.com';
+  const BACKEND_URL = 'https://lolmetamind-dmxt.onrender.com';
   const RIOT_API_URL = 'https://127.0.0.1:2999/liveclientdata/allgamedata';
 
   const socket = io(SOCKET_URL, { transports: ['websocket'], reconnectionAttempts: 5 });
