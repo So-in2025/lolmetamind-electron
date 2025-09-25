@@ -8,7 +8,6 @@ export const useScale = () => useContext(ScaleContext);
 export const ScaleProvider = ({ children }) => {
   const [scale, setScale] = useState(1.0);
 
-  // Cargar la escala guardada al iniciar
   useEffect(() => {
     const savedScale = localStorage.getItem('widgets-scale');
     if (savedScale) {
@@ -16,11 +15,11 @@ export const ScaleProvider = ({ children }) => {
     }
   }, []);
 
-  // Guardar la escala cada vez que cambia
   const updateScale = (newScale) => {
-    const clampedScale = Math.max(0.5, Math.min(2.0, newScale)); // Limita la escala entre 50% y 200%
+    // RANGO AJUSTADO: de 40% a 200%
+    const clampedScale = Math.max(0.4, Math.min(2.0, newScale));
     setScale(clampedScale);
-    localStorage.setItem('widgets-scale', clampedScale);
+    localStorage.setItem('widgets-scale', clampedScale.toString());
   };
 
   const increaseScale = () => {

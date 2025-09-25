@@ -1,59 +1,56 @@
 'use client';
-import Draggable from 'react-draggable';
 import { useState, useEffect } from 'react';
 import { FaLock, FaUnlock } from 'react-icons/fa';
 import { useScale } from '@/context/ScaleContext';
-
-const useDraggablePosition = (widgetId) => {
-  const [position, setPosition] = useState({ x: 0, y: 0 });
-  const [isLoaded, setIsLoaded] = useState(false);
-
-  useEffect(() => {
-    const savedPosition = localStorage.getItem(widgetId);
-    if (savedPosition) {
-      setPosition(JSON.parse(savedPosition));
-    }
-    setIsLoaded(true);
-  }, [widgetId]);
-
-  const handleStop = (e, data) => {
-    const newPosition = { x: data.x, y: data.y };
-    setPosition(newPosition);
-    localStorage.setItem(widgetId, JSON.stringify(newPosition));
-  };
-
-  return { position, handleStop, isLoaded };
-};
+import { useInteractiveWidget } from '@/hooks/useInteractiveWidget';
 
 export default function BuildsHUD() {
-  const { position, handleStop, isLoaded } = useDraggablePosition('widget-builds');
   const [isDraggable, setIsDraggable] = useState(true);
   const { scale } = useScale();
+  const { position, isLoaded, handleMouseDown } = useInteractiveWidget('widget-builds', { x: 0, y: 50 });
+  
+  // Nuevo estado para el mensaje del consejo de build
+  const [buildAdvice, setBuildAdvice] = useState('Inicia una partida para recibir consejos.');
+
+  useEffect(() => {
+    // Escuchamos los nuevos consejos de build
+    const handleNewAdvice = (event, data) => {
+      // Asumimos que la respuesta del backend es algo como { recommendedItem: 'Espada del Rey Arruinado' }
+      if (data && data.recommendedItem) {
+        setBuildAdvice(`Próximo objeto recomendado: ${data.recommendedItem}`);
+      }
+    };
+    window.electronAPI.onNewBuildAdvice(handleNewAdvice);
+
+    return () => {
+      window.electronAPI.removeAllListeners('new-build-advice');
+    };
+  }, []);
 
   if (!isLoaded) return null;
 
   return (
-    <Draggable
-      handle=".drag-handle"
-      position={position}
-      onStop={handleStop}
-      disabled={!isDraggable}
+    <div
+      className="absolute w-96 origin-top-left bg-lol-blue-dark/10 border-2 border-lol-gold rounded-md text-lol-gold-light shadow-lg backdrop-blur-sm"
+      style={{
+        top: `${position.y}px`,
+        left: `${position.x}px`,
+        transform: `scale(${scale})`,
+        cursor: isDraggable ? 'move' : 'default',
+      }}
     >
       <div
-        className="absolute w-72 origin-top-left bg-lol-blue-dark/10 border-2 border-lol-gold rounded-md text-lol-gold-light shadow-lg backdrop-blur-sm"
-        style={{ transform: `scale(${scale})` }}
+        className="bg-lol-blue-dark p-2 flex justify-between items-center"
+        onMouseDown={isDraggable ? handleMouseDown : undefined}
       >
-        <div className="drag-handle bg-lol-blue-dark p-2 flex justify-between items-center cursor-move">
-          <h3 className="font-bold text-shadow-md">Consejos de Build</h3>
-          <button onClick={() => setIsDraggable(!isDraggable)} className="text-lol-gold hover:text-white">
-            {isDraggable ? <FaUnlock /> : <FaLock />}
-          </button>
-        </div>
-        <div className="p-4">
-          <p>Aquí irán los consejos de objetos recomendados...</p>
-          <div className="mt-2">Item 1, Item 2, Item 3</div>
-        </div>
+        <h3 className="font-bold text-shadow-md">Consejos de Build</h3>
+        <button onClick={() => setIsDraggable(!isDraggable)} className="text-lol-gold hover:text-white cursor-pointer">
+          {isDraggable ? <FaUnlock /> : <FaLock />}
+        </button>
       </div>
-    </Draggable>
+      <div className="p-4">
+        <p className="font-semibold">{buildAdvice}</p>
+      </div>
+    </div>
   );
 }

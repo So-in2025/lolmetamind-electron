@@ -14,6 +14,7 @@ export default function UnifiedHUD() {
       setIsEditMode(value);
     };
 
+    // Usamos el API expuesto en el preload script
     window.electronAPI.onSetEditMode(handleSetEditMode);
 
     // Limpiamos el listener cuando el componente se desmonta
