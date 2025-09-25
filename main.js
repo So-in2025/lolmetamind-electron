@@ -1,292 +1,151 @@
-const { app, BrowserWindow, globalShortcut, screen, ipcMain } = require('electron');
+const { app, BrowserWindow, ipcMain, screen, protocol } = require('electron');
 const path = require('path');
-const { io } = require('socket.io-client');
-const fetch = require('node-fetch');
+const Store = require('electron-store');
+const net = require('net');
+const WebSocket = require('ws');
+const fs = require('fs');
 
-let store; 
-const isDev = process.env.NODE_ENV !== 'production';
+// --- CORRECCIÓN FINAL PARA isDev (no usar electron-is-dev) ---
+// isDev será true si NODE_ENV es 'development' (ej. con npm run electron:dev)
+// isDev será false si NODE_ENV es 'production' (ej. cuando se empaqueta con electron-builder)
+const isDev = process.env.NODE_ENV === 'development';
+// --- FIN DE LA CORRECCIÓN ---
 
-app.commandLine.appendSwitch('ignore-certificate-errors');
-app.disableHardwareAcceleration();
+// URLs de tus servicios desplegados
+const BACKEND_URL = 'https://lolmetamind-dmxt.onrender.com';
+const FRONTEND_URL = 'https://lolmetamind-dmxt.onrender.com'; // Asegúrate de que esta es la URL donde tu frontend Next.js está desplegado
 
-let overlayWindow;
+// Almacenamiento persistente
+const store = new Store();
+
 let licenseWindow;
+let overlayWindow;
+let wss; // WebSocket Server instance
+let wsClient; // WebSocket client connected to the backend
+let gameDataInterval;
 
-// --- FUNCIÓN PARA CREAR LA VENTANA DEL OVERLAY ---
-function createOverlayWindow() {
-  const { width, height } = screen.getPrimaryDisplay().workAreaSize;
-
-  overlayWindow = new BrowserWindow({
-    width,
-    height,
-    frame: false,
-    transparent: true,
-    alwaysOnTop: true,
+const createLicenseWindow = () => {
+  licenseWindow = new BrowserWindow({
+    width: 600,
+    height: 400,
     resizable: false,
     webPreferences: {
-      contextIsolation: true,
-      nodeIntegration: false, 
       preload: path.join(__dirname, 'preload.js'),
+      nodeIntegration: true,
+      contextIsolation: false,
     },
+    icon: path.join(__dirname, 'assets', 'icon.ico'), // Asegúrate que el icono está en este path
   });
 
-  overlayWindow.setIgnoreMouseEvents(true, { forward: true });
+  const licenseHtmlPath = path.join(__dirname, 'static', 'license.html');
+  const licenseHtml = fs.readFileSync(licenseHtmlPath, 'utf8');
+
+  // Load the custom HTML directly
+  licenseWindow.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(licenseHtml)}`);
+
+  // Opcional: Abre las DevTools para la ventana de licencia
+  // licenseWindow.webContents.openDevTools({ mode: 'detach' });
+
+  licenseWindow.on('closed', () => {
+    licenseWindow = null;
+    if (!overlayWindow) {
+      app.quit(); // Si se cierra la ventana de licencia y no hay overlay, cierra la app
+    }
+  });
+};
+
+
+const createOverlayWindow = () => {
+  if (overlayWindow) {
+    overlayWindow.show();
+    return;
+  }
+
+  const primaryDisplay = screen.getPrimaryDisplay();
+  const { width, height } = primaryDisplay.workAreaSize;
+
+  overlayWindow = new BrowserWindow({
+    width: width,
+    height: height,
+    x: 0,
+    y: 0,
+    transparent: true,
+    frame: false,
+    resizable: false,
+    alwaysOnTop: true,
+    skipTaskbar: true,
+    webPreferences: {
+      nodeIntegration: true,
+      contextIsolation: false,
+      backgroundThrottling: false, // Evita que se ralentice en segundo plano
+    },
+    icon: path.join(__dirname, 'assets', 'icon.ico'), // Asegúrate que el icono está en este path
+  });
 
   const urlToLoad = isDev
     ? 'http://localhost:3000/overlay'
     : `file://${path.join(__dirname, 'out/overlay.html')}`;
 
   if (isDev) {
+    console.log('[Electron] Cargando overlay en modo desarrollo:', urlToLoad);
     overlayWindow.loadURL(urlToLoad);
   } else {
+    console.log('[Electron] Cargando overlay en modo producción desde archivo:', urlToLoad);
     overlayWindow.loadFile(path.join(__dirname, 'out/overlay.html'));
   }
 
-  // Lógica de WebSocket y peticiones
-  const SOCKET_URL = 'wss://lolmetamind-websockets.onrender.com';
-  const BACKEND_URL = 'https://lolmetamind-dmxt.onrender.com';
-  const RIOT_API_URL = 'https://127.0.0.1:2999/liveclientdata/allgamedata';
+  // Opcional: Abre las DevTools para la ventana de overlay (¡CRUCIAL para depurar el frontend del overlay!)
+  overlayWindow.webContents.openDevTools({ mode: 'detach' });
 
-  const socket = io(SOCKET_URL, { transports: ['websocket'], reconnectionAttempts: 5 });
-  socket.on('connect', () => overlayWindow.webContents.send('websocket-status', 'Conectado'));
-  socket.on('disconnect', () => overlayWindow.webContents.send('websocket-status', 'Desconectado'));
-  socket.on('game_event', (data) => overlayWindow.webContents.send('new-game-event', data));
-
-  setInterval(async () => {
-    try {
-      const response = await fetch(RIOT_API_URL);
-      if (!response.ok) return;
-      const gameData = await response.json();
-      const activePlayer = gameData.allPlayers.find(p => p.summonerName === gameData.activePlayer.summonerName);
-      if (!activePlayer) return;
-      
-      const gameState = {
-        championName: activePlayer.championName,
-        items: activePlayer.items.map(item => item.itemID),
-        gameTime: gameData.gameData.gameTime,
-      };
-
-      const buildResponse = await fetch(`${BACKEND_URL}/api/builds`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ championName: gameState.championName, items: gameState.items }) });
-      if(buildResponse.ok) overlayWindow.webContents.send('new-build-advice', await buildResponse.json());
-
-      const strategyResponse = await fetch(`${BACKEND_URL}/api/recommendation`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(gameState) });
-      if(strategyResponse.ok) overlayWindow.webContents.send('new-strategy-advice', await strategyResponse.json());
-
-    } catch (error) {
-      if (error.code !== 'ECONNREFUSED') console.error('Error obteniendo datos del juego:', error.message);
+  overlayWindow.on('closed', () => {
+    overlayWindow = null;
+    if (gameDataInterval) {
+      clearInterval(gameDataInterval);
     }
-  }, 15000);
-
-  // Atajos de teclado
-  globalShortcut.register('CommandOrControl+F1', () => {
-    overlayWindow.setIgnoreMouseEvents(false);
-    overlayWindow.focus();
-    overlayWindow.webContents.send('set-edit-mode', true);
-  });
-  globalShortcut.register('CommandOrControl+F2', () => {
-    overlayWindow.setIgnoreMouseEvents(true, { forward: true });
-    overlayWindow.webContents.send('set-edit-mode', false);
-  });
-  overlayWindow.webContents.on('did-finish-load', () => {
-    if (isDev) { 
-        overlayWindow.webContents.send('set-edit-mode', true);
+    if (wsClient) {
+      wsClient.close();
     }
-  });
-  if (isDev) {
-    overlayWindow.webContents.openDevTools({ mode: 'detach' });
-  }
-}
-
-// --- FUNCIÓN PARA CREAR LA VENTANA DE LICENCIA ---
-function createLicenseWindow() {
-  licenseWindow = new BrowserWindow({
-    width: 500,  // Aumentado el ancho
-    height: 350, // Aumentada la altura
-    frame: false, // ¡Sin marco del sistema!
-    transparent: true, // Fondo transparente para nuestro estilo LOL
-    title: 'Verificación de Licencia - LoL MetaMind',
-    resizable: false,
-    webPreferences: {
-      nodeIntegration: true, 
-      contextIsolation: false, 
-      preload: path.join(__dirname, 'preload.js'),
-    },
+    app.quit();
   });
 
-  // HTML embebido para la ventana de licencia con estilo LOL
-  const licenseHtml = `
-    <html>
-      <head>
-        <style>
-          @import url('https://fonts.googleapis.com/css2?family=Roboto:wght@400;700&display=swap'); /* Fuente similar a la de LoL */
-          body { 
-            font-family: 'Roboto', sans-serif; 
-            text-align: center; 
-            background: rgba(3, 26, 33, 0.9); /* Fondo oscuro transparente */
-            color: #F0E6D2; /* Blanco roto */
-            margin: 0;
-            padding: 0;
-            overflow: hidden; /* Evitar barras de desplazamiento */
-            display: flex; 
-            flex-direction: column; 
-            justify-content: flex-start; /* Ajuste para la barra de título */
-            align-items: center; 
-            height: 100vh;
-            border: 2px solid #C89B3C; /* Borde dorado */
-            border-radius: 8px; /* Bordes ligeramente redondeados */
-            box-shadow: 0 0 15px rgba(200, 155, 60, 0.5); /* Sombra dorada */
-          }
-          .title-bar {
-            -webkit-app-region: drag; /* Permite arrastrar la ventana */
-            width: 100%;
-            padding: 8px 15px;
-            background-color: #1A283B; /* Color oscuro para la barra de título */
-            color: #C89B3C;
-            text-align: left;
-            font-size: 1.1em;
-            font-weight: bold;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            border-bottom: 1px solid #785A28;
-            border-top-left-radius: 6px; /* Para que coincida con el borde del body */
-            border-top-right-radius: 6px;
-          }
-          .title-bar-buttons {
-            -webkit-app-region: no-drag; /* Los botones no arrastran la ventana */
-            display: flex;
-          }
-          .title-bar-buttons button {
-            background-color: transparent;
-            border: none;
-            color: #F0E6D2;
-            font-size: 1.2em;
-            cursor: pointer;
-            padding: 0 5px;
-            margin-left: 5px;
-          }
-          .title-bar-buttons button:hover {
-            color: #E6E6E6;
-            background-color: rgba(255,255,255,0.1);
-          }
-          .content-area {
-            -webkit-app-region: no-drag; /* El contenido no arrastra la ventana */
-            flex-grow: 1; /* Permite que el contenido ocupe el espacio restante */
-            display: flex;
-            flex-direction: column;
-            justify-content: center;
-            align-items: center;
-            width: 100%;
-            padding: 0 20px;
-          }
-          h2 { color: #C89B3C; margin-bottom: 10px; font-size: 1.8em; text-shadow: 1px 1px 3px rgba(0,0,0,0.6); }
-          p { margin-bottom: 20px; font-size: 1em; color: #BFBFBF;}
-          input { 
-            width: 80%; max-width: 350px; padding: 12px; margin-top: 10px; 
-            border: 1px solid #785A28; background-color: #091428; 
-            color: #F0E6D2; border-radius: 5px; font-size: 1.1em;
-            box-shadow: inset 0 0 5px rgba(0,0,0,0.5);
-          }
-          button { 
-            margin-top: 20px; padding: 12px 30px; background-color: #0BC6E3; 
-            color: #031A21; border: none; cursor: pointer; font-weight: bold; 
-            border-radius: 5px; transition: background-color 0.3s ease, transform 0.1s ease;
-            text-transform: uppercase; letter-spacing: 1px;
-            box-shadow: 0 4px 8px rgba(0,0,0,0.4);
-          }
-          button:hover { background-color: #07A4BF; transform: translateY(-2px); }
-          button:active { transform: translateY(0); }
-          #message { margin-top: 15px; color: #FF4D4D; font-weight: bold; font-size: 1.1em; }
-        </style>
-      </head>
-      <body>
-        <div class="title-bar">
-          <span>LoL MetaMind - Licencia</span>
-          <div class="title-bar-buttons">
-            <button onclick="require('electron').ipcRenderer.send('window-control', 'minimize')">-</button>
-            <button onclick="require('electron').ipcRenderer.send('window-control', 'close')">x</button>
-          </div>
-        </div>
-        <div class="content-area">
-          <h2>Introduce tu Clave de Licencia</h2>
-          <p>Puedes encontrar tu clave en tu perfil en el sitio web de LoL MetaMind.</p>
-          <input type="text" id="licenseKey" placeholder="Pega tu clave aquí..."/>
-          <button id="verifyBtn">Verificar</button>
-          <p id="message"></p>
-        </div>
-        <script>
-          const { ipcRenderer } = require('electron'); 
-          document.getElementById('verifyBtn').addEventListener('click', () => {
-            const key = document.getElementById('licenseKey').value;
-            ipcRenderer.send('verify-license', key);
-          });
-          ipcRenderer.on('license-message', (event, message) => {
-            document.getElementById('message').innerText = message;
-          });
-        </script>
-      </body>
-    </html>
-  `;
-  licenseWindow.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(licenseHtml)}`);
-}
+  overlayWindow.setIgnoreMouseEvents(true); // Inicialmente ignorar eventos del ratón
+};
 
-// --- LÓGICA DE VERIFICACIÓN ---
-async function verifyLicense(key) {
-  const BACKEND_URL = 'https://lolmetamind.onrender.com';
-  try {
-    const response = await fetch(`${BACKEND_URL}/api/license/verify`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ licenseKey: key }),
+app.whenReady().then(() => {
+  protocol.registerFileProtocol('file', (request, callback) => {
+    const filePath = path.normalize(request.url.substr(7));
+    callback({ path: filePath });
+  });
+
+  const storedLicenseKey = store.get('licenseKey');
+  if (storedLicenseKey) {
+    verifyLicense(storedLicenseKey).then(result => {
+      if (result.status === 'active') {
+        createOverlayWindow();
+      } else {
+        createLicenseWindow();
+      }
     });
-    return await response.json();
-  } catch (error) {
-    console.error('Error al verificar la licencia:', error);
-    return { status: 'invalid', message: 'Error de conexión con el servidor. Revisa tu internet.' };
-  }
-}
-
-// --- FLUJO DE ARRANQUE PRINCIPAL ---
-async function startApp() {
-  const { default: Store } = await import('electron-store');
-  store = new Store();
-
-  const licenseKey = store.get('licenseKey');
-  if (licenseKey) {
-    const result = await verifyLicense(licenseKey);
-    if (result.status === 'active') {
-      createOverlayWindow();
-    } else {
-      store.delete('licenseKey');
-      createLicenseWindow();
-    }
   } else {
     createLicenseWindow();
   }
-}
 
-app.whenReady().then(startApp);
-
-ipcMain.on('verify-license', async (event, key) => {
-  const result = await verifyLicense(key);
-  if (result.status === 'active') {
-    store.set('licenseKey', key);
-    createOverlayWindow();
-    if (licenseWindow) licenseWindow.close();
-  } else {
-    licenseWindow.webContents.send('license-message', result.message || 'Clave inválida o expirada.');
-  }
-});
-
-// Listener para los botones de la barra de título personalizada
-ipcMain.on('window-control', (event, action) => {
-  if (licenseWindow) {
-    if (action === 'minimize') {
-      licenseWindow.minimize();
-    } else if (action === 'close') {
-      licenseWindow.close();
+  app.on('activate', () => {
+    if (BrowserWindow.getAllWindows().length === 0) {
+      const storedLicenseKey = store.get('licenseKey');
+      if (storedLicenseKey) {
+        verifyLicense(storedLicenseKey).then(result => {
+          if (result.status === 'active') {
+            createOverlayWindow();
+          } else {
+            createLicenseWindow();
+          }
+        });
+      } else {
+        createLicenseWindow();
+      }
     }
-  }
+  });
 });
 
 app.on('window-all-closed', () => {
@@ -294,3 +153,143 @@ app.on('window-all-closed', () => {
     app.quit();
   }
 });
+
+// --- LÓGICA DE VERIFICACIÓN ---
+async function verifyLicense(key) {
+  const VERIFY_BACKEND_URL = BACKEND_URL; // Usamos la misma URL base
+  try {
+    const response = await fetch(`${VERIFY_BACKEND_URL}/api/license/verify`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ licenseKey: key }),
+    });
+
+    if (!response.ok) {
+      console.error('Respuesta no exitosa del servidor:', response.status, response.statusText);
+      // Intentar leer el cuerpo de error si está disponible
+      const errorBody = await response.text();
+      return { status: 'invalid', message: `Error del servidor (${response.status}): ${errorBody || response.statusText}` };
+    }
+    return await response.json();
+  } catch (error) {
+    console.error('Error al verificar la licencia:', error);
+    return { status: 'invalid', message: 'Error de conexión con el servidor. Revisa tu internet.' };
+  }
+}
+
+ipcMain.on('verify-license', async (event, key) => {
+  console.log(`[Electron Main] Recibida clave para verificar: ${key}`);
+  const result = await verifyLicense(key);
+  console.log('[Electron Main] Resultado de verificación:', result);
+
+  if (result.status === 'active' || result.status === 'trial') {
+    store.set('licenseKey', key);
+    createOverlayWindow();
+    if (licenseWindow) licenseWindow.close();
+    // Establecer la conexión WebSocket después de que la licencia sea activa
+    setupWebSocketClient();
+    setupLiveClientDataPolling();
+  } else {
+    // Asegurarse de que el mensaje de error se envíe de vuelta a la ventana de licencia
+    licenseWindow.webContents.send('license-message', result.message || 'Clave inválida o expirada.');
+  }
+});
+
+// Función para verificar si el cliente de LoL está ejecutándose
+function isLoLClientRunning() {
+  return new Promise((resolve) => {
+    const client = new net.Socket();
+    client.once('error', () => {
+      resolve(false);
+      client.destroy();
+    });
+    client.once('connect', () => {
+      resolve(true);
+      client.end();
+    });
+    // El cliente de LoL usa el puerto 2999 para su API de datos en vivo
+    client.connect(2999, '127.0.0.1');
+  });
+}
+
+// Configuración del cliente WebSocket
+function setupWebSocketClient() {
+    if (wsClient && wsClient.readyState === WebSocket.OPEN) {
+        console.log('WebSocket client already open.');
+        return;
+    }
+
+    const wsUrl = BACKEND_URL.replace('https', 'wss'); // Asume que tu WebSocket está en el mismo dominio
+    wsClient = new WebSocket(wsUrl);
+
+    wsClient.onopen = () => {
+        console.log('Conectado al servidor WebSocket del backend.');
+        if (overlayWindow) {
+            overlayWindow.webContents.send('websocket-status', { connected: true });
+        }
+        // Enviar un mensaje inicial o de identificación si es necesario
+        // wsClient.send(JSON.stringify({ type: 'client-id', id: app.id }));
+    };
+
+    wsClient.onmessage = (event) => {
+        const message = JSON.parse(event.data);
+        console.log('Mensaje del WebSocket del backend:', message);
+        if (overlayWindow) {
+            // Envía el mensaje directamente al proceso de renderizado del overlay
+            overlayWindow.webContents.send('backend-message', message);
+        }
+    };
+
+    wsClient.onclose = () => {
+        console.log('Desconectado del servidor WebSocket del backend. Intentando reconectar en 5s...');
+        if (overlayWindow) {
+            overlayWindow.webContents.send('websocket-status', { connected: false });
+        }
+        setTimeout(setupWebSocketClient, 5000); // Intenta reconectar después de 5 segundos
+    };
+
+    wsClient.onerror = (error) => {
+        console.error('Error en el WebSocket del backend:', error);
+        if (overlayWindow) {
+            overlayWindow.webContents.send('websocket-status', { connected: false, error: error.message });
+        }
+        wsClient.close(); // Forzar cierre para activar onclose y reconexión
+    };
+}
+
+
+// Función para obtener datos del juego y enviarlos al backend via WebSocket
+async function fetchGameData() {
+  const clientRunning = await isLoLClientRunning();
+  if (!clientRunning) {
+    console.log('LoL client not running, skipping data fetch.');
+    if (overlayWindow) overlayWindow.webContents.send('game-status', { running: false });
+    return;
+  }
+
+  try {
+    const res = await fetch('https://127.0.0.1:2999/liveclientdata/allgamedata', { agent: new (require('https').Agent)({ rejectUnauthorized: false }) });
+    const data = await res.json();
+    console.log('Datos del juego obtenidos:', data);
+
+    if (overlayWindow) overlayWindow.webContents.send('game-status', { running: true, data });
+
+    // Enviar datos al backend a través de WebSocket
+    if (wsClient && wsClient.readyState === WebSocket.OPEN) {
+      wsClient.send(JSON.stringify({ type: 'live-game-data', payload: data }));
+    }
+
+  } catch (error) {
+    console.error('Error al obtener datos del juego:', error);
+    if (overlayWindow) overlayWindow.webContents.send('game-status', { running: true, error: error.message });
+  }
+}
+
+// Configura el polling de datos del cliente de LoL
+function setupLiveClientDataPolling() {
+  if (gameDataInterval) {
+    clearInterval(gameDataInterval);
+  }
+  gameDataInterval = setInterval(fetchGameData, 15000); // Cada 15 segundos
+  fetchGameData(); // Ejecutar inmediatamente al inicio
+}
