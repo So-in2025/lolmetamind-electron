@@ -6,6 +6,8 @@ const os = require('os');
 const fs = require('fs');
 const https = require('https'); 
 const { Server } = require('ws'); // Aseguramos el constructor de WebSocket (aunque no se use aquí, es por contexto)
+const WebSocket = require('ws'); // ¡Añade esta línea!
+let wsClient; // Y esta, para guardar la conexión
 
 let store; 
 
@@ -17,12 +19,15 @@ app.commandLine.appendSwitch('ignore-certificate-errors');
 app.disableHardwareAcceleration();
 
 let overlayWindow;
-let licenseWindow;
-let tokenStorage = {}; 
 
-// --- CONFIGURACIÓN CRÍTICA ---
-// ⚠️ ¡IMPORTANTE! REEMPLAZA [TU-DOMINIO-REAL].onrender.com con tu URL de Render.
-const BACKEND_BASE_URL = isDev ? 'http://localhost:3000' : 'https://lolmetamind-dmxt.onrender.com';
+// URL para la API y la carga inicial de la web de Next.js
+const HTTP_BASE_URL = isDev ? 'http://localhost:3000' : 'https://lolmetamind-dmxt.onrender.com'; // <-- URL del Servicio Web
+
+// URL EXCLUSIVA para la conexión en tiempo real del WebSocket
+const WS_BASE_URL = isDev ? 'ws://localhost:8080' : 'wss://lolmetamind-ws.onrender.com'; // <-- URL del Servicio WebSocket
+
+// BACKEND_BASE_URL también debe apuntar al servicio web para las peticiones HTTP
+const BACKEND_BASE_URL = HTTP_BASE_URL; 
 const LIVE_GAME_UPDATE_ENDPOINT = '/api/live-game/update';
 const LIVE_GAME_UPDATE_INTERVAL = 10000; 
 
@@ -31,6 +36,25 @@ const lcuAgent = new https.Agent({
   rejectUnauthorized: false,
 });
 
+// --- FUNCIONES DE CONTROL DE POLLING (AGREGADAS) ---
+
+function startLiveCoachPolling() {
+    // Si ya hay un intervalo, lo detenemos para evitar duplicados.
+    if (pollingInterval) clearInterval(pollingInterval); 
+    
+    sendLiveGameUpdate(); // Ejecuta inmediatamente
+    
+    pollingInterval = setInterval(sendLiveGameUpdate, LIVE_GAME_UPDATE_INTERVAL);
+    console.log(`[LIVE COACH] Polling iniciado. Enviando datos cada ${LIVE_GAME_UPDATE_INTERVAL / 1000}s.`);
+}
+
+function stopLiveCoachPolling() {
+    if (pollingInterval) {
+        clearInterval(pollingInterval);
+        pollingInterval = null;
+        console.log('[LIVE COACH] Polling detenido.');
+    }
+}
 
 function createOverlayWindow() {
   const { width, height } = screen.getPrimaryDisplay().workAreaSize;
@@ -52,8 +76,8 @@ function createOverlayWindow() {
   overlayWindow.setIgnoreMouseEvents(true, { forward: true });
 
   const urlToLoad = isDev
-    ? 'http://localhost:3000/overlay'
-    : `file://${path.join(__dirname, 'out/overlay.html')}`;
+    ? `${HTTP_BASE_URL}/overlay`
+    : `file://${path.join(__dirname, 'out/overlay.html')}`; // Usamos HTTP_BASE_URL para cargar el contenido Next.js
 
   if (isDev) {
     overlayWindow.loadURL(urlToLoad);
@@ -61,38 +85,40 @@ function createOverlayWindow() {
     overlayWindow.loadFile(path.join(__dirname, 'out/overlay.html'));
   }
 
-  overlayWindow.webContents.on('did-finish-load', () => {
-    setInterval(sendLiveGameUpdate, LIVE_GAME_UPDATE_INTERVAL);
+}
+
+function setupWebSocketClient() {
+  wsClient = new WebSocket(WS_BASE_URL);
+
+  wsClient.on('open', () => {
+    console.log('[WS-CLIENT] Conectado al servidor WebSocket del backend.');
+  });
+
+  wsClient.on('message', (data) => {
+    try {
+      const message = JSON.parse(data.toString());
+      console.log('[WS-CLIENT] Mensaje recibido del backend:', message.type);
+
+      // El PUENTE: Reenviamos el mensaje a la ventana del overlay
+      if (overlayWindow && message.type) {
+        overlayWindow.webContents.send(message.type, message.payload);
+      }
+    } catch (error) {
+      console.error('[WS-CLIENT] Error al procesar mensaje:', error);
+    }
+  });
+
+  wsClient.on('close', () => {
+    console.log('[WS-CLIENT] Desconectado del servidor WebSocket. Intentando reconectar en 5 segundos...');
+    setTimeout(setupWebSocketClient, 5000); // Intenta reconectar si se cae
+  });
+
+  wsClient.on('error', (error) => {
+    console.error('[WS-CLIENT] Error de WebSocket:', error.message);
   });
 }
 
-function createLicenseWindow() {
-    const { width, height } = screen.getPrimaryDisplay().workAreaSize;
-    licenseWindow = new BrowserWindow({
-      width: 800,
-      height: 600,
-      center: true,
-      frame: true, 
-      webPreferences: {
-        contextIsolation: true,
-        nodeIntegration: false,
-        preload: path.join(__dirname, 'preload.js'),
-      },
-    });
-    
-    const urlToLoad = isDev 
-        ? 'http://localhost:3000'
-        : `file://${path.join(__dirname, 'out/index.html')}`;
-
-    if (isDev) {
-        licenseWindow.loadURL(urlToLoad);
-    } else {
-        licenseWindow.loadFile(path.join(__dirname, 'out/index.html'));
-    }
-}
-
 // --- LÓGICA DE LIVE COACH: SIMULACIÓN Y FUNCIÓN ---
-
 let pollingInterval = null; 
 
 // DATOS MOCK para el Live Coach
@@ -186,47 +212,45 @@ function stopLiveCoachPolling() {
     }
 }
 // --- LÓGICA DE CONTROL DE ATAJOS ---
-
 function registerGlobalShortcuts() {
-    // CTRL+F1: Habilitar interacción con el mouse (para mover/redimensionar)
     globalShortcut.register('CommandOrControl+F1', () => {
         if (overlayWindow) {
-            // Deshabilita el ignore: permite mover y redimensionar
-            overlayWindow.setIgnoreMouseEvents(false); 
+            overlayWindow.setIgnoreMouseEvents(false);
             console.log('Shortcuts: Interacción HABILITADA (CTRL+F1).');
         }
     });
 
-    // CTRL+F2: Deshabilitar interacción con el mouse (para usarlo en el juego)
     globalShortcut.register('CommandOrControl+F2', () => {
         if (overlayWindow) {
-            // forward: true asegura que los clics pasen al juego detrás
             overlayWindow.setIgnoreMouseEvents(true, { forward: true }); 
-            console.log('Shortcuts: Interacción DESHABILITADA (CTRL+F2). Clics pasan al juego.');
+            console.log('Shortcuts: Interacción DESHABILITADA (CTRL+F2).');
         }
     });
 }
-// --- FLUJO DE ARRANQUE PRINCIPAL ---
-// --- FUNCIÓN DE ARRANQUE FINAL (REEMPLAZA async function startApp()) ---
+
+
+// --- FUNCIÓN DE ARRANQUE PRINCIPAL (REEMPLAZA startApp y Elimina Licencia) ---
 async function startApp() {
     // FIX: Inicializamos Store (aunque no lo usemos, evita errores de require)
     const { default: Store } = await import('electron-store');
     store = new Store(); 
 
-    // Abrimos directamente el overlay y el polling.
+    // 🟢 ARRANQUE DIRECTO Y AUTOMÁTICO
     createOverlayWindow(); 
+    setupWebSocketClient();
     startLiveCoachPolling(); 
-    registerGlobalShortcuts(); // 🟢 AGREGAMOS EL REGISTRO DE ATAJOS
-
+    registerGlobalShortcuts(); // Activamos los atajos
 }
+
+
 app.whenReady().then(startApp);
 
-// UBICACIÓN: Reemplaza tu app.on('window-all-closed', ...)
+// Reemplaza app.on('window-all-closed', ...)
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') {
     app.quit();
   }
-  stopLiveCoachPolling(); 
+  stopLiveCoachPolling(); // CRÍTICO: Detiene el polling al cerrar
 });
 
 // AÑADIR: Desactivamos todos los atajos al cerrar la aplicación
