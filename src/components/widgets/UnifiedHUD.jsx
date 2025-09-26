@@ -14,17 +14,18 @@ const UnifiedHUD = () => {
   });
   const [error, setError] = useState(null);
 
-  // CRÍTICO: Este hook sustituye COMPLETAMENTE la lógica de WebSocket.
+  // CRÍTICO: Este hook sustituye COMPLETAMENTE la lógica de WebSocket duplicada.
   useEffect(() => {
     // 1. Verificación del entorno Electron y el puente
     if (typeof window !== 'undefined' && window.electron && window.electron.onLiveCoachUpdate) {
         
-        // 2. Función Listener
+        // 2. Función Listener (Escuchamos el canal 'live-coach-update' del main.js)
         const listener = (data) => {
             console.log('IPC Coach Advice Received:', data);
-            setError(null); // Limpiamos errores de conexión WS si los había
+            setError(null); 
+            
+            // Actualizamos el estado con la data completa del backend (advice, priority, etc.)
             setHudData(prevData => ({
-                // Mantenemos la data de builds y strategy si no viene en la actualización de realtime
                 ...prevData,
                 ...data 
             }));
@@ -32,27 +33,27 @@ const UnifiedHUD = () => {
 
         // 3. Suscribirse al canal IPC
         window.electron.onLiveCoachUpdate(listener);
-
-        // No es necesario limpiar el listener de ipcRenderer en el contexto de Electron, 
-        // ya que la ventana se cierra con la app.
+        
+        // No se necesita cleanup aquí ya que la ventana de overlay se cerrará con la app.
         
     } else {
-        // Esto indica que el overlay se está ejecutando fuera de Electron (ej. un navegador)
         setError("El Coach no está disponible. Ejecutar en la aplicación de escritorio.");
         console.warn('El puente de Electron/IPC no está disponible.');
     }
-  }, []); // El array vacío asegura que solo se ejecute al montar
+  }, []); 
 
   if (error) {
     return <div className="p-4 rounded-lg bg-red-900/50 text-red-300 text-center">{error}</div>;
   }
   
-  // Usamos las claves de hudData que ahora se actualizan por IPC
+  // CRÍTICO: Pasamos los datos como props a los componentes hijos
   return (
     <div className="flex flex-col space-y-4">
       <RealtimeCoachHUD 
         message={hudData.realtimeAdvice} 
-        priority={hudData.priorityAction} // Si RealtimeCoachHUD lo usa
+        priority={hudData.priorityAction}
+        // Pasamos el tiempo de juego si lo necesitas para mostrarlo
+        gameTime={hudData.gameData?.gameTime} 
       />
       <BuildsHUD build={hudData.buildRecommendation} />
       <StrategicHUD message={hudData.strategicAdvice} />

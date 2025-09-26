@@ -4,32 +4,23 @@ import { FaLock, FaUnlock } from 'react-icons/fa';
 import { useScale } from '@/context/ScaleContext';
 import { useInteractiveWidget } from '@/hooks/useInteractiveWidget';
 
-export default function BuildsHUD() {
+// CRÍTICO: El componente ahora acepta la prop 'build' de UnifiedHUD.jsx
+export default function BuildsHUD({ build }) {
   const [isDraggable, setIsDraggable] = useState(true);
   const { scale } = useScale();
+  // El position y isLoaded deben ser parte del hook
   const { position, isLoaded, handleMouseDown } = useInteractiveWidget('widget-builds', { x: 0, y: 50 });
   
-  const [buildAdvice, setBuildAdvice] = useState('Inicia una partida para recibir consejos.');
+  // No necesitamos useEffect para escuchar IPC. Solo para renderizar la prop.
+  
+  // Lógica simple para mostrar el consejo basado en la prop 'build'
+  let adviceMessage = 'Inicia una partida para recibir consejos.';
+  if (build && build.items && build.items.length > 0) {
+    adviceMessage = `Próximo objeto recomendado: ${build.items[0].name || 'Desconocido'} (${build.items.length} objetos en total)`;
+  } else if (build && build.runes && build.runes.length > 0) {
+     adviceMessage = 'Analizando runas y objetos...';
+  }
 
-  useEffect(() => {
-    const handleNewAdvice = (data) => {
-      if (data && data.recommendedItem) {
-        setBuildAdvice(`Próximo objeto recomendado: ${data.recommendedItem}`);
-      }
-    };
-    
-    // --- CORRECCIÓN CLAVE: Usar la sintaxis correcta del listener ---
-    if (window.electronAPI) {
-      window.electronAPI.on('new-build-advice', handleNewAdvice);
-    }
-    // --- FIN DE LA CORRECCIÓN ---
-
-    return () => {
-      if (window.electronAPI && typeof window.electronAPI.removeAllListeners === 'function') {
-        window.electronAPI.removeAllListeners('new-build-advice');
-      }
-    };
-  }, []);
 
   if (!isLoaded) return null;
 
@@ -52,8 +43,8 @@ export default function BuildsHUD() {
           {isDraggable ? <FaUnlock /> : <FaLock />}
         </button>
       </div>
-      <div className="p-4">
-        <p>{buildAdvice}</p>
+      <div className="p-4 relative min-h-[3rem]">
+        <p className="font-bold text-lg">{adviceMessage}</p>
       </div>
     </div>
   );
