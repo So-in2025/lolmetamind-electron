@@ -1,25 +1,18 @@
 const { contextBridge, ipcRenderer } = require('electron');
 
-contextBridge.exposeInMainWorld('electronAPI', {
-  // Canales para el overlay
-  onSetEditMode: (callback) => ipcRenderer.on('set-edit-mode', callback),
-  onNewGameEvent: (callback) => ipcRenderer.on('new-game-event', callback),
-  onWebsocketStatus: (callback) => ipcRenderer.on('websocket-status', callback),
-  onNewBuildAdvice: (callback) => ipcRenderer.on('new-build-advice', callback),
-  onNewStrategyAdvice: (callback) => ipcRenderer.on('new-strategy-advice', callback),
-  
-  // Canales para la ventana de licencia
-  send: (channel, data) => ipcRenderer.send(channel, data),
-  on: (channel, func) => ipcRenderer.on(channel, (event, ...args) => func(...args)),
-
-  // Limpiador general
-  removeAllListeners: (channel) => ipcRenderer.removeAllListeners(channel),
+contextBridge.exposeInMainWorld('electron', {
+    setAuthToken: (token) => {
+        // No es necesario en este flujo, pero se mantiene si lo necesitas después.
+    },
+    verifyLicense: (key) => ipcRenderer.send('verify-license', key),
+    windowControl: (action) => ipcRenderer.send('window-control', action),
+    onLicenseMessage: (callback) => ipcRenderer.on('license-message', (event, message) => callback(message)),
 });
 
-// Para la ventana de licencia simple, exponemos ipcRenderer directamente
-// Esto es menos seguro, pero aceptable para una ventana tan simple.
-if (process.contextIsolated) {
-  // El preload principal no necesita esto
-} else {
-  window.ipcRenderer = require('electron').ipcRenderer;
-}
+// Función para obtener el token del localStorage y enviarlo al proceso principal (si es necesario)
+window.addEventListener('DOMContentLoaded', () => {
+    const token = localStorage.getItem('authToken');
+    if (token) {
+        ipcRenderer.send('set-auth-token', token);
+    }
+});
