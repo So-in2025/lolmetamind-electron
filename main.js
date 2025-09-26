@@ -12,7 +12,10 @@ let wsClient; // Y esta, para guardar la conexión
 let store; 
 
 const isDev = process.env.NODE_ENV === 'development';
+<<<<<<< HEAD
 const LOCKFILE_PATH = path.join(process.env.LOCALAPPDATA || (process.platform == 'darwin' ? process.env.HOME + '/Library/Application Support' : process.platform == 'linux' ? process.env.HOME + '/.config' : process.platform == 'HOME' + '/AppData/Local'), 'Riot Games/League of Legends/lockfile');
+=======
+>>>>>>> ffe8a3dea13c12cbb01d07555ca048862cd7dd13
 
 // 🟢 FIX CRÍTICO: Se añade el flag de certificado SÓLO para la LCU.
 // Esta línea es necesaria y debe estar aquí para que el agente HTTPS funcione.
@@ -37,6 +40,7 @@ const lcuAgent = new https.Agent({
   rejectUnauthorized: false,
 });
 
+<<<<<<< HEAD
 function getLcuCredentials() {
   try {
     const data = fs.readFileSync(LOCKFILE_PATH, 'utf8');
@@ -85,6 +89,28 @@ async function fetchLiveGameData() {
 }
 
 
+=======
+// --- FUNCIONES DE CONTROL DE POLLING (AGREGADAS) ---
+
+function startLiveCoachPolling() {
+    // Si ya hay un intervalo, lo detenemos para evitar duplicados.
+    if (pollingInterval) clearInterval(pollingInterval); 
+    
+    sendLiveGameUpdate(); // Ejecuta inmediatamente
+    
+    pollingInterval = setInterval(sendLiveGameUpdate, LIVE_GAME_UPDATE_INTERVAL);
+    console.log(`[LIVE COACH] Polling iniciado. Enviando datos cada ${LIVE_GAME_UPDATE_INTERVAL / 1000}s.`);
+}
+
+function stopLiveCoachPolling() {
+    if (pollingInterval) {
+        clearInterval(pollingInterval);
+        pollingInterval = null;
+        console.log('[LIVE COACH] Polling detenido.');
+    }
+}
+
+>>>>>>> ffe8a3dea13c12cbb01d07555ca048862cd7dd13
 function createOverlayWindow() {
   const { width, height } = screen.getPrimaryDisplay().workAreaSize;
 
@@ -108,6 +134,7 @@ function createOverlayWindow() {
     ? `${HTTP_BASE_URL}/overlay`
     : `file://${path.join(__dirname, 'out/overlay.html')}`; // Usamos HTTP_BASE_URL para cargar el contenido Next.js
 
+<<<<<<< HEAD
     if (isDev) {
       overlayWindow.loadURL(urlToLoad);
     } else {
@@ -118,6 +145,14 @@ function createOverlayWindow() {
         return await fetchLiveGameData(); 
 
     });
+=======
+  if (isDev) {
+    overlayWindow.loadURL(urlToLoad);
+  } else {
+    overlayWindow.loadFile(path.join(__dirname, 'out/overlay.html'));
+  }
+
+>>>>>>> ffe8a3dea13c12cbb01d07555ca048862cd7dd13
 }
 
 function setupWebSocketClient() {
@@ -151,6 +186,102 @@ function setupWebSocketClient() {
   });
 }
 
+<<<<<<< HEAD
+=======
+// --- LÓGICA DE LIVE COACH: SIMULACIÓN Y FUNCIÓN ---
+let pollingInterval = null; 
+
+// DATOS MOCK para el Live Coach
+const MOCK_LIVE_GAME_DATA = {
+    gameTime: 120.0,
+    mapName: "Summoner's Rift",
+    activePlayer: { summonerName: "InvocadorSimulado", level: 3, currentGold: 500, championStats: { attackDamage: 100, armor: 30 } },
+    allPlayers: [
+        { summonerName: "InvocadorSimulado", team: "ORDER", isDead: false, scores: { kills: 1, deaths: 0, assists: 0 }, championName: "Jhin", position: "BOTTOM", items: [{itemID: 1055}, {itemID: 2003}] },
+        { summonerName: "OponenteSimulado", team: "CHAOS", isDead: false, scores: { kills: 0, deaths: 1, assists: 0 }, championName: "Caitlyn", position: "BOTTOM", items: [{itemID: 1055}, {itemID: 2003}] }
+    ],
+    events: [{ eventName: "GameStart", eventID: 1 }, { eventName: "FirstBlood", eventID: 2 }]
+};
+
+// Sustituye la función getLCUCredentials()
+function getLCUCredentials() {
+  console.log('[SIMULACIÓN] LCU: Credenciales OK (Saltando lockfile).');
+  return { port: 2999, token: "mock-password" };
+}
+
+// Sustituye la función getRealLiveGameData()
+async function getRealLiveGameData() {
+    const LIVE_GAME_UPDATE_INTERVAL_S = 10;
+    
+    MOCK_LIVE_GAME_DATA.gameTime = (MOCK_LIVE_GAME_DATA.gameTime || 0) + LIVE_GAME_UPDATE_INTERVAL_S;
+
+    if (MOCK_LIVE_GAME_DATA.gameTime > 200 && MOCK_LIVE_GAME_DATA.allPlayers[0].scores.kills === 1) {
+         MOCK_LIVE_GAME_DATA.allPlayers[0].scores.kills = 2; 
+         MOCK_LIVE_GAME_DATA.activePlayer.currentGold = 1000;
+         console.log("[SIMULACIÓN] Data Mockeada: Se simuló un asesinato y aumento de oro.");
+    }
+    
+    return MOCK_LIVE_GAME_DATA;
+}
+
+
+// --- FUNCIÓN DE ENVÍO Y POLLING (REEMPLAZA sendLiveGameUpdate) ---
+async function sendLiveGameUpdate() {
+    // FIX: NO usamos token ni lo chequeamos. El backend usa user_id=1
+    const token = 'NO_AUTH_REQUIRED'; 
+
+    try {
+        const credentials = getLCUCredentials();
+        if (!credentials) return; 
+
+        const liveGameData = await getRealLiveGameData(); 
+
+        if (!liveGameData || liveGameData.gameTime < 10) { 
+            console.log('[POLLING] No hay partida activa. Esperando...');
+            return;
+        }
+
+        const response = await axios.post(
+            `${BACKEND_BASE_URL}${LIVE_GAME_UPDATE_ENDPOINT}`,
+            liveGameData,
+            {
+                headers: {
+                    // Aunque el backend no lo verifica, se envía para consistencia
+                    'Authorization': `Bearer ${token}`, 
+                    'Content-Type': 'application/json',
+                },
+                httpsAgent: lcuAgent, 
+            }
+        );
+
+        if (response.status === 200) {
+            console.log(`[LIVE-DATA] Envío exitoso para GameTime: ${liveGameData.gameTime}`);
+        } else {
+            console.error(`[POLLING] Error al enviar datos: ${response.status}`);
+        }
+    } catch (error) {
+        console.error('[POLLING ERROR]: Error al conectar/enviar al Backend: ', error.message);
+    }
+}
+
+// FUNCIONES DE CONTROL (AGREGADAS)
+function startLiveCoachPolling() {
+    if (pollingInterval) clearInterval(pollingInterval);
+    
+    sendLiveGameUpdate(); 
+    
+    pollingInterval = setInterval(sendLiveGameUpdate, LIVE_GAME_UPDATE_INTERVAL);
+    console.log(`[LIVE COACH] Polling iniciado. Enviando datos cada ${LIVE_GAME_UPDATE_INTERVAL / 1000}s.`);
+}
+
+function stopLiveCoachPolling() {
+    if (pollingInterval) {
+        clearInterval(pollingInterval);
+        pollingInterval = null;
+        console.log('[LIVE COACH] Polling detenido.');
+    }
+}
+>>>>>>> ffe8a3dea13c12cbb01d07555ca048862cd7dd13
 // --- LÓGICA DE CONTROL DE ATAJOS ---
 function registerGlobalShortcuts() {
     globalShortcut.register('CommandOrControl+F1', () => {
@@ -176,12 +307,19 @@ async function startApp() {
     store = new Store(); 
 
     // 🟢 ARRANQUE DIRECTO Y AUTOMÁTICO
+<<<<<<< HEAD
     createOverlayWindow();
     registerGlobalShortcuts();
     setupWebSocketClient();
     fetchLiveGameData(); // Primera llamada inmediata
     getLcuCredentials(); // Verifica credenciales LCU
     
+=======
+    createOverlayWindow(); 
+    setupWebSocketClient();
+    startLiveCoachPolling(); 
+    registerGlobalShortcuts(); // Activamos los atajos
+>>>>>>> ffe8a3dea13c12cbb01d07555ca048862cd7dd13
 }
 
 
@@ -199,3 +337,16 @@ app.on('window-all-closed', () => {
 app.on('will-quit', () => {
   globalShortcut.unregisterAll();
 });
+<<<<<<< HEAD
+=======
+
+// UBICACIÓN: ELIMINA el bloque ipcMain.on('verify-license', ...)
+// UBICACIÓN: AÑADE el manejador de control de Live Coach
+ipcMain.on('live-coach-command', (event, { command }) => {
+    if (command === 'start') {
+        startLiveCoachPolling();
+    } else if (command === 'stop') {
+        stopLiveCoachPolling();
+    }
+});
+>>>>>>> ffe8a3dea13c12cbb01d07555ca048862cd7dd13
