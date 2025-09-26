@@ -4,12 +4,13 @@ const axios = require('axios');
 const os = require('os');
 const fs = require('fs');
 const https = require('https'); 
-// const Store = require('electron-store'); // Ya no se necesita para este flujo de prueba
+
+let pollingInterval = null;
 
 // --- CONFIGURACIÓN DE ENTORNO ---
 const isDev = process.env.NODE_ENV === 'development';
 
-// ⚠️ ¡IMPORTANTE! Reemplaza [TU-DOMINIO-REAL] con tu URL de Render.
+// 🟢 FIX CRÍTICO: URL de Render Aplicada
 const BACKEND_BASE_URL = isDev ? 'http://localhost:3000' : 'https://lolmetamind-dmxt.onrender.com';
 const LIVE_GAME_UPDATE_ENDPOINT = '/api/live-game/update';
 const LIVE_GAME_UPDATE_INTERVAL = 10000; 
@@ -19,12 +20,10 @@ const lcuAgent = new https.Agent({
   rejectUnauthorized: false,
 });
 
-// 🟢 FIX CRÍTICO: Bypass de módulo 'electron-is-dev' y configuraciones de Electron
 app.commandLine.appendSwitch('ignore-certificate-errors'); 
 app.disableHardwareAcceleration();
 
 let overlayWindow;
-let pollingInterval = null;
 
 
 // =========================================================================
@@ -69,17 +68,11 @@ const MOCK_LIVE_GAME_DATA = {
     ]
 };
 
-/**
- * SIMULACIÓN: Siempre devuelve credenciales.
- */
 async function readLoLCreds() {
   console.log('[SIMULACIÓN] LCU: Credenciales OK (Saltando lockfile).');
   return { port: 2999, password: "mock-password" };
 }
 
-/**
- * SIMULACIÓN: Genera y devuelve datos de juego mockeados y que se actualizan.
- */
 async function fetchLiveGameData(port, password) {
     MOCK_LIVE_GAME_DATA.gameTime = (MOCK_LIVE_GAME_DATA.gameTime || 10) + (LIVE_GAME_UPDATE_INTERVAL / 1000);
     
@@ -113,6 +106,7 @@ function createOverlayWindow() {
           webPreferences: {
               nodeIntegration: false,
               contextIsolation: true, 
+              // En este flujo simplificado, el token se inyectará en el frontend del Overlay
               preload: path.join(__dirname, 'preload.js'),
           },
       });
@@ -143,7 +137,7 @@ function createOverlayWindow() {
 async function sendLiveGameUpdate() {
     // --- FIX CRÍTICO: Token Mockeado (ya no se verifica en el backend) ---
     const token = 'mock-token-bypass'; 
-    // --- FIN FIX ---
+    // -------------------------------------------------------------------
 
     try {
         const creds = await readLoLCreds();
@@ -205,7 +199,7 @@ function stopLiveCoachPolling() {
 
 // --- FLUJO DE ARRANQUE PRINCIPAL (Simplificado) ---
 async function startApp() {
-    // La app abre directamente el overlay y el polling.
+    // La app abre directamente el overlay y el polling, saltándose el login.
     createOverlayWindow(); 
     startLiveCoachPolling(); 
 }
