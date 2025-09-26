@@ -1,109 +1,63 @@
 'use client';
-import { useState, useEffect, useRef } from 'react'; // FIX: Añadimos useRef
+import React, { useState, useEffect } from 'react';
 import BuildsHUD from './BuildsHUD';
-import StrategicHUD from './StrategicHUD';
 import RealtimeCoachHUD from './RealtimeCoachHUD';
-import ControlsHUD from './ControlsHUD';
+import StrategicHUD from './StrategicHUD';
 
-export default function UnifiedHUD() {
-  const [isEditMode, setIsEditMode] = useState(true);
-  
-  // FIX: Se añade el estado para los datos del HUD (incluyendo Builds y Estrategia inicial)
+const UnifiedHUD = () => {
   const [hudData, setHudData] = useState({
-    realtimeAdvice: "Conectando al coach...",
-    buildRecommendation: { items: [], runes: [] }, // Estado inicial
-    strategicAdvice: "Esperando la estrategia inicial...", // Estado inicial
-    priorityAction: 'STATUS'
+    // Estado inicial que refleja las claves del servidor WS
+    realtimeAdvice: "Esperando conexión con el Coach...",
+    priorityAction: "STATUS",
+    buildRecommendation: { items: [], runes: [] },
+    strategicAdvice: "Esperando estrategia...",
   });
   const [error, setError] = useState(null);
-  const ws = useRef(null);
 
-  // Lógica de conexión WebSocket para recibir consejos
+  // CRÍTICO: Este hook sustituye COMPLETAMENTE la lógica de WebSocket.
   useEffect(() => {
-    // FIX CRÍTICO: La conexión es directa y no usa token
-    const token = 'mock-token-bypass'; // Valor mockeado para cumplir el formato del URL
-    // Usamos el dominio de Render unificado
-    const wsUrl = process.env.NEXT_PUBLIC_WEBSOCKET_URL || 'wss://lolmetamind-dmxt.onrender.com';
-    
-    function connect() {
-      if (ws.current && ws.current.readyState === WebSocket.OPEN) return;
-      
-      // La conexión se establece al servidor unificado
-      const socket = new WebSocket(`${wsUrl}?token=${token}`); 
+    // 1. Verificación del entorno Electron y el puente
+    if (typeof window !== 'undefined' && window.electron && window.electron.onLiveCoachUpdate) {
+        
+        // 2. Función Listener
+        const listener = (data) => {
+            console.log('IPC Coach Advice Received:', data);
+            setError(null); // Limpiamos errores de conexión WS si los había
+            setHudData(prevData => ({
+                // Mantenemos la data de builds y strategy si no viene en la actualización de realtime
+                ...prevData,
+                ...data 
+            }));
+        };
 
-      socket.onopen = () => {
-          console.log('🔗 Conectado al servidor WebSocket.');
-          setError(null);
-      };
-      
-      socket.onmessage = (event) => {
-        try {
-          const data = JSON.parse(event.data);
-          
-          // FIX CLAVE: Fusionamos el nuevo mensaje con el estado para preservar Builds y Estrategia
-          setHudData(prevData => ({ 
-              ...prevData, 
-              ...data, 
-          })); 
-          
-        } catch (e) {
-          console.error("Error al parsear el mensaje JSON:", e);
-          setError("Error en el formato de datos del servidor.");
-        }
-      };
-      socket.onclose = () => {
-        console.log('💔 Desconectado. Reintentando en 5 segundos...');
-        setTimeout(connect, 5000);
-      };
-      socket.onerror = (err) => {
-        console.error('❌ Error en WebSocket:', err);
-        setError("Error en la conexión con el servidor.");
-        socket.close();
-      };
-      ws.current = socket;
+        // 3. Suscribirse al canal IPC
+        window.electron.onLiveCoachUpdate(listener);
+
+        // No es necesario limpiar el listener de ipcRenderer en el contexto de Electron, 
+        // ya que la ventana se cierra con la app.
+        
+    } else {
+        // Esto indica que el overlay se está ejecutando fuera de Electron (ej. un navegador)
+        setError("El Coach no está disponible. Ejecutar en la aplicación de escritorio.");
+        console.warn('El puente de Electron/IPC no está disponible.');
     }
-
-    connect();
-    
-    // Cleanup
-    return () => {
-      if (ws.current) ws.current.close();
-    };
-  }, []);
-  
-  // Lógica original de isEditMode (para los atajos)
-  useEffect(() => {
-    const handleSetEditMode = (value) => {
-      setIsEditMode(value);
-    };
-
-    if (window.electronAPI) {
-      window.electronAPI.on('set-edit-mode', handleSetEditMode);
-    }
-
-    return () => {
-      if (window.electronAPI && typeof window.electronAPI.removeAllListeners === 'function') {
-        window.electronAPI.removeAllListeners('set-edit-mode');
-      }
-    };
-  }, []);
-
+  }, []); // El array vacío asegura que solo se ejecute al montar
 
   if (error) {
-    return <div className="fixed top-0 left-0 p-2 rounded-lg bg-red-900/80 text-red-300 text-center z-50">Error: {error}</div>;
+    return <div className="p-4 rounded-lg bg-red-900/50 text-red-300 text-center">{error}</div>;
   }
   
+  // Usamos las claves de hudData que ahora se actualizan por IPC
   return (
-    // Se pasan los datos del estado a los componentes
-    <>
-      {isEditMode && <ControlsHUD />}
-      
-      <BuildsHUD build={hudData.buildRecommendation} />
-      <StrategicHUD message={hudData.strategicAdvice} />
+    <div className="flex flex-col space-y-4">
       <RealtimeCoachHUD 
         message={hudData.realtimeAdvice} 
-        priorityAction={hudData.priorityAction} 
+        priority={hudData.priorityAction} // Si RealtimeCoachHUD lo usa
       />
-    </>
+      <BuildsHUD build={hudData.buildRecommendation} />
+      <StrategicHUD message={hudData.strategicAdvice} />
+    </div>
   );
-}
+};
+
+export default UnifiedHUD;
