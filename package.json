@@ -22,6 +22,14 @@
     "framer-motion": "^11.3.19",
     "next": "14.2.3",
     "node-fetch": "^2.7.0",
+    "electron-store": "^8.1.0",
+    "node-fetch": "^2.7.0",
+    "socket.io-client": "^4.7.5",
+    "axios": "^1.12.2",
+    "concurrently": "^8.2.2",
+    "cross-env": "^7.0.3",
+    "framer-motion": "^11.3.19",
+    "next": "14.2.3",
     "react": "^18",
     "react-dom": "^18",
     "react-draggable": "^4.4.6",
@@ -51,6 +59,9 @@
     "win": {
       "target": "nsis",
       "icon": "assets/icon.ico"
-    }
+    },
+    "files": [ "main.js", "preload.js", "static/**/*", "out/**/*", "node_modules/**/*" ],
+    "directories": { "buildResources": "assets", "output": "dist" },
+    "win": { "target": "nsis", "icon": "assets/icon.ico" }
   }
 }
