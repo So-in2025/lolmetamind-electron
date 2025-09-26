@@ -1,219 +1,213 @@
-const { app, BrowserWindow, globalShortcut, screen, ipcMain } = require('electron');
+const { app, BrowserWindow, globalShortcut, screen, ipcMain, Menu } = require('electron');
 const path = require('path');
 const axios = require('axios'); 
-const { spawn } = require('child_process');
 const os = require('os');
 const fs = require('fs');
 const https = require('https'); 
-const { Server } = require('ws'); // Aseguramos el constructor de WebSocket (aunque no se use aquí, es por contexto)
+// const Store = require('electron-store'); // Ya no se necesita para este flujo de prueba
 
-let store; 
-
+// --- CONFIGURACIÓN DE ENTORNO ---
 const isDev = process.env.NODE_ENV === 'development';
 
-// 🟢 FIX CRÍTICO: Se añade el flag de certificado SÓLO para la LCU.
-// Esta línea es necesaria y debe estar aquí para que el agente HTTPS funcione.
-app.commandLine.appendSwitch('ignore-certificate-errors'); 
-app.disableHardwareAcceleration();
-
-let overlayWindow;
-let licenseWindow;
-let tokenStorage = {}; 
-
-// --- CONFIGURACIÓN CRÍTICA ---
-// ⚠️ ¡IMPORTANTE! REEMPLAZA [TU-DOMINIO-REAL].onrender.com con tu URL de Render.
+// ⚠️ ¡IMPORTANTE! Reemplaza [TU-DOMINIO-REAL] con tu URL de Render.
 const BACKEND_BASE_URL = isDev ? 'http://localhost:3000' : 'https://lolmetamind-dmxt.onrender.com';
 const LIVE_GAME_UPDATE_ENDPOINT = '/api/live-game/update';
 const LIVE_GAME_UPDATE_INTERVAL = 10000; 
 
-// Agente HTTPS para ignorar certificados de la LCU (usado en fetch/axios)
+// Agente HTTPS para ignorar certificados de la LCU
 const lcuAgent = new https.Agent({
   rejectUnauthorized: false,
 });
 
+// 🟢 FIX CRÍTICO: Bypass de módulo 'electron-is-dev' y configuraciones de Electron
+app.commandLine.appendSwitch('ignore-certificate-errors'); 
+app.disableHardwareAcceleration();
+
+let overlayWindow;
+let pollingInterval = null;
+
+
+// =========================================================================
+// 🛑 LÓGICA DE SIMULACIÓN INYECTADA
+// =========================================================================
+
+const MOCK_LIVE_GAME_DATA = {
+    gameTime: 120.0,
+    mapName: "Summoner's Rift",
+    activePlayer: {
+        summonerName: "InvocadorSimulado",
+        level: 3,
+        currentGold: 500,
+        championStats: {
+            attackDamage: 100,
+            armor: 30
+        }
+    },
+    allPlayers: [
+        {
+            summonerName: "InvocadorSimulado",
+            team: "ORDER",
+            isDead: false,
+            scores: { kills: 1, deaths: 0, assists: 0 },
+            championName: "Jhin",
+            position: "BOTTOM",
+            items: [{itemID: 1055}, {itemID: 2003}]
+        },
+        {
+            summonerName: "OponenteSimulado",
+            team: "CHAOS",
+            isDead: false,
+            scores: { kills: 0, deaths: 1, assists: 0 },
+            championName: "Caitlyn",
+            position: "BOTTOM",
+            items: [{itemID: 1055}, {itemID: 2003}]
+        }
+    ],
+    events: [
+      { eventName: "GameStart", eventID: 1 },
+      { eventName: "FirstBlood", eventID: 2 },
+    ]
+};
+
+/**
+ * SIMULACIÓN: Siempre devuelve credenciales.
+ */
+async function readLoLCreds() {
+  console.log('[SIMULACIÓN] LCU: Credenciales OK (Saltando lockfile).');
+  return { port: 2999, password: "mock-password" };
+}
+
+/**
+ * SIMULACIÓN: Genera y devuelve datos de juego mockeados y que se actualizan.
+ */
+async function fetchLiveGameData(port, password) {
+    MOCK_LIVE_GAME_DATA.gameTime = (MOCK_LIVE_GAME_DATA.gameTime || 10) + (LIVE_GAME_UPDATE_INTERVAL / 1000);
+    
+    if (MOCK_LIVE_GAME_DATA.gameTime > 200 && MOCK_LIVE_GAME_DATA.allPlayers[0].scores.kills === 1) {
+         MOCK_LIVE_GAME_DATA.allPlayers[0].scores.kills = 2; 
+         MOCK_LIVE_GAME_DATA.activePlayer.currentGold = 1000;
+         console.log("[SIMULACIÓN] Data Mockeada: Se simuló un asesinato y aumento de oro.");
+    }
+    
+    return MOCK_LIVE_GAME_DATA;
+}
+
+// =========================================================================
+// END LÓGICA DE SIMULACIÓN
+// =========================================================================
+
 
 function createOverlayWindow() {
   const { width, height } = screen.getPrimaryDisplay().workAreaSize;
+  
+  if (!overlayWindow || overlayWindow.isDestroyed()) {
+      overlayWindow = new BrowserWindow({
+          width: 450,
+          height: 150,
+          x: 100,
+          y: height - 200, 
+          frame: false,
+          alwaysOnTop: true,
+          transparent: true,
+          skipTaskbar: true,
+          webPreferences: {
+              nodeIntegration: false,
+              contextIsolation: true, 
+              preload: path.join(__dirname, 'preload.js'),
+          },
+      });
 
-  overlayWindow = new BrowserWindow({
-    width,
-    height,
-    frame: false,
-    transparent: true,
-    alwaysOnTop: true,
-    resizable: false,
-    webPreferences: {
-      contextIsolation: true,
-      nodeIntegration: false,
-      preload: path.join(__dirname, 'preload.js'),
-    },
-  });
+      const overlayURL = isDev
+          ? `${BACKEND_BASE_URL}/overlay`
+          : `file://${path.join(__dirname, 'out', 'overlay.html')}`; 
 
-  overlayWindow.setIgnoreMouseEvents(true, { forward: true });
+      overlayWindow.loadURL(overlayURL);
+      overlayWindow.setResizable(true);
+      overlayWindow.setIgnoreMouseEvents(true, { forward: true });
 
-  const urlToLoad = isDev
-    ? 'http://localhost:3000/overlay'
-    : `file://${path.join(__dirname, 'out/overlay.html')}`;
+      // FIX CRÍTICO: Se inyecta un token mockeado para la conexión WS del frontend.
+      overlayWindow.webContents.on('did-finish-load', () => {
+          overlayWindow.webContents.executeJavaScript(`
+              console.log('Token de bypass inyectado para Overlay.');
+              localStorage.setItem('authToken', 'mock-token-bypass'); 
+          `).catch(e => console.error("Error inyectando token:", e));
+      });
+      // FIN FIX CRÍTICO
 
-  if (isDev) {
-    overlayWindow.loadURL(urlToLoad);
-  } else {
-    overlayWindow.loadFile(path.join(__dirname, 'out/overlay.html'));
+      overlayWindow.on('closed', () => overlayWindow = null);
   }
-
-  overlayWindow.webContents.on('did-finish-load', () => {
-    setInterval(sendLiveGameUpdate, LIVE_GAME_UPDATE_INTERVAL);
-  });
 }
 
-function createLicenseWindow() {
-    const { width, height } = screen.getPrimaryDisplay().workAreaSize;
-    licenseWindow = new BrowserWindow({
-      width: 800,
-      height: 600,
-      center: true,
-      frame: true, 
-      webPreferences: {
-        contextIsolation: true,
-        nodeIntegration: false,
-        preload: path.join(__dirname, 'preload.js'),
-      },
-    });
-    
-    const urlToLoad = isDev 
-        ? 'http://localhost:3000'
-        : `file://${path.join(__dirname, 'out/index.html')}`;
+// ------------------ POLLING Y COMUNICACIÓN LCU ------------------
 
-    if (isDev) {
-        licenseWindow.loadURL(urlToLoad);
-    } else {
-        licenseWindow.loadFile(path.join(__dirname, 'out/index.html'));
-    }
-}
-
-
-// --- FUNCIÓN PARA OBTENER DATOS DE LA LCU API ---
-function getLCUCredentials() {
-    try {
-        // La ubicación del lockfile es específica de Windows/Instalación predeterminada.
-        // Si el usuario usa otra plataforma, esto debe ser ajustado (ej. Mac/Linux).
-        const lockFilePath = path.join(os.homedir(), 'AppData', 'Local', 'Riot Games', 'League of Legends', 'lockfile');
-        
-        if (!fs.existsSync(lockFilePath)) {
-            return null; 
-        }
-
-        const lockFileContent = fs.readFileSync(lockFilePath, 'utf-8');
-        // Formato del lockfile: processName:pid:port:password:protocol
-        const parts = lockFileContent.split(':');
-        
-        if (parts.length < 4) return null;
-        
-        return { 
-            port: parts[2], 
-            token: parts[3] 
-        };
-
-    } catch (e) {
-        // console.error("Error al leer credenciales de LCU:", e.message);
-        return null;
-    }
-}
-
-async function getRealLiveGameData() {
-    const credentials = getLCUCredentials();
-    if (!credentials) return null;
-
-    try {
-        const { port, token } = credentials;
-        const lcuUrl = `https://127.0.0.1:${port}/liveclientdata/allgamedata`;
-        
-        const authHeader = 'Basic ' + Buffer.from(`riot:${token}`).toString('base64');
-        
-        const response = await fetch(lcuUrl, {
-            agent: lcuAgent, // Usamos el agente que ignora el certificado
-            headers: {
-                'Authorization': authHeader,
-            }
-        });
-
-        if (!response.ok) {
-            // Si no hay partida, la LCU devuelve 404/403.
-            return null;
-        }
-
-        const data = await response.json();
-        return data; 
-
-    } catch (e) {
-        // Si falla la conexión (el juego no está activo o la ruta es incorrecta)
-        return null;
-    }
-}
-
-
-// --- FUNCIÓN PARA ENVIAR DATOS AL SERVIDOR WEB ---
 async function sendLiveGameUpdate() {
-    const token = store.get('jwtToken');
-    if (!token) return;
-    
-    // 🟢 LECTURA REAL DE DATOS
-    const liveGameData = await getRealLiveGameData(); 
-
-    if (!liveGameData || liveGameData.gameTime < 10) { 
-        return;
-    }
+    // --- FIX CRÍTICO: Token Mockeado (ya no se verifica en el backend) ---
+    const token = 'mock-token-bypass'; 
+    // --- FIN FIX ---
 
     try {
-        await axios.post(
-            `${BACKEND_BASE_URL}${LIVE_GAME_UPDATE_ENDPOINT}`,
-            liveGameData,
-            {
-                headers: {
-                    'Authorization': `Bearer ${token}`,
-                    'Content-Type': 'application/json',
-                },
-            }
-        );
-        console.log(`[LIVE-DATA] Envío exitoso para GameTime: ${liveGameData.gameTime}`);
-    } catch (error) {
-        if (error.response && (error.response.status === 401 || error.response.status === 403)) {
-             console.error('[LIVE-DATA] Token de sesión expirado.');
-             store.delete('jwtToken');
+        const creds = await readLoLCreds();
+        
+        if (!creds) {
+            console.log('LCU: Cliente no detectado. Saltando ciclo de envío.');
+            return; 
         }
-        // console.error(`[LIVE-DATA] Fallo al enviar a ${BACKEND_BASE_URL}:`, error.message);
-    }
-}
 
-// --- VERIFICACIÓN DE LICENCIA ---
-async function verifyLicense(key) {
-    try {
-        const response = await axios.post(
-            `${BACKEND_BASE_URL}/api/license/verify`,
-            { key },
-            { headers: { 'Content-Type': 'application/json' } }
-        );
-        return response.data;
+        const liveGameData = await fetchLiveGameData(creds.port, creds.password);
+
+        if (liveGameData) {
+            console.log('[POLLING] Datos de partida encontrados. Enviando a backend...');
+            
+            const response = await axios.post(
+                BACKEND_BASE_URL + LIVE_GAME_UPDATE_ENDPOINT,
+                liveGameData,
+                {
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${token}` 
+                    },
+                    httpsAgent: lcuAgent,
+                }
+            );
+
+            if (response.status === 200) {
+                console.log('[POLLING] Datos enviados con éxito.');
+            } else {
+                console.error(`[POLLING] Error al enviar datos: ${response.status}`);
+            }
+        } else {
+            console.log('[POLLING] No hay partida activa. Esperando...');
+        }
+
     } catch (error) {
-        return { status: 'error', message: error.response?.data?.error || 'Error de conexión con el servidor.' };
+        console.error('[POLLING ERROR]:', error.message);
     }
 }
 
-// --- FLUJO DE ARRANQUE PRINCIPAL ---
+function startLiveCoachPolling() {
+    if (pollingInterval) {
+        clearInterval(pollingInterval);
+    }
+    
+    sendLiveGameUpdate();
+    
+    pollingInterval = setInterval(sendLiveGameUpdate, LIVE_GAME_UPDATE_INTERVAL);
+    console.log(`[LIVE COACH] Polling iniciado. Enviando datos cada ${LIVE_GAME_UPDATE_INTERVAL / 1000}s.`);
+}
+
+function stopLiveCoachPolling() {
+    if (pollingInterval) {
+        clearInterval(pollingInterval);
+        pollingInterval = null;
+        console.log('[LIVE COACH] Polling detenido.');
+    }
+}
+
+// --- FLUJO DE ARRANQUE PRINCIPAL (Simplificado) ---
 async function startApp() {
-  const { default: Store } = await import('electron-store');
-  store = new Store();
-
-  const licenseKey = store.get('licenseKey');
-  const token = store.get('jwtToken');
-
-  if (licenseKey && token) {
-    createOverlayWindow();
-  } else {
-    store.delete('licenseKey');
-    store.delete('jwtToken');
-    createLicenseWindow();
-  }
+    // La app abre directamente el overlay y el polling.
+    createOverlayWindow(); 
+    startLiveCoachPolling(); 
 }
 
 app.whenReady().then(startApp);
@@ -222,31 +216,14 @@ app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') {
     app.quit();
   }
+  stopLiveCoachPolling(); 
 });
 
-// --- IPC DE VERIFICACIÓN ---
-ipcMain.on('verify-license', async (event, key) => {
-  const result = await verifyLicense(key);
-
-  if ((result.status === 'active' || result.status === 'trial') && result.token) {
-    store.set('licenseKey', key);
-    store.set('jwtToken', result.token);
-    createOverlayWindow();
-    if (licenseWindow) licenseWindow.close();
-  } else {
-    const errorMessage = result.token ? result.message : 'Error: El servidor no devolvió un token de sesión.';
-    if (licenseWindow && !licenseWindow.isDestroyed()) {
-        licenseWindow.webContents.send('license-message', errorMessage || 'Clave inválida.');
+// 🟢 Lógica para iniciar/detener el polling desde el HUD de control.
+ipcMain.on('live-coach-command', (event, { command }) => {
+    if (command === 'start') {
+        startLiveCoachPolling();
+    } else if (command === 'stop') {
+        stopLiveCoachPolling();
     }
-  }
-});
-
-ipcMain.on('window-control', (event, action) => {
-  if (licenseWindow) {
-    if (action === 'minimize') {
-      licenseWindow.minimize();
-    } else if (action === 'close') {
-      licenseWindow.close();
-    }
-  }
 });
