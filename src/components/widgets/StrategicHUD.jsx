@@ -4,32 +4,13 @@ import { FaLock, FaUnlock } from 'react-icons/fa';
 import { useScale } from '@/context/ScaleContext';
 import { useInteractiveWidget } from '@/hooks/useInteractiveWidget';
 
-export default function StrategicHUD() {
+// CRÍTICO: El componente ahora acepta la prop 'message' de UnifiedHUD.jsx
+export default function StrategicHUD({ message }) {
   const [isDraggable, setIsDraggable] = useState(true);
   const { scale } = useScale();
   const { position, isLoaded, handleMouseDown } = useInteractiveWidget('widget-strategy', { x: 0, y: 250 });
 
-  const [strategyAdvice, setStrategyAdvice] = useState('Esperando análisis estratégico...');
-
-  useEffect(() => {
-    const handleNewAdvice = (data) => {
-      if (data && data.advice) {
-        setStrategyAdvice(data.advice);
-      }
-    };
-
-    // --- CORRECCIÓN CLAVE: Usar la sintaxis correcta del listener ---
-    if (window.electronAPI) {
-      window.electronAPI.on('new-strategy-advice', handleNewAdvice);
-    }
-    // --- FIN DE LA CORRECCIÓN ---
-
-    return () => {
-      if (window.electronAPI && typeof window.electronAPI.removeAllListeners === 'function') {
-        window.electronAPI.removeAllListeners('new-strategy-advice');
-      }
-    };
-  }, []);
+  // No necesitamos useEffect para escuchar IPC. Solo para renderizar la prop.
 
   if (!isLoaded) return null;
 
@@ -38,7 +19,7 @@ export default function StrategicHUD() {
       className="absolute w-96 origin-top-left bg-lol-blue-dark/10 border-2 border-lol-gold rounded-md text-lol-gold-light shadow-lg backdrop-blur-sm"
       style={{
         top: `${position.y}px`,
-        left: `${position.x}px`,
+        left: `${position.x}px` ,
         transform: `scale(${scale})`,
         cursor: isDraggable ? 'move' : 'default',
       }}
@@ -52,8 +33,9 @@ export default function StrategicHUD() {
           {isDraggable ? <FaUnlock /> : <FaLock />}
         </button>
       </div>
-      <div className="p-4">
-        <p>{strategyAdvice}</p>
+      <div className="p-4 relative min-h-[3rem]">
+        {/* CRÍTICO: Renderiza el mensaje que viene por props */}
+        <p className="font-bold text-lg">▶ {message || 'Esperando análisis estratégico...'}</p>
       </div>
     </div>
   );
