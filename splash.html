@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Iniciando LoL MetaMind</title>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Cinzel:wght@700&display=swap');
+        body {
+            background-color: #010A13;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            margin: 0;
+            overflow: hidden;
+            font-family: 'Cinzel', serif;
+        }
+        .logo-container {
+            position: relative;
+            width: 150px;
+            height: 150px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+        .logo {
+            width: 100px;
+            height: 100px;
+            z-index: 2;
+            animation: pulse 2s infinite ease-in-out;
+        }
+        .ring {
+            position: absolute;
+            width: 150px;
+            height: 150px;
+            border: 3px solid transparent;
+            border-radius: 50%;
+            z-index: 1;
+        }
+        .ring.one { border-bottom-color: #0BC6E3; animation: rotate 1.5s linear infinite; }
+        .ring.two { border-right-color: #C89B3C; animation: rotate 1.5s linear infinite 0.2s; }
+        .ring.three { border-left-color: #F0E6D2; animation: rotate 1.5s linear infinite 0.4s; }
+        .loading-text {
+            margin-top: 20px;
+            color: #F0E6D2;
+            font-size: 1.2rem;
+            letter-spacing: 2px;
+            text-shadow: 0 0 10px #C89B3C;
+            animation: fadeIn 2s infinite alternate;
+        }
+        @keyframes rotate { to { transform: rotate(360deg); } }
+        @keyframes pulse { 0%, 100% { transform: scale(0.95); } 50% { transform: scale(1.05); } }
+        @keyframes fadeIn { from { opacity: 0.5; } to { opacity: 1; } }
+    </style>
+</head>
+<body>
+    <div class="logo-container">
+        <img src="./assets/icon2.png" alt="LoL MetaMind Logo" class="logo">
+        <div class="ring one"></div>
+        <div class="ring two"></div>
+        <div class="ring three"></div>
+    </div>
+    <div class="loading-text">CARGANDO...</div>
+</body>
+</html>

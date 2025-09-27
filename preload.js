@@ -1,17 +1,23 @@
 const { contextBridge, ipcRenderer } = require('electron');
 
-contextBridge.exposeInMainWorld('electronAPI', {
-    // Manejo de la Sesión y Persistencia (usando Electron Store)
-    setSessionState: (state) => ipcRenderer.invoke('session:set-state', state),
-    getSessionState: () => ipcRenderer.invoke('session:get-state'),
-    
-    // 🚨 CAMBIO CRÍTICO: Inicia el flujo de autenticación Web (OAuth)
-    signInGoogle: () => ipcRenderer.invoke('auth:google'),
-    
-    // Manejo del Formulario de Perfil (Onboarding)
-    setSummonerProfile: (data) => ipcRenderer.invoke('config:set-profile', data), 
-    
-    // Manejo de Overlays
-    setOverlayVisibility: (visible) => ipcRenderer.send('overlay:set-visibility', visible),
-    onCoachUpdate: (callback) => ipcRenderer.on('live-coach-update', callback), 
+contextBridge.exposeInMainWorld('electron', {
+    setAuthToken: (token) => {
+        // Lógica de token (se mantiene)
+    },
+    //verifyLicense: (key) => ipcRenderer.send('verify-license', key),
+    windowControl: (action) => ipcRenderer.send('window-control', action),
+    //onLicenseMessage: (callback) => ipcRenderer.on('license-message', (event, message) => callback(message)),
+
+    // 🟢 CRÍTICO: Función que expone el listener para los mensajes del coach
+    onLiveCoachUpdate: (callback) => {
+        // El canal IPC que recibe mensajes del main.js
+        ipcRenderer.on('live-coach-update', (event, message) => callback(message));
+    },
+});
+
+window.addEventListener('DOMContentLoaded', () => {
+    const token = localStorage.getItem('authToken');
+    if (token) {
+        ipcRenderer.send('set-auth-token', token);
+    }
 });
