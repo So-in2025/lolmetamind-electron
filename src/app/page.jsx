@@ -1,35 +1,44 @@
-// Ruta: src/app/page.jsx
-'use client';
-import React from 'react';
-import { useAppState } from '@/context/AppStateContext';
 
-import AuthScreen from '@/components/AuthScreen'; 
-import LoadingScreen from '@/components/LoadingScreen';
-import DashboardLayout from './dashboard/layout'; 
-import DashboardPage from './dashboard/page';     
+"use client"
+import React from 'react';
+import { useAppState } from '../context/AppStateContext';
+import LoginScreen from '../components/LoginScreen';
+// 🚨 CORRECCIÓN CRÍTICA: Quitamos el import de AllFlowComponents
+import LoginScreen from '../components/LoginScreen'; 
+import OnboardingForm from '../components/OnboardingForm';
+// 🚨 CORRECCIÓN CRÍTICA DE RUTA: Ruta correcta al componente
+import Dashboard from '../dashboard/page'; 
+import Dashboard from './dashboard/page'; 
+import LoadingScreen from '../components/LoadingScreen'; 
+
+// Componente simple de carga (para asegurar que siempre esté disponible)
+function LoadingScreen() {
+    return (
+        <div className="flex items-center justify-center h-screen bg-[#091018] text-[#C5B58E]">
+            Cargando estado de la aplicación...
+        </div>
+    );
+}
 
 export default function Home() {
-  // Ahora usamos splashLoaded para la primera comprobación.
-  const { isAuthenticated, loading, splashLoaded } = useAppState(); 
+    const { flowState, AppFlowState } = useAppState();
 
-  // 1. Mostrar pantalla de carga inicial si el AppState no ha cargado O el Splash aún no termina
-  if (loading || !splashLoaded) { 
-    return <LoadingScreen message="Cargando aplicación..." />;
-  }
-  
-  // 2. Si NO está autenticado, muestra la pantalla de Login/Registro
-  if (!isAuthenticated) {
-    return (
-      <div className="flex items-center justify-center min-h-screen bg-lol-blue-dark">
-        <AuthScreen /> 
-      </div>
-    );
-  }
+    switch (flowState) {
+        case AppFlowState.LOADING:
+        case AppFlowState.SPLASH: 
+            return <LoadingScreen />;
 
-  // 3. Si está autenticado, muestra el Dashboard
-  return (
-    <DashboardLayout>
-      <DashboardPage />
-    </DashboardLayout>
-  );
+        case AppFlowState.LOGIN:
+            // 1. Mostrar la pantalla de Login (para Google Auth)
+            return <LoginScreen />;
+
+
+        case AppFlowState.DASHBOARD:
+            // 3. Mostrar el Dashboard (el corazón de la aplicación)
+            return <Dashboard />; 
+            return <Dashboard />;
+
+        default:
+            return <LoadingScreen />;
+    }
 }
