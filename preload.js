@@ -1,23 +1,23 @@
+// preload.js
+
 const { contextBridge, ipcRenderer } = require('electron');
 
-contextBridge.exposeInMainWorld('electron', {
-    setAuthToken: (token) => {
-        // Lógica de token (se mantiene)
-    },
-    //verifyLicense: (key) => ipcRenderer.send('verify-license', key),
-    windowControl: (action) => ipcRenderer.send('window-control', action),
-    //onLicenseMessage: (callback) => ipcRenderer.on('license-message', (event, message) => callback(message)),
-
-    // 🟢 CRÍTICO: Función que expone el listener para los mensajes del coach
-    onLiveCoachUpdate: (callback) => {
-        // El canal IPC que recibe mensajes del main.js
-        ipcRenderer.on('live-coach-update', (event, message) => callback(message));
-    },
-});
-
-window.addEventListener('DOMContentLoaded', () => {
-    const token = localStorage.getItem('authToken');
-    if (token) {
-        ipcRenderer.send('set-auth-token', token);
+contextBridge.exposeInMainWorld('electronAPI', {
+  // Función para cerrar la aplicación
+  quitApp: () => ipcRenderer.send('quit-app'),
+  // Función para el login con Google
+  googleLogin: () => ipcRenderer.invoke('google-login'),
+  // El resto de tus funciones
+  getAppVersion: () => ipcRenderer.invoke('get-app-version'),
+  getStoreValue: (key) => ipcRenderer.invoke('get-store-value', key),
+  setStoreValue: (key, value) => ipcRenderer.send('set-store-value', { key, value }),
+  openExternalLink: (url) => ipcRenderer.send('open-external-link', url),
+  on: (channel, callback) => {
+    const validChannels = ['websocket-message', 'live-game-update'];
+    if (validChannels.includes(channel)) {
+      const subscription = (event, ...args) => callback(...args);
+      ipcRenderer.on(channel, subscription);
+      return () => ipcRenderer.removeListener(channel, subscription);
     }
+  },
 });

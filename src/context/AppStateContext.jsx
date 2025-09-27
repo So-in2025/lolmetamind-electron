@@ -1,82 +1,93 @@
-"use client"
+// Ruta: src/context/AppStateContext.jsx
+'use client';
 import React, { createContext, useContext, useState, useEffect } from 'react';
 
-// Estados posibles del flujo de la aplicación
-const AppFlowState = {
-    LOADING: 'LOADING',
-    LOGIN: 'LOGIN',
-    ONBOARDING: 'ONBOARDING',
-    DASHBOARD: 'DASHBOARD',
-};
-
-const AppStateContext = createContext();
-
-export const useAppState = () => useContext(AppStateContext);
+const AppStateContext = createContext(null);
 
 export const AppStateProvider = ({ children }) => {
-    const [flowState, setFlowState] = useState(AppFlowState.LOADING);
-    const [profile, setProfile] = useState(null);
-    const [isAuthenticated, setIsAuthenticated] = useState(false);
-    const [overlayEnabled, setOverlayEnabled] = useState(false);
+  const [userId, setUserId] = useState(null);
+  const [username, setUsername] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [splashLoaded, setSplashLoaded] = useState(false); // Estado para el Splash Screen
 
-    // 1. Cargar estado de Electron Store al inicio
-    useEffect(() => {
-        if (typeof window !== 'undefined' && window.electronAPI) {
-            window.electronAPI.getSessionState().then(state => {
-                const { isAuthenticated, summonerProfile } = state;
-                
-                setIsAuthenticated(isAuthenticated);
-                setProfile(summonerProfile);
+  useEffect(() => {
+    // 1. Cargar la sesión persistente
+    const storedId = localStorage.getItem('user_id');
+    const storedUsername = localStorage.getItem('username');
 
-                if (isAuthenticated && summonerProfile) {
-                    setFlowState(AppFlowState.DASHBOARD);
-                } else if (isAuthenticated) {
-                    setFlowState(AppFlowState.ONBOARDING);
-                } else {
-                    setFlowState(AppFlowState.LOGIN);
-                }
-            });
+    if (storedId) {
+      setUserId(storedId);
+      setUsername(storedUsername);
+    }
+    setLoading(false);
+    
+    // 2. Manejar el evento de fin de carga del Splash Screen
+    if (window.ipcRenderer) {
+        // Asume que 'splash-ready' es el evento enviado desde preload/main.js
+        window.ipcRenderer.on('splash-ready', () => {
+            setSplashLoaded(true);
+        });
+    } else {
+        // Fallback inmediato si no estamos en Electron
+        setSplashLoaded(true); 
+    }
+    
+    // Limpieza de listener
+    return () => {
+        if (window.ipcRenderer) {
+            window.ipcRenderer.removeAllListeners('splash-ready');
         }
-    }, []);
+    }
+  }, []);
 
-    // 2. Controlar la visibilidad del overlay
-    const toggleOverlay = (visible) => {
-        if (typeof window !== 'undefined' && window.electronAPI) {
-            window.electronAPI.setOverlayVisibility(visible);
-            setOverlayEnabled(visible);
-        }
-    };
+  /**
+   * Establece la sesión del usuario después de un login/registro exitoso.
+   */
+  const setUserSession = (newId, newUsername) => {
+    localStorage.setItem('user_id', newId);
+    localStorage.setItem('username', newUsername);
+    setUserId(newId);
+    setUsername(newUsername);
+    
+    // CRÍTICO: Notificar al proceso principal (main.js) para abrir el Overlay
+    if (window.ipcRenderer) {
+      window.ipcRenderer.send('user-logged-in', { id: newId, username: newUsername });
+    }
+  };
+  
+  /**
+   * Cierra la sesión del usuario.
+   */
+  const logout = () => {
+    localStorage.removeItem('user_id');
+    localStorage.removeItem('username');
+    setUserId(null);
+    setUsername(null);
+    // Forzar recarga a la pantalla de Login
+    window.location.reload(); 
+  };
 
-    // 3. Funciones de flujo
-    const goToDashboard = () => setFlowState(AppFlowState.DASHBOARD);
-    const goToOnboarding = () => setFlowState(AppFlowState.ONBOARDING);
-    const logout = () => {
-        if (typeof window !== 'undefined' && window.electronAPI) {
-            window.electronAPI.setSessionState({ isAuthenticated: false, summonerProfile: null });
-        }
-        setIsAuthenticated(false);
-        setProfile(null);
-        setFlowState(AppFlowState.LOGIN);
-    };
-
-    const value = {
-        AppFlowState,
-        flowState,
-        setFlowState,
-        profile,
-        setProfile,
-        isAuthenticated,
-        setIsAuthenticated,
+  return (
+    <AppStateContext.Provider
+      value={{
+        userId,
+        username,
+        isAuthenticated: !!userId,
+        loading,
+        splashLoaded, // Exporta el estado del splash
+        setUserSession,
         logout,
-        goToDashboard,
-        goToOnboarding,
-        overlayEnabled,
-        toggleOverlay
-    };
+      }}
+    >
+      {children}
+    </AppStateContext.Provider>
+  );
+};
 
-    return (
-        <AppStateContext.Provider value={value}>
-            {children}
-        </AppStateContext.Provider>
-    );
+export const useAppState = () => {
+  const context = useContext(AppStateContext);
+  if (context === undefined) {
+    throw new Error('useAppState debe ser usado dentro de AppStateProvider');
+  }
+  return context;
 };

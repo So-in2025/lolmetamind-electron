@@ -1,297 +1,181 @@
-// main.js
-
-const { app, BrowserWindow, globalShortcut, screen, ipcMain } = require('electron');
+const { app, BrowserWindow, ipcMain } = require('electron');
 const path = require('path');
-const axios = require('axios'); 
-const { shell } = require('electron'); 
-const Store = require('electron-store'); 
-const { fetchAndSendLcuData } = require('./lol-client-api'); 
 
-let wsClient; 
-const store = new Store(); 
-let pollingInterval = null; 
+// =========================================================================
+// 1. ELIMINACIÓN DE 'electron-is-dev'
+// =========================================================================
+// Utilizamos la propiedad nativa de Electron:
+// - app.isPackaged es TRUE en producción (cuando la app está empaquetada)
+// - app.isPackaged es FALSE en desarrollo (cuando se ejecuta 'npm run electron .')
 
-const isDev = process.env.NODE_ENV === 'development';
+// Determina si estamos en modo de desarrollo (no empaquetado)
+const isDev = !app.isPackaged; 
 
-app.commandLine.appendSwitch('ignore-certificate-errors'); 
-app.disableHardwareAcceleration();
+let mainWindow;
+let splashWindow;
+let overlayWindow;
 
-let mainWindow; 
-let overlayWindow; 
+// =========================================================================
+// 2. RUTAS Y CONFIGURACIÓN BASE
+// =========================================================================
 
-// 🚨 CORRECCIÓN CRÍTICA DE URL: Usar Render por defecto
-const USE_LOCAL_BACKEND = process.env.DEBUG_BACKEND_LOCAL === 'true';
+// Rutas base para la ventana principal (Dashboard/Login)
+// En desarrollo, apunta a http://localhost:3000
+// En producción, apunta al archivo local 'index.html'
+const INDEX_PATH = isDev
+    ? 'http://localhost:3000'
+    : `file://${path.join(__dirname, 'out', 'index.html')}`;
 
-// Si no estamos haciendo debug local, usamos el endpoint de Render (el real).
-const HTTP_BASE_URL = USE_LOCAL_BACKEND
-    ? 'http://localhost:3000' 
-    : 'https://lolmetamind-dmxt.onrender.com'; 
+// Rutas base para la ventana de Overlay (Coach flotante)
+const OVERLAY_PATH = isDev
+    ? 'http://localhost:3000/overlay'
+    : `file://${path.join(__dirname, 'out', 'overlay.html')}`;
 
-const WS_BASE_URL = USE_LOCAL_BACKEND
-    ? 'ws://localhost:8080' 
-    : 'wss://lolmetamind-ws.onrender.com'; 
+// =========================================================================
+// 3. FUNCIONES DE CREACIÓN DE VENTANAS
+// =========================================================================
 
-const BACKEND_BASE_URL = HTTP_BASE_URL; 
-const LIVE_GAME_UPDATE_ENDPOINT = '/api/live-game/update';
-const LIVE_GAME_UPDATE_INTERVAL = 10000;
+function createSplashWindow() {
+    // Crea la ventana de splash (la primera que se muestra)
+    splashWindow = new BrowserWindow({
+        width: 600,
+        height: 400,
+        transparent: true,
+        frame: false,
+        alwaysOnTop: true,
+        center: true,
+        webPreferences: {
+            preload: path.join(__dirname, 'preload.js'),
+            nodeIntegration: false,
+            contextIsolation: true,
+        },
+    });
 
+    splashWindow.loadURL(`file://${path.join(__dirname, 'splash.html')}`);
 
-// --- LÓGICA DE POLLING LCU ---
-function startLiveCoachPolling() {
-    if (pollingInterval) clearInterval(pollingInterval); 
-    fetchAndSendLcuData(BACKEND_BASE_URL, LIVE_GAME_UPDATE_ENDPOINT); 
-    pollingInterval = setInterval(() => {
-        fetchAndSendLcuData(BACKEND_BASE_URL, LIVE_GAME_UPDATE_ENDPOINT);
-    }, LIVE_GAME_UPDATE_INTERVAL);
-    console.log(`[LIVE COACH] Polling LCU iniciado.`);
+    splashWindow.on('closed', () => (splashWindow = null));
 }
 
-function stopLiveCoachPolling() {
-    if (pollingInterval) {
-        clearInterval(pollingInterval);
-        pollingInterval = null;
-        console.log('[LIVE COACH] Polling LCU detenido.');
-    }
-}
-
-// --- LÓGICA DE WEBSOCKET CLIENT ---
-function setupWebSocketClient() {
-    const WS = require('ws'); 
-    const token = store.get('userToken') || 'MOCK_TOKEN'; 
-
-    // 🚨 Usa WS_BASE_URL (que ahora apunta a wss://lolmetamind-ws.onrender.com)
-    wsClient = new WS(`${WS_BASE_URL}?token=${token}`); 
-
-    wsClient.on('open', () => {
-        console.log('[WS-CLIENT] Conectado al servidor WebSocket del backend (Render).');
-    });
-
-    wsClient.on('message', (data) => {
-        try {
-            const message = JSON.parse(data.toString());
-            if (overlayWindow) {
-                overlayWindow.webContents.send('live-coach-update', message); 
-            }
-        } catch (error) {
-            console.error('[WS-CLIENT] Error al procesar mensaje:', error);
-        }
-    });
-
-    wsClient.on('close', () => {
-        console.log('[WS-CLIENT] Desconectado del servidor WebSocket. Intentando reconectar en 5 segundos...');
-        setTimeout(setupWebSocketClient, 5000); 
-    });
-
-    wsClient.on('error', (error) => {
-        console.error('[WS-CLIENT] Error de WebSocket:', error.message);
-    });
-}
-
-// --- CONFIGURACIÓN DE IPC (INTER-PROCESS COMMUNICATION) ---
-function setupIpcHandlers() {
-    // IPC para Persistencia de Sesión
-    ipcMain.handle('session:set-state', (event, state) => {
-        store.set('authState', state);
-        store.set('isAuthenticated', state.isAuthenticated);
-        store.set('summonerProfile', state.summonerProfile);
-        store.set('userToken', state.userToken || store.get('userToken'));
-
-        if (state.userToken) {
-            setupWebSocketClient();
-        }
-    });
-    
-    ipcMain.handle('session:get-state', () => {
-        return {
-            isAuthenticated: store.get('isAuthenticated') || false,
-            summonerProfile: store.get('summonerProfile') || null,
-            userToken: store.get('userToken') || null,
-        };
-    });
-
-    // IPC CRÍTICO: Google Auth (Ventana Externa)
-    ipcMain.handle('auth:google', async () => {
-        // 🚨 LOG: Proceso iniciado
-        console.log('[AUTH FLOW] -> Solicitud de inicio de sesión de Google recibida desde el frontend.');
-        
-        return new Promise((resolve, reject) => {
-            const authUrl = `${BACKEND_BASE_URL}/api/auth/google`;
-            
-            // 🚨 LOG: URL de inicio de sesión
-            console.log(`[AUTH FLOW] 🌐 Abriendo ventana de autenticación a: ${authUrl}`);
-            
-            const authWindow = new BrowserWindow({
-                width: 600,
-                height: 800,
-                show: true,
-                webPreferences: { nodeIntegration: false }
-            });
-
-            authWindow.loadURL(authUrl);
-
-            authWindow.webContents.on('will-redirect', (event, url) => {
-                const urlObj = new URL(url);
-                
-                // 🚨 LOG: Redirección detectada
-                console.log(`[AUTH FLOW] ➡️ Redirección detectada. Hostname: ${urlObj.hostname}`);
-                
-                // Verificamos si la redirección es la URL final que esperamos (Vercel)
-                if (urlObj.pathname === '/auth-callback' || urlObj.hostname === 'couchmetamind.vercel.app') { 
-                    event.preventDefault();
-                    
-                    const token = urlObj.searchParams.get('token');
-                    const isNewUser = urlObj.searchParams.get('isNewUser') === 'true';
-
-                    if (token) {
-                        // 🚨 LOG: Token interceptado con éxito
-                        console.log(`[AUTH FLOW] ✅ Token JWT interceptado. Redirigiendo a Dashboard/Onboarding.`);
-                        
-                        store.set('isAuthenticated', true);
-                        store.set('userToken', token);
-                        authWindow.close();
-                        
-                        resolve({ success: true, isNewUser: isNewUser, userToken: token }); 
-                    } else {
-                        // 🚨 LOG: Redirección a la URL final, pero sin token
-                        console.error('[AUTH FLOW] ❌ Redirección final sin token. Revisar el backend de Render.');
-                        authWindow.close();
-                        reject(new Error('No se recibió el token de autenticación desde el backend.'));
-                    }
-                }
-            });
-
-            authWindow.on('closed', () => {
-                // 🚨 LOG: Ventana cerrada
-                console.log('[AUTH FLOW] ℹ️ Ventana de autenticación cerrada (por usuario o por éxito).');
-                // Debemos manejar esto solo si no se resolvió antes
-            });
-        }).catch(error => {
-            console.error('[AUTH FLOW] 💥 ERROR DURANTE EL PROCESO DE AUTH:', error.message);
-            return { success: false, message: error.message }; 
-        });
-    });
-    
-    // IPC para Onboarding (Guardar Perfil)
-    ipcMain.handle('config:set-profile', async (event, data) => {
-        const token = store.get('userToken');
-        
-        try {
-            // Usa la URL de Render
-            const response = await axios.post(`${BACKEND_BASE_URL}/api/user/profile/set`, data, {
-                headers: { 'Authorization': `Bearer ${token}` }
-            });
-
-            if (response.status === 200) {
-                store.set('summonerProfile', response.data.profileData); 
-                return { success: true, profileData: response.data.profileData };
-            }
-
-            return { success: false, message: `Error del Backend: ${response.status}` };
-
-        } catch (error) {
-            console.error('[ONBOARDING] ❌ Error al procesar perfil:', error.message);
-            return { success: false, message: 'Fallo al conectar o procesar el perfil.' };
-        }
-    });
-    
-    // IPC para controlar visibilidad del overlay
-    ipcMain.on('overlay:set-visibility', (event, visible) => {
-        if (overlayWindow) {
-            visible ? overlayWindow.show() : overlayWindow.hide();
-        }
-    });
-}
-
-
-// --- LÓGICA DE VENTANAS ---
 function createMainWindow() {
-  mainWindow = new BrowserWindow({
-    width: 1200, 
-    height: 780,
-    minWidth: 900,
-    minHeight: 600,
-    frame: false, // 🚨 CAMBIO 1: Eliminamos el marco del sistema operativo
-    transparent: true, // 🚨 CAMBIO 2: Hacemos la ventana transparente
-    title: 'LolMetaMind - Coach Estratégico',
-    webPreferences: {
-      contextIsolation: true,
-      nodeIntegration: false,
-      preload: path.join(__dirname, 'preload.js'),
-    },
-  });
+    // Configuración de la ventana principal (Dashboard/Login)
+    mainWindow = new BrowserWindow({
+        width: 1200,
+        height: 800,
+        minWidth: 1000,
+        minHeight: 600,
+        show: false, // Ocultar inicialmente mientras se carga el contenido
+        icon: path.join(__dirname, 'assets', 'icon2.png'),
+        webPreferences: {
+            preload: path.join(__dirname, 'preload.js'),
+            nodeIntegration: false,
+            contextIsolation: true,
+            // Habilitar webSecurity solo en producción para más seguridad
+            webSecurity: !isDev 
+        },
+    });
 
-  const urlToLoad = `file://${path.join(app.getAppPath(), 'out', 'index.html')}`; 
+    mainWindow.loadURL(INDEX_PATH);
 
-  mainWindow.loadURL(urlToLoad);
-  
-  if (isDev) { 
-      mainWindow.webContents.openDevTools(); 
-  }
+    mainWindow.on('ready-to-show', () => {
+        // Una vez que el contenido está listo para mostrarse, cerramos el splash y mostramos la principal.
+        if (splashWindow) {
+            // Notificar al splash para animaciones finales y luego cerrarlo
+            splashWindow.webContents.send('app-ready'); 
+            splashWindow.close();
+        }
+        mainWindow.show();
+        // Abrir DevTools solo si estamos en modo desarrollo
+        if (isDev) { 
+            mainWindow.webContents.openDevTools();
+        }
+    });
+
+    mainWindow.on('closed', () => {
+        mainWindow = null;
+        // Si la ventana principal se cierra, aseguramos que el overlay también lo haga
+        if (overlayWindow) {
+            overlayWindow.close();
+            overlayWindow = null;
+        }
+    });
 }
 
 function createOverlayWindow() {
-  const { width, height } = screen.getPrimaryDisplay().workAreaSize;
-
-  overlayWindow = new BrowserWindow({
-    width,
-    height,
-    frame: false,
-    transparent: true,
-    alwaysOnTop: true,
-    resizable: false,
-    show: false, // Inicialmente oculto
-    webPreferences: {
-      contextIsolation: true,
-      nodeIntegration: false,
-      preload: path.join(__dirname, 'preload.js'),
-    },
-  });
-
-  overlayWindow.setIgnoreMouseEvents(true, { forward: true });
-
-  // CARGA AUTÓNOMA: Usamos el archivo local
-  const urlToLoad = `file://${path.join(app.getAppPath(), 'out', 'overlay.html')}`; 
-
-  overlayWindow.loadURL(urlToLoad);
-}
-
-// --- LÓGICA DE ARRANQUE ---
-function registerGlobalShortcuts() {
-    globalShortcut.register('CommandOrControl+F1', () => {
-        if (overlayWindow) {
-            overlayWindow.setIgnoreMouseEvents(false);
-            console.log('Shortcuts: Interacción HABILITADA (CTRL+F1).');
+    // Evita crear duplicados
+    if (overlayWindow && !overlayWindow.isDestroyed()) {
+        overlayWindow.focus();
+        return;
+    }
+    
+    // Configuración de la ventana de Overlay (Coach flotante)
+    overlayWindow = new BrowserWindow({
+        width: 400,
+        height: 150,
+        x: 100, 
+        y: 100,
+        transparent: true, // Ventana sin fondo
+        frame: false, // Sin bordes ni botones de sistema
+        alwaysOnTop: true, // Siempre en la parte superior de otras ventanas
+        skipTaskbar: true, // No aparece en la barra de tareas
+        show: true,
+        webPreferences: {
+            preload: path.join(__dirname, 'preload.js'),
+            nodeIntegration: false,
+            contextIsolation: true,
+            webSecurity: !isDev
         }
     });
 
-    globalShortcut.register('CommandOrControl+F2', () => {
-        if (overlayWindow) {
-            overlayWindow.setIgnoreMouseEvents(true, { forward: true }); 
-            console.log('Shortcuts: Interacción DESHABILITADA (CTRL+F2).');
-        }
-    });
+    overlayWindow.loadURL(OVERLAY_PATH);
+    // Permite que los clics pasen a través del overlay (crucial para no interferir con el juego)
+    overlayWindow.setIgnoreMouseEvents(true); 
+    
+    overlayWindow.on('closed', () => (overlayWindow = null));
 }
 
+// =========================================================================
+// 4. MANEJO DE EVENTOS DE PROCESO PRINCIPAL (Electron App Lifecycle)
+// =========================================================================
 
-async function startApp() {
-    setupIpcHandlers();
-    createMainWindow();
-    createOverlayWindow();
-    setupWebSocketClient();
-    startLiveCoachPolling(); 
-    registerGlobalShortcuts();
-}
-
-
-app.whenReady().then(startApp);
-
-app.on('window-all-closed', () => {
-  if (process.platform !== 'darwin') {
-    app.quit();
-  }
-  stopLiveCoachPolling(); 
+// Se dispara cuando Electron ha terminado de inicializarse
+app.on('ready', () => {
+    // 1. Mostrar la pantalla de splash primero para una mejor experiencia de usuario
+    createSplashWindow();
+    
+    // 2. Crear la ventana principal con un pequeño retraso (para que se vea el splash)
+    setTimeout(() => {
+        createMainWindow();
+    }, 100); 
 });
 
-app.on('will-quit', () => {
-  globalShortcut.unregisterAll();
+// Listener para cerrar la aplicación si todas las ventanas se cierran (excepto en macOS)
+app.on('window-all-closed', () => {
+    if (process.platform !== 'darwin') {
+        app.quit();
+    }
+});
+
+// Listener para macOS: recrear la ventana si se hace clic en el ícono del dock
+app.on('activate', () => {
+    if (mainWindow === null) {
+        createMainWindow();
+    }
+});
+
+// =========================================================================
+// 5. COMUNICACIÓN INTER-PROCESOS (IPC - Flujo de Autenticación)
+// =========================================================================
+
+// El frontend (AuthScreen.jsx) envía este evento al proceso principal 
+// cuando el Login o Registro ha sido exitoso.
+ipcMain.on('user-logged-in', (event, userData) => {
+    console.log(`[IPC] Usuario ${userData.username} (${userData.id}) autenticado. Iniciando flujo de aplicación.`);
+    
+    // 1. Forzar la carga de la ruta principal del Dashboard (si no estaba ya allí)
+    if (mainWindow) {
+        mainWindow.loadURL(INDEX_PATH);
+    }
+    
+    // 2. ABRIR EL OVERLAY FLOTANTE (Dashboard Flotante), siguiendo el flujo
+    createOverlayWindow();
 });

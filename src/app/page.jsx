@@ -1,30 +1,35 @@
-"use client"
+// Ruta: src/app/page.jsx
+'use client';
 import React from 'react';
-import { useAppState } from '../context/AppStateContext';
-// 🚨 CORRECCIÓN CRÍTICA: Quitamos el import de AllFlowComponents
-import LoginScreen from '../components/LoginScreen'; 
-import OnboardingForm from '../components/OnboardingForm';
-import Dashboard from './dashboard/page'; 
-import LoadingScreen from '../components/LoadingScreen'; 
+import { useAppState } from '@/context/AppStateContext';
+
+import AuthScreen from '@/components/AuthScreen'; 
+import LoadingScreen from '@/components/LoadingScreen';
+import DashboardLayout from './dashboard/layout'; 
+import DashboardPage from './dashboard/page';     
 
 export default function Home() {
-    const { flowState, AppFlowState } = useAppState();
+  // Ahora usamos splashLoaded para la primera comprobación.
+  const { isAuthenticated, loading, splashLoaded } = useAppState(); 
 
-    switch (flowState) {
-        case AppFlowState.LOADING:
-        case AppFlowState.SPLASH: 
-            return <LoadingScreen />;
-        
-        case AppFlowState.LOGIN:
-            return <LoginScreen />;
-            
-        case AppFlowState.ONBOARDING:
-            return <OnboardingForm />;
-            
-        case AppFlowState.DASHBOARD:
-            return <Dashboard />;
+  // 1. Mostrar pantalla de carga inicial si el AppState no ha cargado O el Splash aún no termina
+  if (loading || !splashLoaded) { 
+    return <LoadingScreen message="Cargando aplicación..." />;
+  }
+  
+  // 2. Si NO está autenticado, muestra la pantalla de Login/Registro
+  if (!isAuthenticated) {
+    return (
+      <div className="flex items-center justify-center min-h-screen bg-lol-blue-dark">
+        <AuthScreen /> 
+      </div>
+    );
+  }
 
-        default:
-            return <LoadingScreen />;
-    }
+  // 3. Si está autenticado, muestra el Dashboard
+  return (
+    <DashboardLayout>
+      <DashboardPage />
+    </DashboardLayout>
+  );
 }
