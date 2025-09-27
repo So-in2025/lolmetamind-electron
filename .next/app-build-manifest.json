@@ -1,0 +1,52 @@
+{
+  "pages": {
+    "/_not-found/page": [
+      "static/chunks/webpack-4b1a3e62c7895bfb.js",
+      "static/chunks/fd9d1056-2d3ec73faabe5d64.js",
+      "static/chunks/23-003b0041b0880d47.js",
+      "static/chunks/main-app-6e2128aed7450650.js",
+      "static/chunks/app/_not-found/page-f1c454d36928933b.js"
+    ],
+    "/layout": [
+      "static/chunks/webpack-4b1a3e62c7895bfb.js",
+      "static/chunks/fd9d1056-2d3ec73faabe5d64.js",
+      "static/chunks/23-003b0041b0880d47.js",
+      "static/chunks/main-app-6e2128aed7450650.js",
+      "static/css/a66c258ea058dcff.css",
+      "static/chunks/app/layout-855e731b4d149d8c.js"
+    ],
+    "/overlay/page": [
+      "static/chunks/webpack-4b1a3e62c7895bfb.js",
+      "static/chunks/fd9d1056-2d3ec73faabe5d64.js",
+      "static/chunks/23-003b0041b0880d47.js",
+      "static/chunks/main-app-6e2128aed7450650.js",
+      "static/chunks/8e1d74a4-9ff373863833bcef.js",
+      "static/chunks/app/overlay/page-6135509f3884c358.js"
+    ],
+    "/page": [
+      "static/chunks/webpack-4b1a3e62c7895bfb.js",
+      "static/chunks/fd9d1056-2d3ec73faabe5d64.js",
+      "static/chunks/23-003b0041b0880d47.js",
+      "static/chunks/main-app-6e2128aed7450650.js",
+      "static/chunks/8e1d74a4-9ff373863833bcef.js",
+      "static/chunks/262-1f1d11d0e6512fd4.js",
+      "static/chunks/app/page-a1a352295dd889ee.js"
+    ],
+    "/dashboard/page": [
+      "static/chunks/webpack-4b1a3e62c7895bfb.js",
+      "static/chunks/fd9d1056-2d3ec73faabe5d64.js",
+      "static/chunks/23-003b0041b0880d47.js",
+      "static/chunks/main-app-6e2128aed7450650.js",
+      "static/chunks/8e1d74a4-9ff373863833bcef.js",
+      "static/chunks/262-1f1d11d0e6512fd4.js",
+      "static/chunks/app/dashboard/page-91de4189713aced6.js"
+    ],
+    "/dashboard/layout": [
+      "static/chunks/webpack-4b1a3e62c7895bfb.js",
+      "static/chunks/fd9d1056-2d3ec73faabe5d64.js",
+      "static/chunks/23-003b0041b0880d47.js",
+      "static/chunks/main-app-6e2128aed7450650.js",
+      "static/chunks/app/dashboard/layout-69780ce9f3c678e9.js"
+    ]
+  }
+}

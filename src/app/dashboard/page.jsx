@@ -1,8 +1,7 @@
 "use client"
 import React from 'react';
-import { useAppState } from '../../context/AppStateContext'; // Ajusta la ruta a tu AppStateContext
-
-// Componentes de ejemplo para el Dashboard
+import { useAppState } from '../../context/AppStateContext'; 
+// 🚨 CORRECCIÓN 3: Rutas explícitas para alcanzar la carpeta 'components'
 import WeeklyChallenges from '../../components/WeeklyChallenges'; 
 import BuildsHUD from '../../components/widgets/BuildsHUD';
 
@@ -10,7 +9,6 @@ export default function DashboardPage() {
     const { profile, isAuthenticated, overlayEnabled, toggleOverlay, logout } = useAppState();
 
     if (!isAuthenticated) {
-        // Esto debería ser manejado por page.jsx, pero es un fallback de seguridad
         return <p className="text-red-400 p-8">No autenticado. Redirigiendo...</p>;
     }
 
@@ -57,17 +55,15 @@ export default function DashboardPage() {
                         <div className="grid grid-cols-2 gap-4 text-gray-400">
                             <p><strong>Signo Zodiacal:</strong> <span className="text-[#C5B58E]">{zodiacSign}</span></p>
                             <p><strong>Posiciones Clave:</strong> <span className="text-white">{positions}</span></p>
-                            {/* Aquí se mostraría el Win Rate, Rank, y Lógica Psico-Estratégica */}
                             <p className="col-span-2 pt-2">
                                 *La IA está combinando su Signo Zodiacal con el Win Rate de sus 5 mejores campeones para generar un perfil de riesgo estratégico único.*
                             </p>
                         </div>
                     </section>
 
-                    {/* Simulación del Widget de Builds (Puedes usar BuildsHUD) */}
+                    {/* Simulación del Widget de Builds */}
                     <section className="bg-black bg-opacity-60 p-6 rounded-xl border border-[#1E2A38]">
                          <h2 className="text-2xl font-semibold text-gray-200 mb-4">Builds Recomendadas del Parche</h2>
-                         {/* Asumo que tienes el componente BuildsHUD en tu proyecto */}
                          <BuildsHUD /> 
                     </section>
                 </div>
@@ -76,7 +72,6 @@ export default function DashboardPage() {
                 <div className="md:col-span-1">
                     <section className="bg-black bg-opacity-60 p-6 rounded-xl border border-[#1E2A38] h-full">
                         <h2 className="text-2xl font-semibold text-gray-200 mb-4">Desafíos de la Semana</h2>
-                        {/* Asumo que tienes el componente WeeklyChallenges en tu proyecto */}
                         <WeeklyChallenges /> 
                     </section>
                 </div>
