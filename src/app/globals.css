@@ -2,6 +2,10 @@
 @tailwind components;
 @tailwind utilities;
 
+/* 🚨 CRÍTICO: Forzar la transparencia en los elementos raíz del navegador */
+html, body, #__next {
+  background-color: transparent !important;
+}
 @font-face {
   font-family: 'BeaufortforLOL-Bold';
   src: url('/fonts/BeaufortforLOL-Bold.woff2') format('woff2');
@@ -15,7 +19,6 @@ body {
   margin: 0;
   padding: 0;
   font-family: 'Roboto', sans-serif;
-  background-color: transparent;
   color: #F0E6D2;
 }
 

@@ -111,8 +111,14 @@ function setupIpcHandlers() {
 
     // IPC CRÍTICO: Google Auth (Ventana Externa)
     ipcMain.handle('auth:google', async () => {
+        // 🚨 LOG: Proceso iniciado
+        console.log('[AUTH FLOW] -> Solicitud de inicio de sesión de Google recibida desde el frontend.');
+        
         return new Promise((resolve, reject) => {
-            const authUrl = `${BACKEND_BASE_URL}/api/auth/google`; // Usa la URL de Render
+            const authUrl = `${BACKEND_BASE_URL}/api/auth/google`;
+            
+            // 🚨 LOG: URL de inicio de sesión
+            console.log(`[AUTH FLOW] 🌐 Abriendo ventana de autenticación a: ${authUrl}`);
             
             const authWindow = new BrowserWindow({
                 width: 600,
@@ -126,30 +132,41 @@ function setupIpcHandlers() {
             authWindow.webContents.on('will-redirect', (event, url) => {
                 const urlObj = new URL(url);
                 
-                if (urlObj.pathname === '/auth-callback' || urlObj.hostname === 'lolmetamind.com') { 
+                // 🚨 LOG: Redirección detectada
+                console.log(`[AUTH FLOW] ➡️ Redirección detectada. Hostname: ${urlObj.hostname}`);
+                
+                // Verificamos si la redirección es la URL final que esperamos (Vercel)
+                if (urlObj.pathname === '/auth-callback' || urlObj.hostname === 'couchmetamind.vercel.app') { 
                     event.preventDefault();
                     
                     const token = urlObj.searchParams.get('token');
                     const isNewUser = urlObj.searchParams.get('isNewUser') === 'true';
 
                     if (token) {
+                        // 🚨 LOG: Token interceptado con éxito
+                        console.log(`[AUTH FLOW] ✅ Token JWT interceptado. Redirigiendo a Dashboard/Onboarding.`);
+                        
                         store.set('isAuthenticated', true);
                         store.set('userToken', token);
                         authWindow.close();
                         
                         resolve({ success: true, isNewUser: isNewUser, userToken: token }); 
                     } else {
+                        // 🚨 LOG: Redirección a la URL final, pero sin token
+                        console.error('[AUTH FLOW] ❌ Redirección final sin token. Revisar el backend de Render.');
                         authWindow.close();
-                        reject(new Error('No se recibió el token de autenticación.'));
+                        reject(new Error('No se recibió el token de autenticación desde el backend.'));
                     }
                 }
             });
 
             authWindow.on('closed', () => {
-                reject(new Error('Ventana de autenticación cerrada por el usuario.'));
+                // 🚨 LOG: Ventana cerrada
+                console.log('[AUTH FLOW] ℹ️ Ventana de autenticación cerrada (por usuario o por éxito).');
+                // Debemos manejar esto solo si no se resolvió antes
             });
         }).catch(error => {
-            console.error('[AUTH ERROR]:', error.message);
+            console.error('[AUTH FLOW] 💥 ERROR DURANTE EL PROCESO DE AUTH:', error.message);
             return { success: false, message: error.message }; 
         });
     });
@@ -193,7 +210,8 @@ function createMainWindow() {
     height: 780,
     minWidth: 900,
     minHeight: 600,
-    frame: true,
+    frame: false, // 🚨 CAMBIO 1: Eliminamos el marco del sistema operativo
+    transparent: true, // 🚨 CAMBIO 2: Hacemos la ventana transparente
     title: 'LolMetaMind - Coach Estratégico',
     webPreferences: {
       contextIsolation: true,
@@ -202,7 +220,6 @@ function createMainWindow() {
     },
   });
 
-  // CARGA AUTÓNOMA: Usamos el archivo local pre-compilado
   const urlToLoad = `file://${path.join(app.getAppPath(), 'out', 'index.html')}`; 
 
   mainWindow.loadURL(urlToLoad);
