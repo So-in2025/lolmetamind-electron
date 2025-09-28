@@ -1,3 +1,4 @@
+// src/components/LoginScreen.jsx
 "use client"
 import React, { useState, useCallback } from 'react';
 import { useAppState } from '../context/AppStateContext';
@@ -42,8 +43,7 @@ export default function LoginScreen() {
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState('');
     const [successMessage, setSuccessMessage] = useState('');
-    // Añade esta línea para el nuevo estado
-    const [rememberMe, setRememberMe] = useState(false);
+    // 🚨 ELIMINADO: rememberMe state y toda su lógica de carga/guardado.
     const [username, setUsername] = useState('');
     const [password, setPassword] = useState('');
     const [summonerName, setSummonerName] = useState('');
@@ -57,6 +57,8 @@ export default function LoginScreen() {
     const REGIONS = ['LAS', 'NA', 'EUW', 'EUNE', 'KR', 'BR'];
     const ROLES = ['TOP', 'JUNGLE', 'MID', 'ADC', 'SUPPORT'];
     const ZODIACS = ['Aries', 'Tauro', 'Géminis', 'Cáncer', 'Leo', 'Virgo', 'Libra', 'Escorpio', 'Sagitario', 'Capricornio', 'Acuario', 'Piscis'];
+
+    // 🚨 ELIMINADO: useEffect para cargar credenciales (todo el bloque).
 
     // LÓGICA DE VALIDACIÓN COMPLETA
     const validateRegistrationFields = useCallback(() => {
@@ -86,49 +88,16 @@ export default function LoginScreen() {
     }, [tagline, summonerName, region, zodiacSign, favChamp1, favRole1, favChamp2, ROLES]);
   
 
-     const handleSuccess = useCallback(async (token) => {
-        // Nota: localStorage no funciona en el proceso principal de Electron,
-        // usamos electron-store que ya está configurado.
-        await window.electron.store.set('jwt-token', token);
+    // 🚨 handleSuccess: Sincrono, SOLO cambia el estado de flujo.
+    const handleSuccess = (token) => {
+        // Por ahora, solo logueamos el token y nos aseguramos de cambiar el estado
+        console.log(`[FRONTEND] Token recibido. Transición inmediata a Dashboard.`);
 
-        // --- En tu función handleSuccess ---
-        if (rememberMe) {
-            console.log('[FRONTEND] Guardando credenciales de forma segura.');
-            await window.electron.store.set('remembered-username', username);
-            // Usa la API segura que expondrías desde el proceso principal
-            await window.electronAPI.savePassword(password);
-        } else {
-            console.log('[FRONTEND] Borrando credenciales guardadas.');
-            await window.electron.store.delete('remembered-username');
-            // Llama a la API para borrar la contraseña
-            await window.electronAPI.deletePassword();
-        }
+        // CRÍTICO: Cambiar el estado inmediatamente.
+        setFlowState(AppFlowState.DASHBOARD);
+    };
 
-    // AÑADE ESTE BLOQUE COMPLETO
-    React.useEffect(() => {
-        // --- En tu useEffect para cargar credenciales ---
-        const loadCredentials = async () => {
-            if (window.electron) {
-                const savedUser = await window.electron.store.get('remembered-username');
-                if (savedUser) {
-                    // Pide la contraseña al almacén seguro
-                    const savedPass = await window.electronAPI.getPassword();
-                    setUsername(savedUser);
-                    setPassword(savedPass || '');
-                    setRememberMe(true);
-                }
-            }
-        };
-        loadCredentials();
-    }, []); // El array vacío asegura que solo se ejecute una vez
-
-
-        if (setFlowState && AppFlowState && AppFlowState.DASHBOARD) {
-            setFlowState(AppFlowState.DASHBOARD);
-        }
-    }, [setFlowState, AppFlowState, rememberMe, username, password]);
-
-const handleAuth = async (e) => {
+    const handleAuth = async (e) => {
         e.preventDefault();
         
         if (isRegister && !validateRegistrationFields()) {
@@ -136,7 +105,7 @@ const handleAuth = async (e) => {
         }
 
         setError('');
-        setSuccessMessage(''); // Limpiar mensajes al inicio
+        setSuccessMessage(''); 
         setIsLoading(true);
 
         const url = isRegister ? API_ENDPOINTS.REGISTER : API_ENDPOINTS.LOGIN;
@@ -144,7 +113,7 @@ const handleAuth = async (e) => {
         let body = isRegister ? { username, password, summonerName, tagline, region, zodiacSign, favChamp1, favChamp2: favChamp2 || null, favRole1, favRole2: favRole2 || null,} : { username, password };
 
         try {
-            console.log(`[FRONTEND] Enviando petición a ${url} con el usuario: ${username}`); // LOG
+            console.log(`[FRONTEND] Enviando petición a ${url} con el usuario: ${username}`);
             const response = await fetch(url, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -154,25 +123,23 @@ const handleAuth = async (e) => {
             const data = await response.json();
 
             if (!response.ok) {
-                console.error('[FRONTEND] Error de la API:', data.message); // LOG
+                console.error('[FRONTEND] Error de la API:', data.message);
                 const apiErrorMsg = data.message || `Error ${response.status}: Revisa tus credenciales.`;
                 setError(apiErrorMsg);
-                return; // Detener ejecución si hay error
+                return;
             }
 
             if (isRegister) {
-                // Si fue un registro exitoso, mostramos mensaje y cambiamos a login
-                console.log('[FRONTEND] Registro exitoso.'); // LOG
+                console.log('[FRONTEND] Registro exitoso.');
                 setSuccessMessage('¡Cuenta creada! Por favor, inicia sesión.');
                 setIsRegister(false);
             } else if (data.token) {
-                // Si fue un login exitoso, vamos al dashboard
-                console.log('[FRONTEND] Login exitoso.'); // LOG
+                console.log('[FRONTEND] Login exitoso. Llamando a handleSuccess.');
                 handleSuccess(data.token);
             }
 
         } catch (networkError) {
-            console.error('[FRONTEND] Error de red:', networkError); // LOG
+            console.error('[FRONTEND] Error de red:', networkError);
             setError('No se pudo conectar al servidor. Verifica el Backend.');
         } finally {
             setIsLoading(false);
@@ -199,8 +166,6 @@ const handleAuth = async (e) => {
             
             {/* CONTENEDOR PRINCIPAL: lol-frame aplica -webkit-app-region: drag */}
             <div className="w-[560px] lol-frame shadow-[0_0_50px_rgba(197,181,142,0.3)] rounded-lg overflow-hidden border border-lol-accent-gold/30" style={{ padding: '0px', backgroundColor: '#091018' }}>
-                
-                {/* 🚨 BOTÓN X HA SIDO ELIMINADO */}
                 
                 {/* 🚨 Cabecera de Pestañas: pt-2 (Espacio mínimo superior) */}
                 <div className="flex text-sm font-lol-title border-b border-lol-accent-gold/20 -webkit-app-region-drag pt-2">
@@ -241,22 +206,8 @@ const handleAuth = async (e) => {
                     {/* CAMPOS DE ENTRADA (Todos deben ser -webkit-app-region-no-drag) */}
                     <div><input type="text" placeholder="Usuario" value={username} onChange={(e) => setUsername(e.target.value)} required className="w-full p-3 bg-lol-input-bg text-white border border-lol-accent-gold/40 focus:border-lol-highlight outline-none rounded-sm -webkit-app-region-no-drag" /></div>
                     <div><input type="password" placeholder="Contraseña" value={password} onChange={(e) => setPassword(e.target.value)} required className="w-full p-3 bg-lol-input-bg text-white border border-lol-accent-gold/40 focus:border-lol-highlight outline-none rounded-sm -webkit-app-region-no-drag" /></div>
-                    {/* AÑADE ESTE BLOQUE COMPLETO AQUÍ */}
-                    {!isRegister && (
-                        <div className="flex items-center -webkit-app-region-no-drag">
-                            <input
-                                id="remember-me"
-                                name="remember-me"
-                                type="checkbox"
-                                checked={rememberMe}
-                                onChange={(e) => setRememberMe(e.target.checked)}
-                                className="h-4 w-4 rounded border-gray-300 text-lol-accent-gold focus:ring-lol-accent-gold"
-                            />
-                            <label htmlFor="remember-me" className="ml-2 block text-sm text-gray-300">
-                                Recordarme
-                            </label>
-                        </div>
-                    )}
+                    {/* 🚨 ELIMINADO: Checkbox de Recordarme */}
+                    
                     {/* CAMPOS ADICIONALES PARA REGISTRO */}
                     {isRegister && (
                         <>
