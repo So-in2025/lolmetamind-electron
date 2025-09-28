@@ -58,6 +58,22 @@ export default function LoginScreen() {
     const ROLES = ['TOP', 'JUNGLE', 'MID', 'ADC', 'SUPPORT'];
     const ZODIACS = ['Aries', 'Tauro', 'Géminis', 'Cáncer', 'Leo', 'Virgo', 'Libra', 'Escorpio', 'Sagitario', 'Capricornio', 'Acuario', 'Piscis'];
 
+    // Añade este bloque completo para cargar datos guardados
+    React.useEffect(() => {
+        const loadCredentials = async () => {
+            if (window.electron) {
+                const savedUser = await window.electron.store.get('remembered-username');
+                const savedPass = await window.electron.store.get('remembered-password');
+                if (savedUser) {
+                    setUsername(savedUser);
+                    setPassword(savedPass || ''); // Evita que la contraseña sea 'undefined'
+                    setRememberMe(true);
+                }
+            }
+        };
+        loadCredentials();
+    }, []); // El array vacío asegura que solo se ejecute una vez
+
     // LÓGICA DE VALIDACIÓN COMPLETA
     const validateRegistrationFields = useCallback(() => {
         if (tagline.length < 3 || tagline.length > 5 || !/^[A-Za-z0-9]+$/.test(tagline)) {
@@ -84,35 +100,15 @@ export default function LoginScreen() {
         setError('');
         return true;
     }, [tagline, summonerName, region, zodiacSign, favChamp1, favRole1, favChamp2, ROLES]);
-  
-
-     const handleSuccess = useCallback(async (token) => {
-        // Nota: localStorage no funciona en el proceso principal de Electron,
-        // usamos electron-store que ya está configurado.
-        await window.electron.store.set('jwt-token', token);
-
-        // --- En tu función handleSuccess ---
-        if (rememberMe) {
-            console.log('[FRONTEND] Guardando credenciales de forma segura.');
-            await window.electron.store.set('remembered-username', username);
-            // Usa la API segura que expondrías desde el proceso principal
-            await window.electronAPI.savePassword(password);
-        } else {
-            console.log('[FRONTEND] Borrando credenciales guardadas.');
-            await window.electron.store.delete('remembered-username');
-            // Llama a la API para borrar la contraseña
-            await window.electronAPI.deletePassword();
-        }
+    
 
     // AÑADE ESTE BLOQUE COMPLETO
     React.useEffect(() => {
-        // --- En tu useEffect para cargar credenciales ---
         const loadCredentials = async () => {
             if (window.electron) {
                 const savedUser = await window.electron.store.get('remembered-username');
+                const savedPass = await window.electron.store.get('remembered-password');
                 if (savedUser) {
-                    // Pide la contraseña al almacén seguro
-                    const savedPass = await window.electronAPI.getPassword();
                     setUsername(savedUser);
                     setPassword(savedPass || '');
                     setRememberMe(true);
@@ -122,6 +118,21 @@ export default function LoginScreen() {
         loadCredentials();
     }, []); // El array vacío asegura que solo se ejecute una vez
 
+     const handleSuccess = useCallback(async (token) => {
+        // Nota: localStorage no funciona en el proceso principal de Electron,
+        // usamos electron-store que ya está configurado.
+        await window.electron.store.set('jwt-token', token);
+
+        // Lógica para guardar/borrar credenciales
+        if (rememberMe) {
+            console.log('[FRONTEND] Guardando credenciales.'); // Log
+            await window.electron.store.set('remembered-username', username);
+            await window.electron.store.set('remembered-password', password);
+        } else {
+            console.log('[FRONTEND] Borrando credenciales guardadas.'); // Log
+            await window.electron.store.delete('remembered-username');
+            await window.electron.store.delete('remembered-password');
+        }
 
         if (setFlowState && AppFlowState && AppFlowState.DASHBOARD) {
             setFlowState(AppFlowState.DASHBOARD);
