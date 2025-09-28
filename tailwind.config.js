@@ -13,6 +13,7 @@ module.exports = {
           'conic-gradient(from 180deg at 50% 50%, var(--tw-gradient-stops))',
       },
       colors: {
+        // TUS COLORES ORIGINALES (PRESERVADOS)
         'lol-gold': {
           DEFAULT: '#C89B3C',
           light: '#F0E6D2',
@@ -29,15 +30,20 @@ module.exports = {
           light: '#3C3C41',
           dark: '#1E2328',
         },
+        // 🚨 COLORES CRÍTICOS AÑADIDOS PARA LA ESTÉTICA DEL LOGIN 🚨
+        'lol-app-bg': '#091018', // Fondo más oscuro (el que resuelve el problema del fondo claro)
+        'lol-input-bg': '#111A23', // Fondo de input/campos
+        'lol-accent-gold': '#C5B58E', // Oro específico usado para bordes/botones de Login
+        'lol-highlight': '#FFD700', // Dorado más brillante para focus/shadow
       },
       textShadow: {
         'default': '0 2px 4px rgba(0, 0, 0, 0.5)',
-        'md': '0 4px 8px rgba(0, 0, 0, 0.6)',
-        'lg': '0 10px 15px rgba(0, 0, 0, 0.6)',
+        'md': '0 4px 8px rgba(0, 0, 0, 0.6...',
+      },
+      fontFamily: {
+        'lol-title': ['BeaufortforLOL-Bold', 'Cinzel', 'serif'],
       },
     },
   },
-  plugins: [
-    require('tailwindcss-textshadow'),
-  ],
+  plugins: [],
 };

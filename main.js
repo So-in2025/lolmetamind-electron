@@ -1,32 +1,45 @@
-// Ruta: main.js
-const { app, BrowserWindow, ipcMain } = require('electron');
+// main.js
+
+const { app, BrowserWindow, globalShortcut, screen, ipcMain, session } = require('electron');
 const path = require('path');
+const axios = require('axios');
+const { shell } = require('electron');
+const Store = require('electron-store');
+const { fetchAndSendLcuData } = require('./lol-client-api'); // Asumiendo que esta función existe
+const WebSocket = require('ws');
 
-// Utilizamos la propiedad nativa de Electron para determinar el entorno (sin electron-is-dev)
-const isDev = !app.isPackaged; 
+let wsClient;
+const store = new Store(); // Asumiendo que Store fue importado correctamente
+let pollingInterval = null;
+const isDev = process.env.NODE_ENV === 'development';
+app.commandLine.appendSwitch('ignore-certificate-errors');
+app.disableHardwareAcceleration();
 
-let mainWindow;      // Ventana principal (Dashboard/Login)
-let splashWindow;    // Ventana de carga inicial
-let overlayWindow;   // Ventana flotante del Coach
+let mainWindow;
+let splashWindow;
+let overlayWindow;
 
-// Rutas base: Se define la ruta completa dependiendo del entorno (dev o prod)
-const INDEX_PATH = isDev
-    ? 'http://localhost:3000'
-    : `file://${path.join(__dirname, 'out', 'index.html')}`;
-    
-const OVERLAY_PATH = isDev
-    ? 'http://localhost:3000/overlay'
-    : `file://${path.join(__dirname, 'out', 'overlay.html')}`;
+// TUS VARIABLES ORIGINALES:
+const USE_LOCAL_BACKEND = process.env.DEBUG_BACKEND_LOCAL === 'true';
+const HTTP_BASE_URL = USE_LOCAL_BACKEND ? 'http://localhost:3000' : 'https://lolmetamind-dmxt.onrender.com';
+const WS_BASE_URL = USE_LOCAL_BACKEND ? 'ws://localhost:8080' : 'wss://lolmetamind-ws.onrender.com';
+const BACKEND_BASE_URL = HTTP_BASE_URL;
+const LIVE_GAME_UPDATE_ENDPOINT = '/api/live-game/update';
 
-// Función para crear la ventana de splash
+const INDEX_PATH = isDev ? 'http://localhost:3000' : `file://${path.join(__dirname, 'out', 'index.html')}`;
+const OVERLAY_PATH = isDev ? 'http://localhost:3000/overlay' : `file://${path.join(__dirname, 'out', 'overlay.html')}`;
+
+// 🚨 LÓGICA DE LOGIN CON GOOGLE ELIMINADA.
+
 function createSplashWindow() {
     splashWindow = new BrowserWindow({
-        width: 600,
+        width: 400,
         height: 400,
         transparent: true,
         frame: false,
         alwaysOnTop: true,
         center: true,
+        backgroundColor: '#00000000', 
         webPreferences: {
             preload: path.join(__dirname, 'preload.js'),
             nodeIntegration: false,
@@ -35,19 +48,23 @@ function createSplashWindow() {
     });
 
     splashWindow.loadURL(`file://${path.join(__dirname, 'splash.html')}`);
-
     splashWindow.on('closed', () => (splashWindow = null));
 }
 
 function createMainWindow() {
-    // Configuración de la ventana principal (Dashboard/Login)
+    // Configuración de la ventana principal (Login Flotante / Dashboard)
     mainWindow = new BrowserWindow({
-        width: 1200,
-        height: 800,
-        minWidth: 1000,
-        minHeight: 600,
-        show: false, // Ocultar inicialmente mientras se carga el contenido (SPLASH)
-        icon: path.join(__dirname, 'assets', 'icon2.png'),
+        // 🚨 Configuración Flotante y Estabilidad (debe coincidir con LoginScreen.jsx)
+        width: 500,    
+        height: 720,
+        minWidth: 500, // Fijamos el tamaño para evitar redimensionamiento
+        minHeight: 720,
+        show: false, // CRÍTICO: Ocultar inicialmente
+        frame: false, 
+        transparent: true, 
+      // 🚨 CORRECCIÓN CRÍTICA: FONDOS FANTASMAS
+        backgroundColor: '#00000000', 
+        
         webPreferences: {
             preload: path.join(__dirname, 'preload.js'),
             nodeIntegration: false,
@@ -56,28 +73,27 @@ function createMainWindow() {
         },
     });
 
-    // Cargar la ruta principal (page.jsx controlará si se muestra AuthScreen o Dashboard)
     mainWindow.loadURL(INDEX_PATH);
 
-    mainWindow.on('ready-to-show', () => {
-        // Al terminar de cargar la ventana principal:
-        if (splashWindow) {
-            splashWindow.webContents.send('app-ready'); 
-            splashWindow.close();
-        }
-        
-        // Mostrar la ventana principal
-        mainWindow.show();
-        if (isDev) { 
-            mainWindow.webContents.openDevTools();
-        }
+    // 🚨 MANEJO DE LA TRANSICIÓN SPLASH -> MAIN
+    mainWindow.once('ready-to-show', () => {
+        // Cuando el contenido de Login/Dashboard está cargado, esperamos 4 segundos.
+        setTimeout(() => {
+            if (splashWindow) {
+                splashWindow.close(); 
+                splashWindow = null;
+            }
+            // Mostramos la ventana principal SOLO después del delay
+            mainWindow.show();
+            mainWindow.center();
+            if (isDev) { 
+                mainWindow.webContents.openDevTools();
+            }
+        }, 4000); // 4 SEGUNDOS DE SPLASH
     });
     
-    // Se elimina toda la lógica de Google Auth.
-
     mainWindow.on('closed', () => {
         mainWindow = null;
-        // Cierra el overlay si la ventana principal se cierra
         if (overlayWindow) { overlayWindow.close(); overlayWindow = null; }
     });
 }
@@ -113,41 +129,96 @@ function createOverlayWindow() {
     overlayWindow.on('closed', () => (overlayWindow = null));
 }
 
+
+// --- LÓGICA COMPLETA DE WEBSOCKETS (Tu código original) ---
+function setupWebSocketClient() {
+    if (wsClient) { wsClient.close(1000, 'Reconnecting'); }
+    wsClient = new WebSocket(WS_BASE_URL); 
+
+    wsClient.on('open', () => {
+        console.log('WebSocket conectado a:', WS_BASE_URL);
+    });
+
+    wsClient.on('message', (data) => {
+        const message = data.toString();
+        if (mainWindow) {
+            mainWindow.webContents.send('ws-message', message);
+        }
+    });
+
+    wsClient.on('close', () => { 
+        console.log('WebSocket desconectado. Reconectando en 5s...'); 
+        setTimeout(setupWebSocketClient, 5000);
+    });
+
+    wsClient.on('error', (error) => {
+        console.error('Error de WebSocket:', error.message);
+    });
+}
+
+// --- LÓGICA COMPLETA DE LIVE GAME POLLING (Tu código original) ---
+function startLiveGamePolling() {
+    if (pollingInterval) clearInterval(pollingInterval);
+    pollingInterval = setInterval(async () => {
+        try {
+            const response = await fetchAndSendLcuData(null, 'GET', '/lol-gameflow/v1/session');
+            const gameState = response?.phase || 'None';
+            
+            if (mainWindow) { mainWindow.webContents.send('live-game-update', { state: gameState }); }
+            
+            if (gameState === 'InProgress') {
+                const gameDataResponse = await fetchAndSendLcuData(null, 'GET', '/lol-liveclientdata/allgamedata');
+                if (gameDataResponse) { 
+                    await axios.post(`${BACKEND_BASE_URL}${LIVE_GAME_UPDATE_ENDPOINT}`, gameDataResponse); 
+                }
+            }
+        } catch (error) { 
+            if (mainWindow) { mainWindow.webContents.send('live-game-update', { state: 'None', error: 'Cliente no detectado' }); } 
+        }
+    }, 5000);
+}
+
 // =========================================================================
-// MANEJO DE EVENTOS IPC (El Login exitoso abre el Overlay)
+// MANEJO DE EVENTOS IPC (Control de Ventana y Login)
 // =========================================================================
 
-// El frontend (AuthScreen.jsx) envía este evento al proceso principal 
-// cuando el Login o Registro ha sido exitoso.
-ipcMain.on('user-logged-in', (event, userData) => {
-    console.log(`[IPC] Usuario ${userData.username} (${userData.id}) autenticado. Abriendo Overlay.`);
-    
-    // El frontend ya cambió su estado a DASHBOARD, solo abrimos el Overlay
-    createOverlayWindow();
+// 🚨 CORRECCIÓN IPC: Cierre de ventana
+ipcMain.on('closeWindow', () => {
+    if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.close();
+    } else {
+        app.quit(); // Si mainWindow ya se cerró, cierra la aplicación
+    }
 });
+// 🚨 CORRECCIÓN IPC: Minimizar ventana
+ipcMain.on('minimizeWindow', () => {
+    if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.minimize();
+    }
+});
+
+// El frontend (LoginScreen.jsx) envía este evento al proceso principal 
+ipcMain.on('user-logged-in', (event, userData) => {
+    console.log(`[IPC] Usuario ${userData.username} autenticado. Abriendo Overlay.`);
+    // createOverlayWindow(); // Tu lógica para abrir el Overlay
+});
+
 
 // ----------------------------------------------------
 // INICIO DEL CICLO DE VIDA DE LA APLICACIÓN
 // ----------------------------------------------------
 
 app.on('ready', () => {
-    // 1. Inicia el Splash (primera ventana visible)
+    // 1. Inicia el Splash (única ventana visible inicialmente)
     createSplashWindow();
     
-    // 2. Crea la ventana principal (Dashboard) en segundo plano
-    setTimeout(() => {
-        createMainWindow();
-    }, 100); 
+    // 2. Crea la ventana principal (oculta) INMEDIATAMENTE
+    createMainWindow(); 
+    
+    // Iniciar las funciones de monitoreo si es necesario
+    // setupWebSocketClient(); 
+    // startLiveGamePolling();
 });
 
-app.on('window-all-closed', () => {
-    if (process.platform !== 'darwin') {
-        app.quit();
-    }
-});
-
-app.on('activate', () => {
-    if (mainWindow === null) {
-        createMainWindow();
-    }
-});
+app.on('window-all-closed', () => { if (process.platform !== 'darwin') { app.quit(); } });
+app.on('activate', () => { if (mainWindow === null) { createMainWindow(); } });

@@ -12,10 +12,6 @@ export const metadata = {
 export default function RootLayout({ children }) {
   return (
     <html lang="es">
-      {/* --- CORRECCIÓN DEFINITIVA ---
-        Se ha eliminado "className" del body. Esto previene que Tailwind aplique 
-        un color de fondo por defecto, eliminando la "caja" fantasma de una vez por todas.
-      */}
       <body>
         <AppStateProvider>
           {children}

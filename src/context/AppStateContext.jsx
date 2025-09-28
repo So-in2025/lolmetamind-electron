@@ -1,122 +1,48 @@
-// Ruta: src/context/AppStateContext.jsx
-'use client';
-import React, { createContext, useContext, useState, useEffect } from 'react';
+"use client";
+import React, { createContext, useContext, useState } from 'react';
 
+// Define los estados posibles del flujo de la aplicación
+export const AppFlowState = {
+    // Mantenemos LOADING por si lo necesitas en el splash, pero el flujo principal ya no depende de la verificación
+    LOADING: 'LOADING',     
+    LOGIN: 'LOGIN',         // Pantalla de inicio de sesión/registro
+    DASHBOARD: 'DASHBOARD', // Aplicación principal
+};
+
+// Crea el contexto
 const AppStateContext = createContext(null);
 
-// Definición de la constante de flujo de estados
-export const AppFlowState = {
-    LOADING: 'LOADING',
-    SPLASH: 'SPLASH',
-    LOGIN: 'LOGIN', // Ahora incluye Registro y Perfil
-    DASHBOARD: 'DASHBOARD',
-    // ELIMINADO: ONBOARDING
-};
-
 export const AppStateProvider = ({ children }) => {
-  const [userId, setUserId] = useState(null);
-  const [username, setUsername] = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [splashLoaded, setSplashLoaded] = useState(false); 
-  const [flowState, setFlowState] = useState(AppFlowState.LOADING);
-
-  useEffect(() => {
-    const storedId = localStorage.getItem('user_id');
-
-    if (storedId) {
-      // Si hay sesión, el estado final será DASHBOARD
-      setUserId(storedId);
-      setUsername(localStorage.getItem('username'));
-    }
+    // 🚨 CORRECCIÓN CLAVE: El estado inicial se fuerza a LOGIN.
+    // Ya no verificamos el token en localStorage al inicio.
+    const [flowState, setFlowState] = useState(AppFlowState.LOGIN);
     
-    setLoading(false);
+    // Si necesitas un estado para datos de usuario global, lo defines aquí
+    const [userData, setUserData] = useState(null);
 
-    // Manejar el evento de fin de carga del Splash Screen
-    if (window.ipcRenderer) {
-        window.ipcRenderer.on('splash-ready', () => {
-            setSplashLoaded(true);
-        });
-    } else {
-        setSplashLoaded(true); 
-    }
+    // 🚨 LÓGICA DE VERIFICACIÓN DE TOKEN EN useEffect HA SIDO ELIMINADA.
     
-    return () => {
-        if (window.ipcRenderer) {
-            window.ipcRenderer.removeAllListeners('splash-ready');
-        }
-    }
-  }, []);
+    const contextValue = {
+        flowState,
+        setFlowState, // Usado para navegar entre estados (como del Login al Dashboard)
+        AppFlowState, // Permite acceder a los nombres de los estados
+        userData,
+        setUserData,
+        // Puedes añadir aquí una función logout() si la necesitas.
+    };
 
-  // Lógica para actualizar el flowState después de la carga inicial
-  useEffect(() => {
-    if (!loading && splashLoaded) {
-        if (userId) {
-            setFlowState(AppFlowState.DASHBOARD);
-        } else {
-            setFlowState(AppFlowState.LOGIN);
-        }
-    }
-  }, [loading, splashLoaded, userId]);
-
-
-  /**
-   * Establece la sesión del usuario y cambia el estado a DASHBOARD.
-   */
-  const setUserSession = (newId, newUsername) => {
-    localStorage.setItem('user_id', newId);
-    localStorage.setItem('username', newUsername);
-    setUserId(newId);
-    setUsername(newUsername);
-    setFlowState(AppFlowState.DASHBOARD); // Cambia el estado para renderizar el Dashboard
-    
-    // Notificar a main.js para que abra el Overlay Flotante
-    if (window.ipcRenderer) {
-      window.ipcRenderer.send('user-logged-in', { id: newId, username: newUsername });
-    }
-  };
-  
-  /**
-   * Cierra la sesión del usuario.
-   */
-  const logout = () => {
-    localStorage.removeItem('user_id');
-    localStorage.removeItem('username');
-    setUserId(null);
-    setUsername(null);
-    setFlowState(AppFlowState.LOGIN); // Vuelve al estado de Login
-    // Solo recargar en modo desarrollo si no es Electron
-    if (!window.ipcRenderer) {
-        window.location.reload();
-    }
-  };
-  
-  // Define el estado actual: si está cargando, muestra el SPLASH
-  const currentFlowState = loading || !splashLoaded 
-    ? AppFlowState.SPLASH 
-    : flowState;
-
-  return (
-    <AppStateContext.Provider
-      value={{
-        userId,
-        username,
-        isAuthenticated: !!userId,
-        loading,
-        setUserSession,
-        logout,
-        flowState: currentFlowState, // Flujo que será usado por page.jsx
-        AppFlowState, // Constantes de flujo
-      }}
-    >
-      {children}
-    </AppStateContext.Provider>
-  );
+    return (
+        <AppStateContext.Provider value={contextValue}>
+            {children}
+        </AppStateContext.Provider>
+    );
 };
 
+// Hook personalizado para usar el contexto
 export const useAppState = () => {
-  const context = useContext(AppStateContext);
-  if (context === undefined) {
-    throw new Error('useAppState debe ser usado dentro de AppStateProvider');
-  }
-  return context;
+    const context = useContext(AppStateContext);
+    if (!context) {
+        throw new Error('useAppState debe ser usado dentro de un AppStateProvider');
+    }
+    return context;
 };
