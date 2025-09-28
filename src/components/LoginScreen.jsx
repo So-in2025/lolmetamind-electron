@@ -10,7 +10,7 @@ const API_ENDPOINTS = {
     REGISTER: `${API_BASE_URL}/register`
 };
 
-// --- Componentes de Icono LoL Style ---
+// --- Componentes de Icono LoL Style (Iguales) ---
 const LoginIcon = () => (
     <svg className="w-5 h-5 mr-2" fill="currentColor" viewBox="0 0 20 20">
         <path fillRule="evenodd" d="M10 9a3 3 0 100-6 3 3 0 000 6zm-7 9a7 7 0 1114 0H3z" clipRule="evenodd" />
@@ -21,8 +21,6 @@ const RegisterIcon = () => (
         <path d="M8 9a3 3 0 100-6 3 3 0 000 6zM3 12h4a7 7 0 0110 0h4a7 7 0 01-10 0z" />
     </svg>
 );
-
-// Botón de cierre (para referencia de código completo)
 const CloseButton = () => (
     <button
         onClick={() => window.electronAPI ? window.electronAPI.closeWindow() : alert('Cerrar app (Electron no detectado)')} 
@@ -36,14 +34,13 @@ const CloseButton = () => (
 
 
 export default function LoginScreen() {
-    const { setFlowState, AppFlowState } = useAppState();
+    const { setFlowState, AppFlowState, setUserData } = useAppState();
     
     // ESTADOS COMPLETOS
     const [isRegister, setIsRegister] = useState(false);
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState('');
     const [successMessage, setSuccessMessage] = useState('');
-    // 🚨 ELIMINADO: rememberMe state y toda su lógica de carga/guardado.
     const [username, setUsername] = useState('');
     const [password, setPassword] = useState('');
     const [summonerName, setSummonerName] = useState('');
@@ -58,9 +55,7 @@ export default function LoginScreen() {
     const ROLES = ['TOP', 'JUNGLE', 'MID', 'ADC', 'SUPPORT'];
     const ZODIACS = ['Aries', 'Tauro', 'Géminis', 'Cáncer', 'Leo', 'Virgo', 'Libra', 'Escorpio', 'Sagitario', 'Capricornio', 'Acuario', 'Piscis'];
 
-    // 🚨 ELIMINADO: useEffect para cargar credenciales (todo el bloque).
-
-    // LÓGICA DE VALIDACIÓN COMPLETA
+    // LÓGICA DE VALIDACIÓN COMPLETA (Misma)
     const validateRegistrationFields = useCallback(() => {
         if (tagline.length < 3 || tagline.length > 5 || !/^[A-Za-z0-9]+$/.test(tagline)) {
             setError('Tagline inválido. Debe tener 3 a 5 caracteres alfanuméricos.');
@@ -88,13 +83,31 @@ export default function LoginScreen() {
     }, [tagline, summonerName, region, zodiacSign, favChamp1, favRole1, favChamp2, ROLES]);
   
 
-    // 🚨 handleSuccess: Sincrono, SOLO cambia el estado de flujo.
+    // 🚨 handleSuccess: Dispara el IPC y luego cambia el estado.
     const handleSuccess = (token) => {
-        // Por ahora, solo logueamos el token y nos aseguramos de cambiar el estado
-        console.log(`[FRONTEND] Token recibido. Transición inmediata a Dashboard.`);
+        const userProfile = { 
+            username: username, 
+            token: token,
+            summonerName: summonerName, 
+            tagline: tagline, 
+            region: region,
+        };
 
-        // CRÍTICO: Cambiar el estado inmediatamente.
+        // 1. 🔑 CLAVE: ENVIAR IPC CON DATOS REALES E INMEDIATOS ANTES DE CAMBIAR EL ESTADO.
+        if (window.electronAPI && window.electronAPI.send) {
+            window.electronAPI.send('user-logged-in', { 
+                username: userProfile.username, 
+                token: userProfile.token 
+            });
+            console.log(`[FRONTEND] IPC DISPARADO CON TOKEN VÁLIDO. Usuario: ${userProfile.username}`);
+        }
+
+        // 2. Actualizar el contexto.
+        setUserData(userProfile);
+        
+        // 3. Cambiar el estado de flujo.
         setFlowState(AppFlowState.DASHBOARD);
+        console.log(`[FRONTEND] Login exitoso. Contexto actualizado. Transición a Dashboard.`);
     };
 
     const handleAuth = async (e) => {
@@ -134,7 +147,6 @@ export default function LoginScreen() {
                 setSuccessMessage('¡Cuenta creada! Por favor, inicia sesión.');
                 setIsRegister(false);
             } else if (data.token) {
-                console.log('[FRONTEND] Login exitoso. Llamando a handleSuccess.');
                 handleSuccess(data.token);
             }
 
@@ -206,7 +218,6 @@ export default function LoginScreen() {
                     {/* CAMPOS DE ENTRADA (Todos deben ser -webkit-app-region-no-drag) */}
                     <div><input type="text" placeholder="Usuario" value={username} onChange={(e) => setUsername(e.target.value)} required className="w-full p-3 bg-lol-input-bg text-white border border-lol-accent-gold/40 focus:border-lol-highlight outline-none rounded-sm -webkit-app-region-no-drag" /></div>
                     <div><input type="password" placeholder="Contraseña" value={password} onChange={(e) => setPassword(e.target.value)} required className="w-full p-3 bg-lol-input-bg text-white border border-lol-accent-gold/40 focus:border-lol-highlight outline-none rounded-sm -webkit-app-region-no-drag" /></div>
-                    {/* 🚨 ELIMINADO: Checkbox de Recordarme */}
                     
                     {/* CAMPOS ADICIONALES PARA REGISTRO */}
                     {isRegister && (
