@@ -265,6 +265,31 @@ async function fetchAndSendLcuData(BACKEND_BASE_URL, LIVE_GAME_UPDATE_ENDPOINT) 
     // ----------------------------------------------------
     
     if (consolidatedData) {
+        
+        // 💡 NUEVO LOGGING DE DATOS DE PARTIDA EN VIVO (LCU)
+        if (consolidatedData.mode === 'Realtime' && consolidatedData.liveData && consolidatedData.liveData.activePlayer) {
+            const player = consolidatedData.liveData.activePlayer;
+            const gameData = consolidatedData.liveData.gameData;
+            
+            const kda = `${player.scores.kills}/${player.scores.deaths}/${player.scores.assists}`;
+            const gold = player.currentGold.toFixed(0);
+            const cs = player.scores.creepScore;
+            const time = (gameData.gameTime / 60).toFixed(2);
+            
+            console.log('----------------------------------------------------');
+            console.log(`[LCU DATA SENT] Live Metrics for ${player.summonerName}:`);
+            console.log(`[LCU DATA SENT] -> Time: ${time} min`);
+            console.log(`[LCU DATA SENT] -> KDA: ${kda}`);
+            console.log(`[LCU DATA SENT] -> Gold: ${gold}`);
+            console.log(`[LCU DATA SENT] -> CS: ${cs}`);
+            console.log(`[LCU DATA SENT] -> Phase: ${consolidatedData.gameflow.phase}`);
+            console.log('----------------------------------------------------');
+        } else if (consolidatedData.mode === 'Strategic_API') {
+             console.log(`[LCU DATA SENT] Sending Strategic API Fallback Data.`);
+        } else if (consolidatedData.mode && consolidatedData.mode.includes('Scraping')) {
+             console.log(`[LCU DATA SENT] Sending Web Scraping Fallback Data (Mode: ${consolidatedData.mode})`);
+        }
+        
         const backendAgent = new https.Agent({ rejectUnauthorized: false });
         const modeLog = consolidatedData.mode; 
         

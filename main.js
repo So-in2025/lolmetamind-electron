@@ -139,7 +139,7 @@ function createMainWindow() {
             preload: path.join(__dirname, 'preload.js'),
             nodeIntegration: false,
             contextIsolation: true,
-            webSecurity: !isDevMode 
+            //webSecurity: !isDevMode 
         },
     });
 
@@ -157,9 +157,9 @@ function createMainWindow() {
             }
             mainWindow.show();
             mainWindow.center();
-            if (isDevMode) { 
+            /*if (isDevMode) { 
                 mainWindow.webContents.openDevTools();
-            }
+            }*/
         }, 4000); 
     });
     
