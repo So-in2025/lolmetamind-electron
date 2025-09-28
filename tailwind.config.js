@@ -13,37 +13,33 @@ module.exports = {
           'conic-gradient(from 180deg at 50% 50%, var(--tw-gradient-stops))',
       },
       colors: {
-        // TUS COLORES ORIGINALES (PRESERVADOS)
+        // TUS COLORES ORIGINALES, AJUSTADOS PARA CONSISTENCIA:
         'lol-gold': {
-          DEFAULT: '#C89B3C',
-          light: '#F0E6D2',
+          DEFAULT: '#c8aa6e', // Dorado principal
+          light: '#F0E6D2',   // Beige/Claro (para texto/acento)
           dark: '#785A28',
         },
         'lol-blue': {
-          DEFAULT: '#0A323C',
-          light: '#091428',
+          DEFAULT: '#0099ff', // Azul brillante (para botones/acento)
+          light: '#0BC6E3',
           dark: '#031A21',
           accent: '#0BC6E3',
         },
         'lol-grey': {
           DEFAULT: '#A09B8C',
           light: '#3C3C41',
-          dark: '#1E2328',
+          dark: '#1E2328', // Gris muy oscuro/Fondo de contenedores
         },
-        // 🚨 COLORES CRÍTICOS AÑADIDOS PARA LA ESTÉTICA DEL LOGIN 🚨
-        'lol-app-bg': '#091018', // Fondo más oscuro (el que resuelve el problema del fondo claro)
-        'lol-input-bg': '#111A23', // Fondo de input/campos
-        'lol-accent-gold': '#C5B58E', // Oro específico usado para bordes/botones de Login
-        'lol-highlight': '#FFD700', // Dorado más brillante para focus/shadow
-      },
-      textShadow: {
-        'default': '0 2px 4px rgba(0, 0, 0, 0.5)',
-        'md': '0 4px 8px rgba(0, 0, 0, 0.6...',
-      },
-      fontFamily: {
-        'lol-title': ['BeaufortforLOL-Bold', 'Cinzel', 'serif'],
+        // 🚨 COLORES CRÍTICOS AÑADIDOS PARA LA ESTÉTICA (Nuevos o ajustados):
+        'lol-app-bg': '#091018', // Fondo más oscuro para toda la app (casi negro)
+        'lol-input-bg': '#1e2328', // Fondo de input
+        'lol-text': '#f0e6d2',    // Texto principal
+        'lol-dark-blue': '#1e2328', // Fondo del panel de configuración
       },
     },
   },
-  plugins: [],
-};
+  plugins: [
+    // Asegúrate de que tienes 'tailwindcss-textshadow' si lo usas
+    require('tailwindcss-textshadow'),
+  ],
+}

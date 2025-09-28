@@ -34,7 +34,8 @@
   },
   "devDependencies": {
     "electron": "^22.3.27",
-    "electron-builder": "^24.13.3"
+    "electron-builder": "^24.13.3",
+    "rimraf": "^6.0.1"
   },
   "build": {
     "appId": "com.lolmetamind.app",
@@ -44,7 +45,9 @@
       "preload.js",
       "static/**/*",
       "out/**/*",
-      "node_modules/**/*"
+      "node_modules/**/*",
+      "lol-client-api.js",
+      "lol-strategic-data-fallback.js"
     ],
     "directories": {
       "buildResources": "assets",

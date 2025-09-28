@@ -25,14 +25,22 @@ contextBridge.exposeInMainWorld('electronAPI', {
   getStoreValue: (key) => ipcRenderer.invoke('get-store-value', key),
   setStoreValue: (key, value) => ipcRenderer.send('set-store-value', { key, value }),
   openExternalLink: (url) => ipcRenderer.send('open-external-link', url),
+  
+  // 🔑 FUNCIÓN DE RECEPCIÓN (on): Corregida y Añadida la funcionalidad de Riot API
   on: (channel, callback) => {
-    const validChannels = ['websocket-message', 'live-game-update'];
+    // AÑADIDO: 'riot-profile-data' para recibir los datos de Ligas/Maestrías desde main.js
+    const validChannels = ['websocket-message', 'live-game-update', 'riot-profile-data']; 
     if (validChannels.includes(channel)) {
-      const subscription = (event, ...args) => callback(...args);
+      const subscription = (event, ...args) => callback(event, ...args);
       ipcRenderer.on(channel, subscription);
-      return () => ipcRenderer.removeListener(channel, subscription);
+    }
+  },
+  
+  // 🔑 FUNCIÓN DE LIMPIEZA: Necesaria para el hook de React
+  removeListener: (channel, callback) => {
+    const validChannels = ['websocket-message', 'live-game-update', 'riot-profile-data'];
+    if (validChannels.includes(channel)) {
+        ipcRenderer.removeListener(channel, callback);
     }
   },
 });
-
-console.log('[PRELOAD] API de Electron expuesta en window.electronAPI');

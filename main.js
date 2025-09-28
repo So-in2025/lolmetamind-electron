@@ -6,6 +6,7 @@ const axios = require('axios');
 const { shell } = require('electron');
 const Store = require('electron-store');
 const https = require('https'); 
+// 🔑 IMPORTANTE: La ruta ha sido corregida para usar el nombre correcto del archivo
 const { fetchAndSendLcuData } = require('./lol-client-api'); 
 const WebSocket = require('ws');
 
@@ -24,26 +25,39 @@ let splashWindow;
 let overlayWindow;
 
 // TUS VARIABLES ORIGINALES:
-const USE_LOCAL_BACKEND = process.env.DEBUG_BACKEND_LOCAL === 'true';
+// La usaremos para forzar el backend local
+const USE_LOCAL_BACKEND = true; // 🔑 FORZADO: Siempre true para que use localhost:3000
 
 // La URL base para todas las llamadas API es el puerto 3000.
 const HTTP_BASE_API_URL = 'http://localhost:3000'; 
 const WS_BASE_URL = 'ws://localhost:8080'; 
-const BACKEND_BASE_URL = isDevMode ? HTTP_BASE_API_URL : 'https://lolmetamind-dmxt.onrender.com';
+
+// 🔑 CLAVE: Ahora BACKEND_BASE_URL SIEMPRE será HTTP_BASE_API_URL (localhost:3000)
+const BACKEND_BASE_URL = HTTP_BASE_API_URL;
 
 const LIVE_GAME_UPDATE_ENDPOINT = '/api/live-game/update';
 const USER_PROFILE_ENDPOINT = '/api/user/profile'; // Endpoint de su Backend para obtener perfil completo
 
-// 🚨 CLAVE: La INTERFAZ de Electron carga desde el puerto 3001.
+// 🔑 REVERTIDO: Vuelve a usar archivos locales (file://) para el .exe (Modo Producción)
+// El frontend se cargará de la carpeta 'out' dentro del paquete.
 const INDEX_PATH = isDevMode ? 'http://localhost:3001' : `file://${path.join(__dirname, 'out', 'index.html')}`; 
 const OVERLAY_PATH = isDevMode ? 'http://localhost:3001/overlay' : `file://${path.join(__dirname, 'out', 'overlay.html')}`; 
 
 // Agente HTTPS para el backend
 const backendAgent = new https.Agent({ rejectUnauthorized: false });
 
-// 🔑 CLAVE: Helper function para crear un delay (SOLUCIONA EL REFERENCEERROR)
+// 🔑 CLAVE: Helper function para crear un delay
 const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
 
+
+
+// 🔑 FUNCIÓN IPC: Envía datos al proceso de renderizado (Dashboard)
+function sendPollingDataToRenderer(data) {
+    if (mainWindow && !mainWindow.isDestroyed()) {
+        // Canal 'riot-profile-data' será escuchado en el frontend
+        mainWindow.webContents.send('riot-profile-data', data);
+    }
+}
 /**
  * 🔑 CLAVE: Obtiene el perfil completo del usuario (Invocador, Tagline, Región) desde la DB.
  * Implementa hasta 2 intentos para manejar fallos transitorios.
@@ -68,7 +82,7 @@ async function fetchAndStoreUserProfile(username, token) {
             const response = await axios.get(`${BACKEND_BASE_URL}${USER_PROFILE_ENDPOINT}`, {
                 headers: { 'Authorization': `Bearer ${token}` },
                 params: { username: username }, 
-                httpsAgent: backendAgent,
+                httpsAgent: backendAgent, // Aunque sea HTTP, este agente no debería causar problemas
                 timeout: 20000 
             });
 
@@ -157,9 +171,10 @@ function createMainWindow() {
             }
             mainWindow.show();
             mainWindow.center();
-            /*if (isDevMode) { 
-                mainWindow.webContents.openDevTools();
-            }*/
+            // 🔑 QUITAR COMENTARIO PARA DEPURAR EL .EXE
+            // if (!isDevMode) { 
+            //     mainWindow.webContents.openDevTools();
+            // }
         }, 4000); 
     });
     
