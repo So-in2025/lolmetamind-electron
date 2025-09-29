@@ -125,7 +125,7 @@ function createSplashWindow() {
         frame: false,
         alwaysOnTop: true,
         center: true,
-        //backgroundColor: '#00000000', 
+        backgroundColor: '#00000000', 
         webPreferences: {
             preload: path.join(__dirname, 'preload.js'),
             nodeIntegration: false,
@@ -140,14 +140,14 @@ function createSplashWindow() {
 function createMainWindow() {
     console.log('[MAIN] -> Creando Main Window.'); 
     mainWindow = new BrowserWindow({
-        width: 1280,    // 🔑 CORRECCIÓN DE TAMAÑO 16:9
-        height: 720,    // 🔑 CORRECCIÓN DE TAMAÑO 16:9
-        minWidth: 1280, // 🔑 CORRECCIÓN DE TAMAÑO
-        minHeight: 720, // 🔑 CORRECCIÓN DE TAMAÑO
+        width: 1280,    
+        height: 800,
+        minWidth: 1280, 
+        minHeight: 800,
         show: false, 
-        frame: false,   // <-- Sin Marco
+        frame: false, 
         transparent: true, 
-        backgroundColor: '#00000000', // Debe ser transparente para que el CSS funcione
+        backgroundColor: '#00000000', 
         
         webPreferences: {
             preload: path.join(__dirname, 'preload.js'),
@@ -175,7 +175,7 @@ function createMainWindow() {
             // if (!isDevMode) { 
             //     mainWindow.webContents.openDevTools();
             // }
-        }, 4000); 
+        }, 3000); 
     });
     
     mainWindow.on('closed', () => {
@@ -233,7 +233,7 @@ function setupWebSocketClient() {
 
     wsClient.on('close', () => { 
         console.log('WebSocket desconectado. Reconectando en 5s...'); 
-        setTimeout(setupWebSocketClient, 5000);
+        setTimeout(setupWebSocketClient, 10000);
     });
 
     wsClient.on('error', (error) => {
@@ -245,22 +245,14 @@ function setupWebSocketClient() {
 function startLiveGamePolling() {
     if (pollingInterval) clearInterval(pollingInterval);
     
-    // 🔑 CORRECCIÓN DE INTERVALO: Aumentado de 5000ms a 15000ms.
-    // Esto reduce la probabilidad de golpear el Rate Limit (403/429).
-    pollingInterval = setInterval(async () => { 
+    pollingInterval = setInterval(async () => {
         console.log('[LCU POLLING] 🏃‍♀️ Ejecutando rutina de Polling de LCU/Riot API/Estratégico...');
+        await fetchAndSendLcuData(BACKEND_BASE_URL, LIVE_GAME_UPDATE_ENDPOINT);
         
-        await fetchAndSendLcuData(
-            BACKEND_BASE_URL, 
-            LIVE_GAME_UPDATE_ENDPOINT, 
-            sendPollingDataToRenderer 
-        );
-        
-    }, 15000); // <--- CAMBIO CRÍTICO AQUÍ
+    }, 15000); 
     
-    console.log('[LCU POLLING] 🟢 LCU Polling Iniciado. (Intervalo 15s).');
+    console.log('[LCU POLLING] 🟢 LCU Polling Iniciado. (Intervalo 5s).');
 }
-
 
 function stopLiveGamePolling() {
     if (pollingInterval) {
@@ -290,19 +282,14 @@ ipcMain.on('minimizeWindow', () => {
     }
 });
 
-// main.js (modificado)
+// 🔑 NUEVO LISTENER: Para guardar la clave API desde el Dashboard.
 ipcMain.on('set-riot-api-key', (event, apiKey) => {
     store.set('riotApiKey', apiKey);
-    console.log(`[MAIN STORE] ✅ Clave API Riot guardada. Reiniciando Polling.`);
-
-    // 🔑 Descomentar para reiniciar el polling inmediatamente
-    if (pollingInterval) { 
-        // Primero detenemos el polling para luego iniciarlo de nuevo, asegurando la nueva key
-        clearInterval(pollingInterval); 
-    }
-    // Aseguramos que se inicie el nuevo ciclo con la nueva key.
-    startLiveGamePolling(); 
+    console.log(`[MAIN STORE] ✅ Clave API Riot guardada.`);
+    // Opcional: reiniciar el polling para probar la nueva clave inmediatamente.
+    // if (pollingInterval) startLiveGamePolling();
 });
+
 
 // ----------------------------------------------------
 // INICIO DEL CICLO DE VIDA DE LA APLICACIÓN
@@ -333,6 +320,12 @@ app.on('ready', () => {
         
         // 3. Iniciar el Polling (Ahora con el token REAL en el store)
         startLiveGamePolling();
+        
+        // 🔑 CLAVE DE SOLUCIÓN: Desactivar la ignorancia de eventos de ratón para que el Dashboard sea interactivo.
+        if (mainWindow && !mainWindow.isDestroyed()) {
+             mainWindow.setIgnoreMouseEvents(false);
+             console.log('[IPC RECEPCIÓN] 🖱️ Reactivando eventos de ratón para el Dashboard. Clics y arrastre habilitados.');
+        }
     });
 
 

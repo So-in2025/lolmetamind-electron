@@ -1,3 +1,4 @@
+// src/components/WeeklyChallenges.jsx
 "use client"
 import React from 'react';
 
@@ -10,20 +11,26 @@ const challenges = [
 
 export default function WeeklyChallenges() {
     return (
-        <div className="space-y-4">
-            <p className="text-sm text-gray-400">Estos desafíos se actualizan con la lógica estratégica de tu IA.</p>
-            {challenges.map(challenge => (
-                <div key={challenge.id} className="p-3 bg-black bg-opacity-40 rounded-lg border border-[#1E2A38]">
-                    <div className="flex justify-between items-center mb-1">
-                        <h3 className="text-base font-semibold text-white">{challenge.title}</h3>
-                        <span className="text-sm font-bold text-gray-300">{challenge.progress}%</span>
+        <div className="space-y-4 h-full">
+            <h3 className="text-xl font-bold text-lol-gold mb-4 border-b border-lol-gold/50 pb-2">
+               Desafíos Semanales Estratégicos
+            </h3>
+            <p className="text-sm text-lol-grey/70">Estos desafíos se actualizan con la lógica estratégica de tu IA.</p>
+            {/* Contenedor con scroll para evitar que se desborde el dashboard */}
+            <div className="space-y-4 max-h-[500px] overflow-y-auto no-scrollbar pt-2">
+                {challenges.map(challenge => (
+                    <div key={challenge.id} className="p-3 bg-lol-input-bg rounded-lg border border-lol-grey-dark shadow-lg">
+                        <div className="flex justify-between items-center mb-1">
+                            <h3 className="text-base font-semibold text-lol-text">{challenge.title}</h3>
+                            <span className="text-sm font-bold text-lol-gold">{challenge.progress}%</span>
+                        </div>
+                        <p className="text-xs text-lol-grey mb-2">{challenge.description}</p>
+                        <div className="w-full bg-lol-grey-dark rounded-full h-1.5">
+                            <div className={`h-1.5 rounded-full ${challenge.color}`} style={{ width: `${challenge.progress}%` }}></div>
+                        </div>
                     </div>
-                    <p className="text-xs text-gray-400 mb-2">{challenge.description}</p>
-                    <div className="w-full bg-gray-600 rounded-full h-1.5">
-                        <div className={`h-1.5 rounded-full ${challenge.color}`} style={{ width: `${challenge.progress}%` }}></div>
-                    </div>
-                </div>
-            ))}
+                ))}
+            </div>
         </div>
     );
 }
