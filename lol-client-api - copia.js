@@ -1,206 +1,179 @@
 // lol-client-api.js
-// Este módulo es el núcleo de la recolección de datos, interactuando tanto con el
-// League Client (LCU) localmente como con la API externa de Riot Games.
-// Incluye un robusto modo de diagnóstico y una lógica de polling avanzada
-// para enviar datos consolidados a tu backend para el análisis de la IA.
 
 const fs = require('fs');
 const path = require('path');
 const axios = require('axios');
 const https = require('https');
-const Store = require('electron-store');
-const LCUConnector = require('lcu-connector');
+const Store = require('electron-store'); 
+const store = new Store(); 
 
-const store = new Store();
-const connector = new LCUConnector();
-
-// =========================================================================
-//  CONFIGURACIÓN Y UTILIDADES GLOBALES
-// =========================================================================
-
-/**
- * Crea una pausa en la ejecución. Esencial para manejar los límites de velocidad de la API.
- * @param {number} ms - Milisegundos a esperar.
- * @returns {Promise<void>}
- */
+// 🔑 Helper function para crear un delay
 const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
 
-// Mapeos de Región a Plataforma y a Routing Regional para las APIs de Riot
+// 🚨 MAPEO 1: Para el ROUTING Regional (API de Cuentas y Match)
 const REGION_MAPPING = {
     'NA1': 'AMERICAS', 'LA1': 'AMERICAS', 'LA2': 'AMERICAS', 'BR1': 'AMERICAS',
     'LAS': 'AMERICAS', 'LAN': 'AMERICAS', 'OC1': 'AMERICAS', 
-    'EUW1': 'EUROPE', 'EUN1': 'EUROPE', 'TR1': 'EUROPE', 'RU': 'EUROPE',
-    'KR': 'ASIA', 'JP1': 'ASIA', 'PH2': 'ASIA', 'SG2': 'ASIA', 'TH2': 'ASIA', 'TW2': 'asia', 'VN2': 'asia',
+    'EUW1': 'EUROPE', 'EUN1': 'EUROPE', 'KR': 'ASIA', 'JP1': 'ASIA', 'PH2': 'ASIA',
 };
 
+// 🔑 MAPEO 2: Para el SUBDOMINIO de Plataforma (Soluciona ENOTFOUND en llamadas Summoner, League, Mastery)
 const FRIENDLY_TO_PLATFORM_ID = {
     'LAS': 'LA2', 'LAN': 'LA1', 'EUW': 'EUW1', 'EUNE': 'EUN1', 'BR': 'BR1', 
     'NA': 'NA1', 'OC': 'OC1', 'KR': 'KR',
 };
 
-// Agente HTTPS para ignorar certificados autofirmados (necesario para LCU y backend local)
-const agent = new https.Agent({
+// Agente HTTPS para el LCU y backend (ignora certificados)
+const lcuAgent = new https.Agent({
   rejectUnauthorized: false,
 });
 
-let lcuCredentials = null;
-let lastSentGameflowPhase = null;
 
-// =========================================================================
-//  LÓGICA DE CONEXIÓN AL LCU (LEAGUE CLIENT UPDATE)
-// =========================================================================
+// -----------------------------------------------------------
+//  🚨 LÓGICA DE CONEXIÓN AL LCU (LEAGUE CLIENT UPDATE)
+// -----------------------------------------------------------
+const LCUConnector = require('lcu-connector');
+const connector = new LCUConnector();
+let lcuCredentials = null;
 
 connector.on('connect', (data) => {
   lcuCredentials = data;
   console.log('[LCU] ✅ Conectado al Cliente de LoL');
 });
-
 connector.on('disconnect', () => {
   lcuCredentials = null;
   console.log('[LCU] ❌ Desconectado del Cliente de LoL');
 });
-
-// Inicia el conector para que escuche al cliente de LoL
 connector.start();
 
 
-// =========================================================================
-//  FUNCIÓN PRINCIPAL DE POLLING
-// =========================================================================
+// -----------------------------------------------------------
+//  🔑 LÓGICA DE POLLING
+// -----------------------------------------------------------
+
+let lastSentGameflowPhase = null;
 
 /**
- * Función principal ejecutada en un intervalo desde main.js.
- * Recopila datos de LCU y/o Riot API y los envía al backend.
- * @param {string} BACKEND_BASE_URL - URL base del servidor backend.
- * @param {string} LIVE_GAME_UPDATE_ENDPOINT - Endpoint para enviar los datos de polling.
+ * 🚨 FUNCIÓN PRINCIPAL DE POLLING: Ejecutada en un intervalo desde main.js
  */
 async function fetchAndSendLcuData(BACKEND_BASE_URL, LIVE_GAME_UPDATE_ENDPOINT) {
     let lcuData = null;
     let riotApiData = null;
-    let modeLog = 'Initial';
+    let modeLog = 'Initial'; // Para seguimiento
 
-    const userToken = store.get('userToken');
+    const userToken = store.get('userToken'); // Token JWT del usuario de la app
     const summonerName = store.get('userSummonerName');
     const tagline = store.get('userTagline');
     const region = store.get('userRegion');
     const riotApiKey = store.get('riotApiKey');
-
-    // --- PRIORIDAD 1: Intenta obtener datos de la LCU ---
+    
+    // -----------------------------------------------------------------
+    //  PRIORIDAD 1: Intenta obtener datos de la LCU (Cliente abierto)
+    // -----------------------------------------------------------------
     if (lcuCredentials) {
         modeLog = 'LCU_Live_Game';
         try {
             const lcuAxios = axios.create({
                 baseURL: `https://127.0.0.1:${lcuCredentials.port}`,
                 headers: { 'Authorization': `Basic ${Buffer.from(`riot:${lcuCredentials.password}`).toString('base64')}` },
-                httpsAgent: agent,
+                httpsAgent: lcuAgent,
             });
 
-            // Se obtiene también la selección de campeones para análisis pre-partida
-            const [sessionResponse, gameflowResponse, champSelectResponse] = await Promise.all([
+            const [sessionResponse, gameflowResponse] = await Promise.all([
                 lcuAxios.get('/lol-gameflow/v1/session').catch(() => null),
                 lcuAxios.get('/lol-gameflow/v1/gameflow-phase').catch(() => null),
-                lcuAxios.get('/lol-champ-select/v1/session').catch(() => null),
             ]);
-
+            
+            // Si hay datos de sesión (partida en curso), los usamos
             if (sessionResponse && sessionResponse.data && sessionResponse.data.gameData) {
                 lcuData = {
                     gameflow: gameflowResponse?.data || null,
                     session: sessionResponse.data,
-                    champSelect: champSelectResponse?.data || null,
                 };
             } else if (gameflowResponse && gameflowResponse.data) {
-                lcuData = { 
-                    gameflow: gameflowResponse.data, 
-                    session: null,
-                    champSelect: champSelectResponse?.data || null,
-                };
+                // Si no hay partida, al menos usamos el estado del cliente (ej. "Lobby", "Matchmaking")
+                lcuData = { gameflow: gameflowResponse.data, session: null };
             } else {
-                console.log('[LCU POLLING] LCU abierto, pero estado no disponible. Pasando a Riot API.');
+                 console.log('[LCU POLLING] LCU abierto, pero estado no disponible. Pasando a Riot API (Prioridad 2).');
             }
+
         } catch (error) {
             console.error('[LCU POLLING] ❌ Error al obtener datos de LCU:', error.message);
         }
     }
 
-    // --- PRIORIDAD 2: Si no hay partida en LCU, usa la API de Riot ---
+    // -----------------------------------------------------------------
+    //  PRIORIDAD 2: Si LCU falla o no está en partida, usa la API de Riot
+    // -----------------------------------------------------------------
     if (!lcuData?.session) {
         modeLog = 'Strategic_API_Profile';
         if (summonerName && tagline && region && riotApiKey) {
             try {
+                // 🔑 PASO 1: Obtener PUUID a partir del Riot ID (Nombre#Tag)
+                const riotIdResponse = await axios.get(`https://${REGION_MAPPING[FRIENDLY_TO_PLATFORM_ID[region]]}.api.riotgames.com/riot/account/v1/accounts/by-riot-id/${encodeURIComponent(summonerName)}/${tagline}`, {
+                    headers: { 'X-Riot-Token': riotApiKey },
+                });
+                const puuid = riotIdResponse.data.puuid;
+
+                // 🔑 PASO 2: Usar PUUID para obtener el resto de los datos
                 const platformId = FRIENDLY_TO_PLATFORM_ID[region];
-                const regionalRoute = REGION_MAPPING[platformId];
-                const headers = { 'X-Riot-Token': riotApiKey };
-
-                const accountResponse = await axios.get(`https://${regionalRoute}.api.riotgames.com/riot/account/v1/accounts/by-riot-id/${encodeURIComponent(summonerName)}/${tagline}`, { headers });
-                const puuid = accountResponse.data.puuid;
-
-                // NOTA: El endpoint de league/v4 usa summonerId, no puuid. Se necesita una llamada previa.
-                const summonerResponse = await axios.get(`https://${platformId}.api.riotgames.com/lol/summoner/v4/summoners/by-puuid/${puuid}`, { headers });
-                const summonerId = summonerResponse.data.id;
-
-                const [leagueData, masteryData, liveGameData, matchIdsData] = await Promise.all([
-                     axios.get(`https://${platformId}.api.riotgames.com/lol/league/v4/entries/by-summoner/${summonerId}`, { headers }).catch(e => null),
-                     axios.get(`https://${platformId}.api.riotgames.com/lol/champion-mastery/v4/champion-masteries/by-puuid/${puuid}`, { headers }).catch(e => null),
-                     axios.get(`https://${platformId}.api.riotgames.com/lol/spectator/v5/active-games/by-puuid/${puuid}`, { headers }).catch(e => null),
-                     axios.get(`https://${regionalRoute}.api.riotgames.com/lol/match/v5/matches/by-puuid/${puuid}/ids?count=5`, { headers }).catch(e => null)
+                
+                // 🚨 EJECUCIÓN EN PARALELO de las llamadas a la Riot API
+                const [summonerData, leagueData, masteryData, liveGameData] = await Promise.all([
+                     axios.get(`https://${platformId}.api.riotgames.com/lol/summoner/v4/summoners/by-puuid/${puuid}`, { headers: { 'X-Riot-Token': riotApiKey } }).catch(e => { console.error('[RIOT API] Fallo al obtener Summoner Data:', e.response?.status); return null; }),
+                     axios.get(`https://${platformId}.api.riotgames.com/lol/league/v4/entries/by-summoner/${puuid}`, { headers: { 'X-Riot-Token': riotApiKey } }).catch(e => { console.error('[RIOT API] Fallo al obtener League Data:', e.response?.status); return null; }),
+                     axios.get(`https://${platformId}.api.riotgames.com/lol/champion-mastery/v4/champion-masteries/by-puuid/${puuid}`, { headers: { 'X-Riot-Token': riotApiKey } }).catch(e => { console.error('[RIOT API] Fallo al obtener Mastery Data:', e.response?.status); return null; }),
+                     axios.get(`https://${platformId}.api.riotgames.com/lol/spectator/v5/active-games/by-puuid/${puuid}`, { headers: { 'X-Riot-Token': riotApiKey } }).catch(e => { /*console.log('[RIOT API] No hay partida activa (404 esperado).');*/ return null; }),
                 ]);
 
-                // --- AMPLIACIÓN ROBUSTA: Obtener detalles y timeline de TODAS las partidas recientes ---
-                let detailedMatches = [];
-                let matchTimelines = [];
-                if (matchIdsData?.data && matchIdsData.data.length > 0) {
-                    const matchDetailPromises = matchIdsData.data.map(matchId => 
-                        axios.get(`https://${regionalRoute}.api.riotgames.com/lol/match/v5/matches/${matchId}`, { headers }).catch(e => null)
-                    );
-                    const matchResults = await Promise.all(matchDetailPromises);
-                    detailedMatches = matchResults.filter(Boolean).map(res => res.data);
-
-                    const timelinePromises = matchIdsData.data.map(matchId =>
-                        axios.get(`https://${regionalRoute}.api.riotgames.com/lol/match/v5/matches/${matchId}/timeline`, { headers }).catch(e => null)
-                    );
-                    const timelineResults = await Promise.all(timelinePromises);
-                    matchTimelines = timelineResults.filter(Boolean).map(res => res.data);
-                }
-                
+                // Construimos el objeto de datos de la Riot API
                 riotApiData = {
-                    summoner: summonerResponse?.data,
+                    summoner: summonerData?.data,
                     leagues: leagueData?.data,
                     masteries: masteryData?.data,
                     liveGame: liveGameData?.data,
-                    matchHistory: detailedMatches,
-                    matchTimelines: matchTimelines,
                 };
 
             } catch (error) {
-                console.error('[RIOT API] ❌ Error en el flujo:', error.response ? `Status ${error.response.status}` : error.message);
+                console.error('[RIOT API] ❌ Error en el flujo de la Riot API:', error.response ? `Status ${error.response.status}` : error.message);
                 if (error.response?.status === 403) {
-                     console.error('[RIOT API] 🔑 ERROR 403: Revisa tu clave de API de Riot.');
-                } else if (error.response?.status === 429) {
-                    console.error('[RIOT API] RATE LIMIT: Demasiadas solicitudes. Esperando para reintentar...');
-                    await delay(10000); // Espera 10 segundos antes del próximo ciclo de polling
+                     console.error('[RIOT API] 🔑 ERROR 403: Revisa tu clave de API de Riot. Puede que haya expirado o sea inválida.');
                 }
             }
         } else {
-             console.log('[RIOT API] Faltan datos para usar la API de Riot.');
+             console.log('[RIOT API] Faltan datos (invocador/tag/región/clave) para usar la Riot API.');
         }
     }
 
-    // --- ENVÍO AL BACKEND ---
+    // -----------------------------------------------------------------
+    //  ENVÍO AL BACKEND: Solo si hay datos nuevos o un cambio de estado
+    // -----------------------------------------------------------------
     const consolidatedData = {
         lcu: lcuData,
         riotApi: riotApiData,
+        // Incluye los datos del perfil de la app para que el backend sepa a quién asociarlos
         metaMindProfile: { summonerName, tagline, region } 
     };
 
+    // Condición de envío: Hay datos de LCU o de Riot API
     if (lcuData || riotApiData) {
+        
+        // 🚨 Lógica para evitar spam: solo envía si el estado del juego ha cambiado
         const currentPhase = lcuData?.gameflow;
         if (currentPhase && currentPhase === lastSentGameflowPhase && modeLog === 'LCU_Live_Game') {
-            return; // Evita spam si el estado no cambia
+            // console.log(`[POLLING] [SKIP] Sin cambios en el estado del juego (${currentPhase}).`);
+            return;
         }
         lastSentGameflowPhase = currentPhase;
         
-        console.log(`[POLLING] [SENT] Enviando datos al backend. Modo: ${modeLog}.`);
+        // --- LOGS DETALLADOS ---
+        if (modeLog === 'LCU_Live_Game' && lcuData) {
+            console.log(`[POLLING] [SENT] LCU Data. Mode: ${modeLog}. Phase: ${lcuData.gameflow.phase}.`);
+        } else if (modeLog === 'Strategic_API_Profile') {
+             console.log(`[POLLING] [SENT] RIOT API Data. Clave en uso. Mode: ${modeLog}.`);
+        }
         
+        const backendAgent = new https.Agent({ rejectUnauthorized: false });
         const requestHeaders = { 
             'Content-Type': 'application/json',
             'Authorization': userToken ? `Bearer ${userToken}` : undefined 
@@ -210,34 +183,32 @@ async function fetchAndSendLcuData(BACKEND_BASE_URL, LIVE_GAME_UPDATE_ENDPOINT) 
              const response = await axios.post(
                 `${BACKEND_BASE_URL}${LIVE_GAME_UPDATE_ENDPOINT}`,
                 consolidatedData, 
-                { headers: requestHeaders, httpsAgent: agent, timeout: 20000 } // Timeout aumentado
+                { headers: requestHeaders, httpsAgent: backendAgent, timeout: 5000 }
             );
 
-            console.log(`[POLLING] [OK] Envío a Backend exitoso. Status: ${response.status}.`);
-
+            if (response.status === 200 || response.status === 204) {
+                const logMessage = response.status === 204 ? 'No Content' : `DB Updated. Mode: ${modeLog}`;
+                console.log(`[POLLING] [OK] Envio a Backend exitoso. Mode: ${modeLog}. Status: ${logMessage}.`);
+            } else {
+                console.error(`[POLLING] [FALLO] Error al enviar data al backend: ${response.status}`);
+            }
         } catch (backendError) {
-            console.error(`[POLLING] [FALLO CRÍTICO BACKEND] Error: ${backendError.message}`);
+            console.error(`[POLLING] [FALLO CRÍTICO BACKEND] Error de red al enviar datos: ${backendError.message}`);
         }
     } else {
-         console.log(`[POLLING] [ALERTA] No hay datos de LCU ni de Riot API para enviar.`);
+         console.log(`[POLLING] [ALERTA] LCU y Riot API fallaron o no están disponibles. Polling en espera.`);
     }
 }
-
-
-// =========================================================================
-//  MODO DIAGNÓSTICO (LÓGICA ORIGINAL RESTAURADA Y COMPLETA)
-// =========================================================================
-
-/**
- * Ejecuta una serie de pruebas contra todos los endpoints de la API de Riot para verificar la conectividad.
- */
+// -------------------------------------------------------------------------------------------------------------------------------
+// 🚨 MODO DIAGNÓSTICO: Ejecuta pruebas en todos los endpoints de la API de Riot.
+// -------------------------------------------------------------------------------------------------------------------------------
 async function runDiagnostics(apiKey, summonerName, tagline, region) {
     console.log('\n\n======================================================');
     console.log(' MODO DIAGNÓSTICO DE RIOT API INICIADO');
     console.log('======================================================');
     
     if (!apiKey || !summonerName || !tagline || !region) {
-        console.error('[DIAG] ❌ ERROR: Faltan datos (Clave API, Invocador, Tagline o Región).');
+        console.error('[DIAG] ❌ ERROR: Faltan datos (Clave API, Invocador, Tagline o Región) para el diagnóstico.');
         return;
     }
     
@@ -263,8 +234,10 @@ async function runDiagnostics(apiKey, summonerName, tagline, region) {
         'Spectator V5': { status: 'PENDIENTE', data: null },
     };
 
-    // --- TEST 1: Account V1 (Obtener PUUID) ---
-    console.log(`\n[TEST 1/10 - Account V1] 🔑 Buscando PUUID para ${summonerName}#${tagline}...`);
+    // -------------------------------------------------
+    //  TEST 1: Account V1 (Obtener PUUID) - CRÍTICO
+    // -------------------------------------------------
+    console.log('\n[TEST 1/10 - Account V1] 🔑 Buscando PUUID para ' + `${summonerName}#${tagline}` + '...');
     try {
         const response = await axios.get(`https://${regionalRoute}.api.riotgames.com/riot/account/v1/accounts/by-riot-id/${encodeURIComponent(summonerName)}/${tagline}`, { headers });
         puuid = response.data.puuid;
@@ -281,13 +254,15 @@ async function runDiagnostics(apiKey, summonerName, tagline, region) {
     
     await delay(200);
 
-    // --- TEST 2: Summoner V4 (Obtener ID Cifrado) ---
+    // -------------------------------------------------
+    //  TEST 2: Summoner V4 (Obtener ID Cifrado)
+    // -------------------------------------------------
     console.log('\n[TEST 2/10 - Summoner V4] 🔑 Buscando Summoner ID...');
-    if (puuid) {
+    if (puuid) { // Asegurarse de tener PUUID
         try {
             const response = await axios.get(`https://${platformId}.api.riotgames.com/lol/summoner/v4/summoners/by-puuid/${puuid}`, { headers });
             encryptedSummonerId = response.data.id;
-            accountId = response.data.accountId;
+            accountId = response.data.accountId; // Guardar accountId si es necesario
             results['Summoner V4'].status = `✅ ÉXITO: Summoner ID cifrado obtenido. (Platform: ${platformId})`;
             results['Summoner V4'].data = response.data;
         } catch (e) {
@@ -300,7 +275,9 @@ async function runDiagnostics(apiKey, summonerName, tagline, region) {
     
     await delay(200);
 
-    // --- TEST 3: League V4 (Ligas) ---
+    // -------------------------------------------------
+    //  TEST 3: League V4 (Ligas)
+    // -------------------------------------------------
     console.log('\n[TEST 3/10 - League V4] 🏆 Buscando Ligas del Invocador...');
     if (encryptedSummonerId) {
         try {
@@ -317,9 +294,11 @@ async function runDiagnostics(apiKey, summonerName, tagline, region) {
     
     await delay(200);
 
-    // --- TEST 4: Mastery V4 (Maestrías) ---
+    // -------------------------------------------------
+    //  TEST 4: Mastery V4 (Maestrías)
+    // -------------------------------------------------
     console.log('\n[TEST 4/10 - Mastery V4] 🏅 Buscando Maestrías de Campeón...');
-    if (puuid) {
+    if (puuid) { // Mastery también puede usar PUUID
         try {
             const response = await axios.get(`https://${platformId}.api.riotgames.com/lol/champion-mastery/v4/champion-masteries/by-puuid/${puuid}`, { headers });
             results['Mastery V4'].status = response.data.length > 0 ? '✅ ÉXITO: Maestrías obtenidas.' : '⚠️ ADVERTENCIA: Respuesta vacía (Sin maestrías).';
@@ -334,7 +313,9 @@ async function runDiagnostics(apiKey, summonerName, tagline, region) {
     
     await delay(200);
     
-    // --- TEST 5: Status V4 (Estado del Servicio) ---
+    // -------------------------------------------------
+    //  TEST 5: Status V4 (Estado del Servicio)
+    // -------------------------------------------------
     console.log('\n[TEST 5/10 - Status V4] ➡️ Buscando Estado del Servicio LoL...');
     try {
         const response = await axios.get(`https://${platformId}.api.riotgames.com/lol/status/v4/platform-data`, { headers });
@@ -347,7 +328,9 @@ async function runDiagnostics(apiKey, summonerName, tagline, region) {
      
     await delay(200);
      
-    // --- TEST 6: TFT League V1 ---
+    // -------------------------------------------------
+    //  TEST 6: TFT League V1
+    // -------------------------------------------------
     console.log('\n[TEST 6/10 - TFT League V1] ♟️ Buscando Ligas de TFT...');
      if (encryptedSummonerId) {
         try {
@@ -364,9 +347,11 @@ async function runDiagnostics(apiKey, summonerName, tagline, region) {
     
     await delay(200);
     
-    // --- TEST 7: Match V5 (Historial) ---
+    // -------------------------------------------------
+    //  TEST 7: Match V5 (Historial)
+    // -------------------------------------------------
     console.log('\n[TEST 7/10 - Match V5] 🚀 Buscando Historial de Partidas (Últimos 5 IDs)...');
-    if (puuid) {
+    if (puuid) { // Match V5 requiere PUUID
         try {
             const response = await axios.get(`https://${regionalRoute}.api.riotgames.com/lol/match/v5/matches/by-puuid/${puuid}/ids?count=5`, { headers });
             matchIds = response.data;
@@ -382,13 +367,15 @@ async function runDiagnostics(apiKey, summonerName, tagline, region) {
 
     await delay(200);
 
-    // --- TEST 8: Match V5 (Timeline) ---
+    // -------------------------------------------------
+    //  TEST 8: Match V5 (Timeline)
+    // -------------------------------------------------
     if (matchIds.length > 0) {
         console.log(`\n[TEST 8/10 - Match V5] ➡️ Buscando Timeline para Match ID: ${matchIds[0]}...`);
         try {
             const response = await axios.get(`https://${regionalRoute}.api.riotgames.com/lol/match/v5/matches/${matchIds[0]}/timeline`, { headers });
             results['Match V5 (Timeline)'].status = '✅ ÉXITO: Timeline de Partida obtenida.';
-            results['Match V5 (Timeline)'].data = 'Datos de Timeline omitidos por brevedad.';
+            results['Match V5 (Timeline)'].data = 'Datos de Timeline omitidos por brevedad.'; // No guardar data completa por ser muy grande
         } catch (e) {
             results['Match V5 (Timeline)'].status = `❌ FALLO: ${e.response?.status || 'Error de Red'}`;
         }
@@ -399,13 +386,15 @@ async function runDiagnostics(apiKey, summonerName, tagline, region) {
 
     await delay(200);
 
-    // --- TEST 9: Challenges V1 ---
+    // -------------------------------------------------
+    //  TEST 9: Challenges V1
+    // -------------------------------------------------
     console.log('\n[TEST 9/10 - Challenges V1] ➡️ Buscando Progreso de Desafíos...');
-    if (puuid) {
+    if (puuid) { // Challenges V1 requiere PUUID
         try {
             const response = await axios.get(`https://${platformId}.api.riotgames.com/lol/challenges/v1/player-data/${puuid}`, { headers });
             results['Challenges V1'].status = '✅ ÉXITO: Datos de Desafíos obtenidos.';
-            results['Challenges V1'].data = 'Datos de Desafíos omitidos por brevedad.';
+            results['Challenges V1'].data = 'Datos de Desafíos omitidos por brevedad.'; // Puede ser muy grande
         } catch (e) {
             results['Challenges V1'].status = `❌ FALLO: Challenges V1. Status: ${e.response?.status || 'Error de Red'}`;
         }
@@ -416,9 +405,11 @@ async function runDiagnostics(apiKey, summonerName, tagline, region) {
 
     await delay(200);
     
-    // --- TEST 10: Spectator V5 ---
+    // -------------------------------------------------
+    //  TEST 10: Spectator V5
+    // -------------------------------------------------
      console.log('\n[TEST 10/10 - Spectator V5] 👁️ Buscando Partida en Vivo...');
-     if (puuid) {
+     if (puuid) { // Spectator V5 requiere PUUID
         try {
             const response = await axios.get(`https://${platformId}.api.riotgames.com/lol/spectator/v5/active-games/by-puuid/${puuid}`, { headers });
             results['Spectator V5'].status = '✅ ÉXITO: Partida en vivo encontrada.';
@@ -435,10 +426,13 @@ async function runDiagnostics(apiKey, summonerName, tagline, region) {
      }
     console.log(`[TEST 10/10] ${results['Spectator V5'].status}`);
     
-    // --- RESUMEN FINAL ---
+    // -------------------------------------------------
+    //  RESUMEN FINAL
+    // -------------------------------------------------
     console.log('\n\n--- RESUMEN FINAL DEL DIAGNÓSTICO (FALLOS) ---');
     let hasFailures = false;
     Object.entries(results).forEach(([api, result]) => {
+        // Consolidar mensajes de fallo y advertencia de manera más limpia
         if (result.status.includes('❌ FALLO')) {
             hasFailures = true;
             console.log(`[DIAG] ❌ ${api}: FALLÓ. Estado: ${result.status.replace('❌ FALLO: ', '')}`);
@@ -460,9 +454,9 @@ async function runDiagnostics(apiKey, summonerName, tagline, region) {
     console.log('------------------------------------------------');
 }
 
-// Exporta las funciones que main.js necesita
+
+// Exportar las funciones que main.js necesita
 module.exports = {
   fetchAndSendLcuData,
   runDiagnostics,
 };
-

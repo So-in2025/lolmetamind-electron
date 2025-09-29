@@ -1,4 +1,4 @@
-// main.js - VERSIÓN COMPLETA Y FINAL
+// main.js - VERSIÓN CORREGIDA
 
 const { app, BrowserWindow, globalShortcut, screen, ipcMain, session } = require('electron');
 const path = require('path');
@@ -6,43 +6,36 @@ const axios = require('axios');
 const { shell } = require('electron');
 const Store = require('electron-store');
 const https = require('https');
-const { fetchAndSendLcuData } = require('./lol-client-api'); // Asegúrate que este archivo exista
-const WebSocket = require('ws'); // Asegúrate de tener 'ws' instalado
+const { fetchAndSendLcuData } = require('./lol-client-api');
+const WebSocket = require('ws'); 
 
-let wsClient; // Cliente WebSocket para LCU
+let wsClient; 
 const store = new Store();
 let pollingInterval = null;
-let hasRunInitialLogin = false; // Bandera para el guard de login
+let hasRunInitialLogin = false;
 
 const isDevMode = !!process.defaultApp;
 
-// Desactiva la validación de certificados (útil para desarrollo con certificados auto-firmados)
 app.commandLine.appendSwitch('ignore-certificate-errors');
-// Deshabilita la aceleración de hardware para evitar problemas de renderizado en algunas GPUs
 app.disableHardwareAcceleration();
 
 let mainWindow;
 let splashWindow;
-let overlayWindow; // Ventana para el overlay en juego
+let overlayWindow;
 
-// Configuración de URLs del backend
-const USE_LOCAL_BACKEND = true; // Cambiar a false si usas un backend remoto en producción
-const HTTP_BASE_API_URL = 'http://localhost:3000'; // URL de tu backend HTTP
-const WS_BASE_URL = 'ws://localhost:8080'; // URL de tu servidor WebSocket (si lo usas)
-const BACKEND_BASE_URL = HTTP_BASE_API_URL; // Alias principal para el backend HTTP
+const USE_LOCAL_BACKEND = true;
+const HTTP_BASE_API_URL = 'http://localhost:3000';
+const WS_BASE_URL = 'ws://localhost:8080';
+const BACKEND_BASE_URL = HTTP_BASE_API_URL;
 
-// Endpoints específicos de tu backend
 const LIVE_GAME_UPDATE_ENDPOINT = '/api/live-game/update';
 const USER_PROFILE_ENDPOINT = '/api/user/profile';
 
-// Rutas para las vistas del frontend (Next.js)
 const INDEX_PATH = isDevMode ? 'http://localhost:3001' : `file://${path.join(__dirname, 'out', 'index.html')}`;
 const OVERLAY_PATH = isDevMode ? 'http://localhost:3001/overlay' : `file://${path.join(__dirname, 'out', 'overlay.html')}`;
 
-// Agente HTTPS para ignorar certificados auto-firmados en llamadas al backend
 const backendAgent = new https.Agent({ rejectUnauthorized: false });
 
-// Función de utilidad para retrasos
 const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
 
 /**
@@ -80,7 +73,13 @@ async function fetchAndStoreUserProfile(username, token) {
             });
 
             if (response.status === 200 && response.data) {
+                // 🔴 CORRECCIÓN 1: Guardar explícitamente los campos críticos (SummonerName, Región, Tagline) 
+                // para que lol-client-api.js pueda acceder a ellos directamente.
                 store.set('userData', response.data);
+                store.set('userSummonerName', response.data.summonerName);
+                store.set('userRegion', response.data.region);
+                store.set('userTagline', response.data.tagline); 
+                
                 console.log(`[DB FETCH] ✅ Perfil completo guardado para: ${response.data.summonerName}.`);
                 console.log('[DB FETCH] Datos de usuario guardados:', JSON.stringify(response.data, null, 2));
                 return true; // Éxito
@@ -101,9 +100,6 @@ async function fetchAndStoreUserProfile(username, token) {
     return false; // Fallo total
 }
 
-/**
- * Crea la ventana de splash (carga inicial).
- */
 function createSplashWindow() {
     splashWindow = new BrowserWindow({
         width: 400,
@@ -122,19 +118,16 @@ function createSplashWindow() {
     splashWindow.on('closed', () => (splashWindow = null));
 }
 
-/**
- * Crea la ventana principal de la aplicación (el dashboard).
- */
 function createMainWindow() {
     mainWindow = new BrowserWindow({
         width: 1920,
         height: 1080,
         minWidth: 1920,
         minHeight: 1080,
-        show: false, // Ocultar hasta que esté lista
+        show: false,
         frame: false,
         transparent: true,
-        backgroundColor: '#00000000', // Fondo transparente
+        backgroundColor: '#00000000',
         webPreferences: {
             preload: path.join(__dirname, 'preload.js'),
             nodeIntegration: false,
@@ -144,7 +137,6 @@ function createMainWindow() {
 
     mainWindow.loadURL(INDEX_PATH);
 
-    // Muestra la ventana principal después de que el splash termine
     mainWindow.once('ready-to-show', () => {
         setTimeout(() => {
             if (splashWindow) {
@@ -152,21 +144,17 @@ function createMainWindow() {
             }
             mainWindow.show();
             mainWindow.center();
-        }, 3000); // 3 segundos de splash
+        }, 3000);
     });
     
     mainWindow.on('closed', () => {
         mainWindow = null;
     });
-    // Solo para desarrollo: abrir DevTools
     if (isDevMode) {
        // mainWindow.webContents.openDevTools();
     }
 }
 
-/**
- * Crea la ventana de overlay (para mostrar información en juego).
- */
 function createOverlayWindow() {
     const primaryDisplay = screen.getPrimaryDisplay();
     const { width, height } = primaryDisplay.workAreaSize;
@@ -188,16 +176,12 @@ function createOverlayWindow() {
     });
 
     overlayWindow.loadURL(OVERLAY_PATH);
-    overlayWindow.setIgnoreMouseEvents(true); // Permite clics a través del overlay
-    overlayWindow.hide(); // Ocultar por defecto
+    overlayWindow.setIgnoreMouseEvents(true); 
+    overlayWindow.hide();
 
     overlayWindow.on('closed', () => (overlayWindow = null));
 }
 
-/**
- * Inicia la conexión WebSocket para LCU.
- * (Esta función parece haber sido comentada en tus logs, pero se mantiene aquí por completitud)
- */
 function setupWebSocketClient() {
     if (wsClient) {
         wsClient.close();
@@ -207,8 +191,6 @@ function setupWebSocketClient() {
     wsClient.onopen = () => console.log('[WS] Conectado al servidor WebSocket');
     wsClient.onmessage = (event) => {
         console.log('[WS] Mensaje recibido:', event.data);
-        // Aquí puedes procesar los mensajes del backend WebSocket
-        // y enviarlos al frontend si es necesario.
     };
     wsClient.onerror = (error) => console.error('[WS] Error WebSocket:', error);
     wsClient.onclose = () => console.log('[WS] Conexión WebSocket cerrada');
@@ -217,22 +199,24 @@ function setupWebSocketClient() {
 
 /**
  * Inicia el polling para datos de LCU y Riot API.
- * Llama a fetchAndSendLcuData (que debe estar en lol-client-api.js).
  */
 function startLiveGamePolling() {
     if (pollingInterval) clearInterval(pollingInterval);
     pollingInterval = setInterval(async () => {
         console.log('[LCU POLLING] 🏃‍♀️ Ejecutando rutina de Polling...');
-        // Asegúrate de que fetchAndSendLcuData reciba la clave API de Riot
-        // desde store.get('riotApiKey') dentro de lol-client-api.js
-        await fetchAndSendLcuData(BACKEND_BASE_URL, LIVE_GAME_UPDATE_ENDPOINT, store.get('riotApiKey'));
+        
+        // 🔴 CORRECCIÓN 2: Pasar la función de envío IPC (sendPollingDataToRenderer)
+        // para que lol-client-api.js pueda enviar los datos de Riot API al frontend.
+        await fetchAndSendLcuData(
+            BACKEND_BASE_URL, 
+            LIVE_GAME_UPDATE_ENDPOINT, 
+            sendPollingDataToRenderer // Argumento corregido (el tercer argumento ahora es el ipcSender)
+        );
+        
     }, 15000); // Cada 15 segundos
     console.log('[LCU POLLING] 🟢 LCU Polling Iniciado.');
 }
 
-/**
- * Detiene el polling.
- */
 function stopLiveGamePolling() {
     if (pollingInterval) {
         clearInterval(pollingInterval);
@@ -248,7 +232,6 @@ function stopLiveGamePolling() {
 app.on('ready', () => {
     console.log('[MAIN] -> APP READY. Creando ventanas y registrando IPC...');
 
-    // --- IPC para control de ventana ---
     ipcMain.on('closeWindow', () => {
         app.quit();
     });
@@ -256,7 +239,6 @@ app.on('ready', () => {
         mainWindow?.minimize();
     });
 
-    // --- IPC para autenticación y datos de usuario ---
     ipcMain.on('user-logged-in', async (event, userData) => {
         if (hasRunInitialLogin) {
             console.warn(`[IPC RECEPCIÓN] ⚠️ Evento de login duplicado para ${userData.username} ignorado.`);
@@ -269,10 +251,8 @@ app.on('ready', () => {
         store.set('userToken', userData.token);
         console.log('[IPC RECEPCIÓN] Token de usuario guardado en el store.');
 
-        // CRÍTICO: El AWAIT asegura que el perfil se intente obtener antes de iniciar el polling.
         const profileFetchSuccess = await fetchAndStoreUserProfile(userData.username, userData.token);
 
-        // SOLO SI TUVIMOS ÉXITO AL OBTENER EL PERFIL, INICIAMOS EL POLLING
         if (profileFetchSuccess) {
             startLiveGamePolling();
         } else {
@@ -280,29 +260,25 @@ app.on('ready', () => {
         }
 
         if (mainWindow && !mainWindow.isDestroyed()) {
-             // Reactivar eventos de ratón para el Dashboard después de la carga inicial
              mainWindow.setIgnoreMouseEvents(false);
              console.log('[IPC RECEPCIÓN] 🖱️ Reactivando eventos de ratón para el Dashboard. Clics y arrastre habilitados.');
         }
     });
 
     ipcMain.handle('get-user-data', async (event) => {
+        // Devolver todo el objeto userData (que ahora incluye SummonerName, Region, Tagline)
         const userData = store.get('userData');
         console.log('[IPC Handle] Sirviendo userData al frontend:', JSON.stringify(userData ? { summonerName: userData.summonerName, username: userData.username } : 'no data', null, 2));
         return userData;
     });
 
-    // --- IPC para la configuración de la clave API de Riot ---
     ipcMain.on('set-riot-api-key', (event, apiKey) => {
         store.set('riotApiKey', apiKey);
         console.log(`[MAIN STORE] ✅ Clave API Riot guardada.`);
-        // Reiniciar polling para que la nueva clave se aplique inmediatamente.
         stopLiveGamePolling();
         startLiveGamePolling();
     });
 
-    // --- IPC para llamadas a la IA (a través de tu backend) ---
-    // Estas llamadas actúan como un proxy seguro hacia tu backend
     const makeAIRequest = async (endpoint, payload = {}) => {
         const token = store.get('userToken');
         if (!token) {
@@ -313,13 +289,12 @@ app.on('ready', () => {
         try {
             const response = await axios.post(`${BACKEND_BASE_URL}${endpoint}`, payload, {
                 headers: { 'Authorization': `Bearer ${token}` },
-                httpsAgent: backendAgent, // Usar el agente para certificados
-                timeout: 30000 // Aumenta el timeout para respuestas de IA
+                httpsAgent: backendAgent, 
+                timeout: 30000 
             });
             return response.data;
         } catch (error) {
             console.error(`[AI Request Error] en ${endpoint}:`, error.message);
-            // Si el backend responde con un error 4xx o 5xx, intenta enviar el mensaje de error del backend
             if (error.response && error.response.data && error.response.data.message) {
                 return { error: error.response.data.message };
             }
@@ -338,41 +313,41 @@ app.on('ready', () => {
     // ----------------------------------------------------
     createSplashWindow();
     createMainWindow();
-    // setupWebSocketClient(); // Comentado según tu configuración original, descomentar si lo usas
-    createOverlayWindow(); // Crea la ventana de overlay al inicio
+    // setupWebSocketClient();
+    createOverlayWindow(); 
 });
 
-// Cuando todas las ventanas estén cerradas, la app se cierra (excepto en macOS)
 app.on('window-all-closed', () => {
     if (process.platform !== 'darwin') {
-        stopLiveGamePolling(); // Detener el polling al cerrar la app
+        stopLiveGamePolling();
         app.quit();
     }
 });
 
-// En macOS, la app permanece activa hasta que el usuario la cierra explícitamente con Cmd + Q
 app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) {
         createMainWindow();
     }
 });
 
-// --- Manejo de Atajos Globales (Ejemplo: Abrir/Cerrar Overlay) ---
 app.on('will-quit', () => {
   globalShortcut.unregisterAll();
 });
 
 app.whenReady().then(() => {
-    // Ejemplo: Atajo para alternar el overlay (Alt+O)
     globalShortcut.register('Alt+O', () => {
         if (overlayWindow) {
             if (overlayWindow.isVisible()) {
                 overlayWindow.hide();
-                overlayWindow.setIgnoreMouseEvents(true);
+                // Ocultar implica que NO puede interactuar
+                overlayWindow.setIgnoreMouseEvents(true); 
             } else {
-                overlayWindow.showInactive(); // Muestra sin quitar el foco del juego
-                overlayWindow.setIgnoreMouseEvents(false); // Permite interacción con el overlay si es necesario
+                overlayWindow.showInactive(); 
+                // Mostrar implica que SI puede interactuar. La lógica del frontend se encarga de cambiar a 'pointer-events-none'
+                overlayWindow.setIgnoreMouseEvents(false); 
             }
+            // Enviar un evento IPC al frontend para que el hook 'useInteractiveWidget' detecte el cambio.
+            overlayWindow.webContents.send('overlay-interaction-toggle', overlayWindow.isVisible());
         }
     });
 });

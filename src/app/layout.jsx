@@ -7,6 +7,8 @@
 
 import { AppStateProvider } from '@/context/AppStateContext';
 import './globals.css'; // Importa los estilos globales de Tailwind CSS
+import { ScaleProvider } from '@/context/ScaleContext'; // <-- AGREGADO
+import './globals.css'; 
 
 // Metadata para el SEO y la pestaña del navegador.
 export const metadata = {
@@ -33,7 +35,10 @@ export default function RootLayout({ children }) {
           ahora podrá usar el hook `useAppState()` para acceder al estado global.
         */}
         <AppStateProvider>
-          {children}
+          {/* Se añade ScaleProvider para evitar el error de contexto indefinido en SSR */}
+            <ScaleProvider>
+                {children}
+            </ScaleProvider>
         </AppStateProvider>
       </body>
     </html>

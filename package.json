@@ -26,6 +26,7 @@
     "electron-updater": "^6.6.2",
     "express": "^5.1.0",
     "framer-motion": "^11.3.19",
+    "lcu-connector": "^2.1.4",
     "next": "14.2.3",
     "node-fetch": "^2.7.0",
     "react": "^18",
