@@ -1,90 +1,91 @@
 // src/components/RiotApiSettings.jsx
-"use client";
+// Este componente permite al usuario introducir y guardar su clave de la API de Riot Games.
+// Es crucial para que la aplicación pueda acceder a los datos de la API de Riot.
 
-import React, { useState, useEffect } from 'react';
-import { KeyIcon, CheckCircleIcon, ExclamationTriangleIcon, ArrowPathIcon } from '@heroicons/react/24/solid';
+import React, { useState } from 'react';
 
 const RiotApiSettings = () => {
+    // Estado local para el valor del campo de entrada de la API Key
     const [apiKey, setApiKey] = useState('');
-    const [status, setStatus] = useState('initial'); // 'initial', 'success', 'error', 'loading'
+    // Estado para mostrar mensajes de éxito o error al usuario
+    const [statusMessage, setStatusMessage] = useState('');
+    // Estado para controlar el color del mensaje de estado
+    const [statusColor, setStatusColor] = useState('text-lol-light');
 
-    // Simula la obtención de la clave guardada al cargar
-    useEffect(() => {
-        // En un componente real, aquí se llamaría a window.ipcRenderer.send('get-stored-key')
-    }, []);
-
-    const handleSaveKey = (e) => {
-        e.preventDefault();
-        
-        if (!apiKey || apiKey.length < 30) {
-            setStatus('error');
-            setTimeout(() => setStatus('initial'), 3000);
+    /**
+     * Maneja el evento de guardar la clave API.
+     * Valida la clave y la envía al proceso principal de Electron para su almacenamiento.
+     */
+    const handleSave = () => {
+        // Validación básica de la clave API
+        if (!apiKey.trim()) {
+            setStatusMessage('La clave API no puede estar vacía.');
+            setStatusColor('text-red-400');
+            return;
+        }
+        if (!apiKey.startsWith('RGAPI-') && apiKey.length < 20) { // Ejemplo de validación mínima
+            setStatusMessage('Formato de clave API inválido. Debe empezar con "RGAPI-" y ser lo suficientemente larga.');
+            setStatusColor('text-red-400');
             return;
         }
 
-        setStatus('loading');
-        
-        // Simulación de envío/reinicio de polling
-        if (window.ipcRenderer) {
-            // 🔑 Lógica real de guardado y reinicio del polling en main.js
-            window.ipcRenderer.send('set-riot-api-key', apiKey);
-            
-            // Simulación de respuesta exitosa
-            setTimeout(() => {
-                setStatus('success');
-                // No reseteamos a initial para que el usuario sepa que está activa
-            }, 1000);
+        // Si la API de Electron está disponible, envía la clave.
+        if (window.electronAPI?.setRiotApiKey) {
+            window.electronAPI.setRiotApiKey(apiKey.trim()); // Envía la clave sin espacios extra
+            setStatusMessage('¡Clave API de Riot guardada con éxito! El sistema de polling se ha reiniciado.');
+            setStatusColor('text-green-400');
+            setApiKey(''); // Limpia el campo después de guardar
+            // Opcional: Oculta el mensaje de estado después de un tiempo
+            setTimeout(() => setStatusMessage(''), 5000);
         } else {
-            console.error("IPC Renderer not available. Cannot save key.");
-            setStatus('error');
-            setTimeout(() => setStatus('initial'), 3000);
+            setStatusMessage('Error: No se pudo conectar con el sistema de Electron para guardar la clave.');
+            setStatusColor('text-red-400');
         }
     };
 
-    const getStatusIcon = () => {
-        if (status === 'success') return <CheckCircleIcon className="w-5 h-5 text-green-400" />;
-        if (status === 'error') return <ExclamationTriangleIcon className="w-5 h-5 text-red-400" />;
-        if (status === 'loading') return <ArrowPathIcon className="w-5 h-5 text-[#FFD700] animate-spin" />;
-        return <KeyIcon className="w-5 h-5 text-[#C89B3C]" />;
-    };
-
     return (
-        <div className="p-4 bg-[#1A2328] rounded-lg shadow-inner border border-[#C89B3C]/30">
-            <h2 className="text-xl font-bold text-[#F0E6D2] mb-4 border-b border-[#C89B3C]/20 pb-2">
-                Credenciales de Acceso (Riot API Key)
-            </h2>
-            <form onSubmit={handleSaveKey} className="space-y-6">
-                <label className="block">
-                    <span className="text-[#F0E6D2]/80 text-sm mb-2 block">Clave de Desarrollo (Caduca cada 24h)</span>
-                    <div className="relative flex items-center">
-                        <input
-                            type="text"
-                            value={apiKey}
-                            onChange={(e) => setApiKey(e.target.value)}
-                            placeholder="RGAPI-xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
-                            className="w-full px-4 py-2 bg-black/40 border border-[#C89B3C]/60 text-[#F0E6D2] focus:outline-none focus:ring-2 focus:ring-[#FFD700] rounded transition duration-200 shadow-md"
-                            // 🔑 Asegura la interactividad
-                            onMouseDown={(e) => e.stopPropagation()} 
-                        />
-                    </div>
-                </label>
-                
-                <div className="flex justify-between items-center">
-                    <p className={`text-sm ${status === 'error' ? 'text-red-400' : status === 'success' ? 'text-green-400' : 'text-[#F0E6D2]/60'}`}>
-                        {status === 'success' ? 'Clave activa. Polling reiniciado.' : status === 'error' ? '¡Error! Clave demasiado corta o inválida (403 probable).' : 'Recuerde regenerar la clave diariamente.'}
-                    </p>
-                    <button
-                        type="submit"
-                        className="hextech-button-gold text-sm transition duration-300 shadow-lg hover:shadow-xl disabled:opacity-50 disabled:cursor-not-allowed"
-                        disabled={status === 'loading'}
-                    >
-                        {getStatusIcon()}
-                        <span className="-webkit-app-region-no-drag">
-                            {status === 'loading' ? 'Guardando...' : 'Guardar y Testear Conexión'}
-                        </span>
-                    </button>
-                </div>
-            </form>
+        <div className="text-lol-light h-full">
+            <p className="mb-6 text-lol-light/80 text-lg">
+                Introduce tu clave de desarrollo de la API de Riot Games para que MetaMind pueda acceder a tu historial de partidas y otros datos de juego en tiempo real.
+            </p>
+            <p className="mb-4 text-sm text-gray-500 italic">
+                (Puedes obtener una clave de desarrollo temporal en el portal de desarrollo de Riot Games.)
+            </p>
+            
+            <div className="flex flex-col sm:flex-row gap-4 mb-4">
+                {/* Campo de entrada para la clave API */}
+                <input
+                    type="password" // Tipo password para ocultar la clave
+                    value={apiKey}
+                    onChange={(e) => setApiKey(e.target.value)}
+                    placeholder="RGAPI-xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
+                    className="flex-grow p-3 bg-lol-input-bg text-white border border-lol-accent-gold/40 
+                               rounded-md focus:border-lol-highlight outline-none text-base 
+                               transition-all duration-200"
+                />
+                {/* Botón para guardar la clave */}
+                <button
+                    onClick={handleSave}
+                    className="bg-lol-gold text-white font-bold py-3 px-6 rounded-md 
+                               hover:bg-lol-gold/80 transition-colors duration-200 text-lg 
+                               flex-shrink-0" // Asegura que el botón no se encoja
+                >
+                    Guardar Clave
+                </button>
+            </div>
+            
+            {/* Mensaje de estado (éxito/error) */}
+            {statusMessage && (
+                <p className={`text-sm mt-2 ${statusColor}`}>
+                    {statusMessage}
+                </p>
+            )}
+
+            <div className="mt-8 p-4 bg-black/20 rounded-lg text-sm text-gray-400 border border-lol-gold/10">
+                <p className="font-semibold text-lol-light-blue mb-2">¿Por qué necesito una clave API?</p>
+                <p>La API de Riot Games requiere una clave para autenticar las solicitudes de datos. Sin ella, MetaMind no podrá acceder a información detallada como tu historial de partidas, estadísticas de campeón o tu progreso en las ligas.</p>
+                <p className="mt-2">Tu clave se almacena de forma segura solo en tu equipo local y se utiliza para todas las comunicaciones con la API de Riot.</p>
+            </div>
         </div>
     );
 };

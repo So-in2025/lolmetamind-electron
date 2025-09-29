@@ -8,19 +8,22 @@ import DashboardPage from './dashboard/page';
 import LoadingScreen from '../components/LoadingScreen';
 
 export default function AppPage() {
-    // 🚨 LOG: Se ejecuta en cada renderizado
+    // 🚨 LOG: Se ejecuta en cada renderizado para monitorear el estado
     console.log(`[RENDERER] AppPage render. Estado actual: ${useAppState().flowState}`); 
     
     const { flowState, userData } = useAppState();
 
     // Lógica IPC para iniciar el polling en Electron.
+    // Este useEffect es CRÍTICO: se dispara solo cuando el estado cambia a DASHBOARD.
     useEffect(() => {
         console.log(`[RENDERER] useEffect disparado. flowState: ${flowState}`);
         
         if (flowState === AppFlowState.DASHBOARD) {
             console.log("[RENDERER] Transición a DASHBOARD detectada. Preparando IPC.");
             
-            // 🚨 CLAVE: Aumentamos el tiempo a 500ms para asegurar que el 'send' funcione.
+            // 🚨 CLAVE: El setTimeout asegura que el preload script de Electron haya tenido
+            // tiempo de inyectar `window.electronAPI` antes de que intentemos usarlo.
+            // Esto previene race conditions durante la carga inicial.
             const timer = setTimeout(() => { 
                  const electronAPIAvailable = window.electronAPI && typeof window.electronAPI.send === 'function';
                  
@@ -29,20 +32,23 @@ export default function AppPage() {
                  
                  if (electronAPIAvailable) {
                     console.log("[RENDERER] ENVIANDO IPC 'user-logged-in'...");
+                    // Envía los datos del usuario a main.js para iniciar el polling.
                     window.electronAPI.send('user-logged-in', { 
                         username: userData?.username || 'user-anon', 
-                        token: 'SESSION_TOKEN' 
+                        token: userData?.token || 'SESSION_TOKEN' // Pasa el token real
                     });
                  } else {
-                    console.error("[RENDERER] FALLO CRÍTICO: No se pudo enviar el IPC.");
+                    console.error("[RENDERER] FALLO CRÍTICO: No se pudo enviar el IPC 'user-logged-in'.");
                  }
-            }, 500); // <-- 500ms
+            }, 500); // <-- 500ms de espera
 
+            // Función de limpieza para el useEffect
             return () => clearTimeout(timer);
         }
-    }, [flowState, userData]);
+    }, [flowState, userData]); // Se ejecuta cuando flowState o userData cambian
 
 
+    // Renderiza el componente adecuado según el estado actual de la aplicación
     switch (flowState) {
         case AppFlowState.LOADING:
             return <LoadingScreen />;
