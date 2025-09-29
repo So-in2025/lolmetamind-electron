@@ -3,43 +3,14 @@
 "use client";
 
 import React from 'react';
+// 🔑 IMPORTAMOS EL HOOK QUE DEBE PROVEER TODOS LOS DATOS REALES
 import useRiotProfileData from '@/hooks/useRiotProfileData'; 
-import { TrophyIcon, StarIcon, ExclamationTriangleIcon, ClockIcon, CheckCircleIcon, WifiIcon, ChartBarSquareIcon, UserIcon, GlobeAltIcon, ServerStackIcon, MapPinIcon, HeartIcon } from '@heroicons/react/24/solid';
+import { 
+    TrophyIcon, StarIcon, ExclamationTriangleIcon, ClockIcon, CheckCircleIcon, WifiIcon, 
+    ChartBarSquareIcon, UserIcon, GlobeAltIcon, ServerStackIcon, MapPinIcon, HeartIcon 
+} from '@heroicons/react/24/solid';
 
-// 🔑 SIMULACIÓN DE DATOS GLOBALES (Reemplaza con datos REALES de tu hook/store/DB)
-const simulatedSummonerData = {
-    summonerName: "Jh0wner",
-    userRegion: "LAS",
-    lolServiceStatus: "OPERATIONAL", // OPERATIONAL, HIGH_LATENCY, DOWN
-    zodiacSign: "Leo", // 🔑 NUEVO: Desde tu DB
-};
-
-const simulatedStrategicStats = {
-    avgKills: 6.2,
-    avgDeaths: 3.5,
-    avgAssists: 7.1,
-    avgKDA: '3.8:1', 
-    avgCS: '7.1 CS/min', 
-    avgVisionScore: '35.4',
-    avgGoldPerMin: '410 G/min',
-    recentWinRate: '58%',
-    killParticipation: '55%',
-    damagePerMinute: '720 DPM',
-    // 🔑 NUEVO: Campeones preferidos (desde tu DB, con URL de imagen)
-    favoriteChampions: [
-        { name: 'Katarina', winRate: '65%', games: 20, imageUrl: 'https://ddragon.leagueoflegends.com/cdn/13.24.1/img/champion/Katarina.png' },
-        { name: 'Ahri', winRate: '51%', games: 35, imageUrl: 'https://ddragon.leagueoflegends.com/cdn/13.24.1/img/champion/Ahri.png' },
-        { name: 'Yasuo', winRate: '48%', games: 15, imageUrl: 'https://ddragon.leagueoflegends.com/cdn/13.24.1/img/champion/Yasuo.png' }
-    ],
-    // 🔑 NUEVO: Roles preferidos (desde tu DB)
-    preferredRoles: [
-        { name: 'MID', winRate: '60%' },
-        { name: 'JUNGLE', winRate: '50%' },
-        { name: 'TOP', winRate: '40%' }
-    ]
-};
-
-// 🔑 NUEVO COMPONENTE: Encabezado con datos críticos (incluyendo Signo Zodiacal)
+// 🔑 NUEVO COMPONENTE: Encabezado con datos críticos (Nombre, Región, Estado Servidor LoL, Signo Zodiacal)
 const ProfileHeader = ({ summonerName, region, status, zodiacSign }) => {
     let statusText, statusColor, statusIcon;
 
@@ -60,7 +31,7 @@ const ProfileHeader = ({ summonerName, region, status, zodiacSign }) => {
             statusIcon = ServerStackIcon;
             break;
         default:
-            statusText = 'Estado Desconocido';
+            statusText = 'Estado Desconocido'; // Si el hook no proporciona status
             statusColor = 'text-lol-grey';
             statusIcon = ClockIcon;
             break;
@@ -74,10 +45,10 @@ const ProfileHeader = ({ summonerName, region, status, zodiacSign }) => {
             <div className="flex items-center">
                 <UserIcon className="w-8 h-8 text-lol-gold mr-3" />
                 <div>
-                    <h4 className="text-2xl font-extrabold text-lol-gold-light">{summonerName}</h4>
+                    <h4 className="text-2xl font-extrabold text-lol-gold-light">{summonerName || 'Invocador Desconocido'}</h4>
                     <p className="text-sm text-lol-grey/70 flex items-center">
                         <GlobeAltIcon className="w-4 h-4 mr-1" />
-                        Región: <span className="font-semibold text-lol-text ml-1">{region}</span>
+                        Región: <span className="font-semibold text-lol-text ml-1">{region || 'N/A'}</span>
                         {zodiacSign && ( // Mostrar signo zodiacal si está disponible
                             <span className="ml-4 flex items-center">
                                 <HeartIcon className="w-4 h-4 mr-1 text-red-400" />
@@ -88,13 +59,13 @@ const ProfileHeader = ({ summonerName, region, status, zodiacSign }) => {
                 </div>
             </div>
 
-            {/* Estado del Servicio */}
+            {/* Estado del Servicio LoL (del Status V4 API) */}
             <div className="text-right">
                 <p className={`text-xs font-semibold ${statusColor} flex items-center justify-end`}>
                     <StatusIcon className={`w-4 h-4 mr-1 ${statusColor}`} />
                     {statusText}
                 </p>
-                <p className="text-sm text-lol-text mt-1">Status V4 OK</p>
+                <p className="text-sm text-lol-text mt-1">Status API V4</p>
             </div>
         </div>
     );
@@ -102,15 +73,23 @@ const ProfileHeader = ({ summonerName, region, status, zodiacSign }) => {
 
 
 const RiotProfileData = () => {
+  // 🔑 DESESTRUCTURAMOS DIRECTAMENTE DEL HOOK, SIN SIMULACIONES LOCALES
+  // Los valores por defecto son solo para evitar errores si el hook devuelve 'undefined' inicialmente.
   const { 
-    mode, 
-    summonerRankData, 
-    championMasteries, 
-    strategicStats = simulatedStrategicStats,
-    summonerName = simulatedSummonerData.summonerName,
-    userRegion = simulatedSummonerData.userRegion,
-    lolServiceStatus = simulatedSummonerData.lolServiceStatus,
-    zodiacSign = simulatedSummonerData.zodiacSign, // 🔑 Nuevo: Obtener de tu hook
+    mode = 'Loading', // 'Loading', 'LCU_ACTIVE', 'Realtime', 'Strategic', 'NO_DATA'
+    summonerName = 'Cargando...',
+    userRegion = '...',
+    lolServiceStatus = 'UNKNOWN', // OPERATIONAL, HIGH_LATENCY, DOWN
+    zodiacSign, // Viene de tu DB
+    summonerRankData = [], // Arrays vacíos por defecto
+    championMasteries = [],
+    strategicStats = { // Objeto vacío con valores por defecto si no se carga
+      avgKills: 0, avgDeaths: 0, avgAssists: 0, avgKDA: '0.0:1', 
+      avgCS: '0.0 CS/min', avgVisionScore: '0.0', avgGoldPerMin: '0 G/min',
+      recentWinRate: '0%', killParticipation: '0%', damagePerMinute: '0 DPM',
+      favoriteChampions: [],
+      preferredRoles: []
+    }
   } = useRiotProfileData();
 
   const getRankColor = (tier) => {
@@ -134,21 +113,33 @@ const RiotProfileData = () => {
     if (mode === 'Loading') return { text: 'CONECTANDO/CARGANDO...', color: 'text-yellow-400 animate-pulse', icon: ClockIcon };
     if (mode === 'LCU_ACTIVE' || mode === 'Realtime') return { text: 'PARTIDA ACTIVA (Realtime)', color: 'text-red-500 border-red-500 animate-pulse', icon: WifiIcon };
     if (mode === 'Strategic') return { text: 'MODO ESTRATÉGICO (API Ok)', color: 'text-green-500', icon: CheckCircleIcon };
+    // Si NO_DATA o cualquier otro estado inesperado
     return { text: 'SIN CONEXIÓN / NO DATA', color: 'text-lol-grey', icon: ExclamationTriangleIcon };
   };
   const ModeIndicator = getModeIndicator();
   const DataBoxClass = "p-4 rounded-lg shadow-inner bg-lol-dark-blue/70 border border-lol-grey-dark";
 
-  // Manejo de estados de carga/error (Mantenido)
+  // Manejo de estados de carga/error (Ahora más descriptivo y dinámico)
+  // Se mostrará el estado de carga o error si el 'mode' no es 'Strategic'
   if (mode === 'Loading' || mode === 'LCU_ACTIVE' || mode === 'Realtime' || mode === 'NO_DATA') {
     const StatusIcon = ModeIndicator.icon;
     const StatusText = mode === 'Loading' ? 'CARGANDO DATOS INICIALES...' : ModeIndicator.text;
     
     return (
-        <div className="p-6 rounded-lg border-2 border-lol-gold/50 bg-lol-dark-blue/90 shadow-md h-full flex flex-col justify-center items-center">
-            <h3 className="text-xl font-bold text-lol-gold mb-4">INICIANDO SISTEMAS</h3>
+        <div className="p-6 rounded-lg border-2 border-lol-gold/50 bg-lol-dark-blue/90 shadow-md h-full flex flex-col justify-center items-center text-center">
+            <h3 className="text-xl font-bold text-lol-gold mb-4">ESTADO DEL SISTEMA</h3>
             <StatusIcon className={`w-10 h-10 mb-3 ${ModeIndicator.color}`} />
             <span className="text-lg font-bold text-lol-text">{StatusText}</span>
+            {mode === 'NO_DATA' && (
+                <p className="text-sm text-lol-grey/70 mt-2">
+                    Verifica tu conexión a internet o la configuración de tu clave de API en la pestaña de Ajustes.
+                </p>
+            )}
+            {mode === 'LCU_ACTIVE' && (
+                <p className="text-sm text-lol-grey/70 mt-2">
+                    La IA está analizando tu partida en tiempo real.
+                </p>
+            )}
         </div>
     );
   }
@@ -157,23 +148,23 @@ const RiotProfileData = () => {
   return (
     <div className="bg-lol-dark-blue/90 p-6 rounded-lg shadow-2xl border border-lol-gold/30 text-lol-text h-full flex flex-col">
       
-      {/* 🔑 ENCABEZADO CON NOMBRE, REGIÓN, ESTADO DEL SERVIDOR Y SIGNO ZODIACAL */}
+      {/* ENCABEZADO CON NOMBRE, REGIÓN, ESTADO DEL SERVIDOR Y SIGNO ZODIACAL (TODO REAL) */}
       <ProfileHeader 
         summonerName={summonerName} 
         region={userRegion} 
         status={lolServiceStatus} 
-        zodiacSign={zodiacSign} // 🔑 Pasamos el signo zodiacal
+        zodiacSign={zodiacSign} 
       />
       
       <h3 className="text-xl font-bold text-lol-gold mb-4 border-b border-lol-gold/50 pb-2 flex items-center">
         <TrophyIcon className="w-6 h-6 mr-2" />
-        Clasificatorias y Estado
+        Clasificatorias y Estado de Conexión
       </h3>
 
       {/* 1. RANGOS Y ESTATUS DE ADQUISICIÓN */}
       <div className="mb-6 grid grid-cols-1 md:grid-cols-3 gap-4">
         
-        {/* Estatus de la IA/API (Compactado) */}
+        {/* Estatus de la IA/API (Ahora con el modo real) */}
         <div className={`p-4 rounded-lg border-2 ${ModeIndicator.color} bg-lol-dark-blue/90 shadow-md col-span-1`}>
             <h4 className="font-semibold text-lg text-lol-text">API Status (V4/V5)</h4>
             <div className="flex items-center mt-2">
@@ -218,7 +209,7 @@ const RiotProfileData = () => {
         </div>
       </div>
       
-      {/* 2. MÉTRICAS ESTRATÉGICAS CLAVE (KDA, CS, ORO, WR) */}
+      {/* 2. MÉTRICAS ESTRATÉGICAS CLAVE (KDA, CS, ORO, WR - Todo Real del Match History/Timeline) */}
       <div className="mb-6">
           <h4 className="text-lg font-semibold text-lol-gold mb-3 border-b border-lol-gold/30 pb-1 flex items-center">
               <ChartBarSquareIcon className="w-5 h-5 mr-2" />
@@ -247,23 +238,23 @@ const RiotProfileData = () => {
               </div>
           </div>
           <p className="text-xs text-lol-grey/70 mt-3 italic">
-            Estas métricas son calculadas a partir de tus últimos 20 juegos.
+            Estas métricas son calculadas a partir de tus últimos juegos (Match V5 & Timeline V5).
           </p>
       </div>
 
-      {/* 🔑 3. RESUMEN DE CAMPEONES Y ROLES (Ahora con datos de tu DB) */}
+      {/* 3. RESUMEN DE CAMPEONES Y ROLES (Ahora REALES de tu DB) */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6 flex-grow">
-          {/* Top Campeones */}
+          {/* Top Campeones Preferidos (de tu DB) */}
           <div className="flex flex-col">
               <h4 className="text-lg font-semibold text-lol-blue mb-2 flex items-center">
                   <StarIcon className="w-5 h-5 mr-2" />
                   Top Campeones Preferidos
               </h4>
               <ul className="space-y-2 flex-grow overflow-y-auto no-scrollbar pr-1">
-                  {strategicStats.favoriteChampions && strategicStats.favoriteChampions.map((champ, index) => (
+                  {strategicStats.favoriteChampions && strategicStats.favoriteChampions.length > 0 ? (
+                      strategicStats.favoriteChampions.map((champ, index) => (
                       <li key={index} className="p-2 bg-lol-input-bg rounded-md flex justify-between items-center text-sm border-l-4 border-lol-gold/70 shadow-md">
                           <div className='flex items-center'>
-                              {/* 🔑 Usamos la imageUrl de tu DB */}
                               {champ.imageUrl && <img src={champ.imageUrl} alt={champ.name} className="w-8 h-8 rounded-full mr-2 border-2 border-lol-gold/50" />}
                               <span className='text-lol-light font-semibold'>{champ.name}</span> 
                           </div>
@@ -272,25 +263,28 @@ const RiotProfileData = () => {
                               <span className="text-xs text-lol-grey/70">{champ.games} Partidas</span>
                           </div>
                       </li>
-                  ))}
-                  {(!strategicStats.favoriteChampions || strategicStats.favoriteChampions.length === 0) && <p className="text-sm text-lol-grey/70">No hay datos de campeones preferidos.</p>}
+                  ))) : (
+                    <p className="text-sm text-lol-grey/70">No hay datos de campeones preferidos. (De tu DB)</p>
+                  )}
               </ul>
           </div>
           
-          {/* Roles Preferidos */}
+          {/* Roles Preferidos (de tu DB) */}
           <div className="flex flex-col">
               <h4 className="text-lg font-semibold text-lol-blue mb-2 flex items-center">
                   <MapPinIcon className="w-5 h-5 mr-2" />
                   Roles Preferidos
               </h4>
               <ul className="space-y-2 flex-grow overflow-y-auto no-scrollbar pr-1">
-                  {strategicStats.preferredRoles && strategicStats.preferredRoles.map((role, index) => (
+                  {strategicStats.preferredRoles && strategicStats.preferredRoles.length > 0 ? (
+                      strategicStats.preferredRoles.map((role, index) => (
                       <li key={index} className="p-2 bg-lol-input-bg rounded-md flex justify-between items-center text-sm border-l-4 border-lol-blue/70 shadow-md">
                           <span className='text-lol-light font-semibold'>{role.name}</span> 
                           <span className="font-bold text-blue-400">{role.winRate} WR</span>
                       </li>
-                  ))}
-                  {(!strategicStats.preferredRoles || strategicStats.preferredRoles.length === 0) && <p className="text-sm text-lol-grey/70">No hay datos de roles preferidos.</p>}
+                  ))) : (
+                    <p className="text-sm text-lol-grey/70">No hay datos de roles preferidos. (De tu DB)</p>
+                  )}
               </ul>
           </div>
       </div>
