@@ -1,89 +1,114 @@
-// preload.js
+// preload.js - VERSIÓN FINAL-FINAL, COMPLETA Y UNIFICADA
 
 const { contextBridge, ipcRenderer } = require('electron');
 
+
+contextBridge.exposeInMainWorld('electronAPI', {
+  send: (channel, data) => {
+    const validSendChannels = ['closeWindow', 'minimizeWindow', 'user-logged-in', 'set-riot-api-key'];
+    if (validSendChannels.includes(channel)) ipcRenderer.send(channel, data);
+  },
+
+  invoke: (channel, data) => {
+    const validInvokeChannels = ['get-user-data', 'create-rune-page', 'get-meta-analysis', 'get-recommendations', 'get-weekly-challenges', 'analyze-matches'];
+    if (validInvokeChannels.includes(channel)) return ipcRenderer.invoke(channel, data);
+  },
+
+  on: (channel, callback) => {
+    const validReceiveChannels = ['riot-profile-data', 'overlay-interaction-toggle']; // <-- YA ESTÁ AQUÍ
+    if (validReceiveChannels.includes(channel)) {
+      const subscription = (event, ...args) => callback(...args);
+      ipcRenderer.on(channel, subscription);
+      return () => ipcRenderer.removeListener(channel, subscription);
+    }
+    return () => {};
+  },
+});
 /**
  * Expone un objeto 'electronAPI' en el objeto global 'window' del proceso de renderizado.
  * Este objeto contiene funciones que permiten al frontend interactuar de forma segura
- * con el proceso principal de Electron y sus APIs.
- *
- * NOTA: Todas las funciones aquí utilizan `ipcRenderer.send` para enviar mensajes
- * síncronos o asíncronos unidireccionales, o `ipcRenderer.invoke` para llamadas
- * bidireccionales que esperan una respuesta (promesa).
+ * con el proceso principal de Electron.
  */
 contextBridge.exposeInMainWorld('electronAPI', {
-  // --- Control de Ventana ---
-  // Envía un mensaje al proceso principal para cerrar la ventana actual.
-  closeWindow: () => ipcRenderer.send('closeWindow'),
-  // Envía un mensaje al proceso principal para minimizar la ventana actual.
-  minimizeWindow: () => ipcRenderer.send('minimizeWindow'),
-  // Envía un mensaje al proceso principal para mostrar el overlay.
-  showOverlay: () => ipcRenderer.send('showOverlay'),
-  // Envía un mensaje al proceso principal para ocultar el overlay.
-  hideOverlay: () => ipcRenderer.send('hideOverlay'),
-  // Envía un mensaje al proceso principal para alternar la visibilidad del overlay.
-  toggleOverlay: () => ipcRenderer.send('toggleOverlay'),
+  
+  // --- MÉTODOS DE ENVÍO (Frontend -> Backend, sin esperar respuesta) ---
 
+  /**
+   * Envía un mensaje unidireccional al proceso principal.
+   * @param {string} channel - El canal IPC al que se envía.
+   * @param {*} [data] - Los datos a enviar (opcional).
+   */
+  send: (channel, data) => {
+    // Lista de canales de envío válidos para mayor seguridad
+    const validSendChannels = [
+        'closeWindow', 
+        'minimizeWindow', 
+        'user-logged-in', 
+        'set-riot-api-key',
+        'showOverlay',
+        'hideOverlay',
+        'toggleOverlay'
+    ];
+    if (validSendChannels.includes(channel)) {
+        ipcRenderer.send(channel, data);
+    } else {
+        console.warn(`[Preload] Intento de enviar a un canal inválido: ${channel}`);
+    }
+  },
 
-  // --- Autenticación y Datos de Usuario ---
-  // Envía los datos de usuario al proceso principal después de un login exitoso.
-  sendLogin: (userData) => ipcRenderer.send('user-logged-in', userData),
-  // Invoca un manejador en el proceso principal para obtener los datos de usuario almacenados.
-  // Retorna una Promesa con los datos del usuario.
-  getUserData: () => ipcRenderer.invoke('get-user-data'),
+  // --- MÉTODOS DE INVOCACIÓN (Frontend -> Backend, esperando una respuesta/Promesa) ---
 
-  // --- Configuración ---
-  // Envía la clave de la API de Riot al proceso principal para que se almacene.
-  setRiotApiKey: (apiKey) => ipcRenderer.send('set-riot-api-key', apiKey),
+  /**
+   * Invoca una función en el proceso principal y espera una respuesta.
+   * @param {string} channel - El canal IPC que se invoca.
+   * @param {*} [data] - Los datos a enviar (opcional).
+   * @returns {Promise<any>} - Una promesa que se resuelve con la respuesta del proceso principal.
+   */
+  invoke: (channel, data) => {
+    // Lista de canales de invocación válidos para mayor seguridad
+    const validInvokeChannels = [
+        'get-user-data',
+        'create-rune-page', // <-- ¡NUEVO CANAL PARA RUNAS!
+        'get-meta-analysis',
+        'get-recommendations',
+        'get-weekly-challenges',
+        'analyze-matches'
+    ];
+    if (validInvokeChannels.includes(channel)) {
+        return ipcRenderer.invoke(channel, data);
+    } else {
+        console.warn(`[Preload] Intento de invocar un canal inválido: ${channel}`);
+        return Promise.reject(new Error(`Canal de invocación inválido: ${channel}`));
+    }
+  },
 
-  // --- Funciones de IA (proxy a través del backend) ---
-  // Invoca un manejador en el proceso principal para obtener el análisis del meta actual.
-  getMetaAnalysis: () => ipcRenderer.invoke('get-meta-analysis'),
-  // Invoca un manejador en el proceso principal para obtener recomendaciones personalizadas.
-  // Puede incluir un payload con datos adicionales (ej. campeón o rol favorito).
-  getRecommendations: (payload) => ipcRenderer.invoke('get-recommendations', payload),
-  // Invoca un manejador en el proceso principal para obtener desafíos semanales generados por IA.
-  getWeeklyChallenges: () => ipcRenderer.invoke('get-weekly-challenges'),
-  // Invoca un manejador en el proceso principal para analizar las últimas partidas del usuario.
-  // Puede incluir un payload con datos adicionales (ej. tipo de análisis).
-  analyzeMatches: (payload) => ipcRenderer.invoke('analyze-matches', payload),
+  // --- MÉTODO DE ESCUCHA (Backend -> Frontend, para recibir eventos) ---
 
-
-  // --- Listeners para datos en tiempo real del proceso principal ---
-  // Permite al proceso de renderizado suscribirse a eventos enviados desde el proceso principal.
-  // Se utiliza para datos de polling (ej. de LCU/Riot API).
-  // @param {string} channel - El nombre del canal al que suscribirse.
-  // @param {function} callback - La función que se ejecutará cuando se reciba un mensaje en el canal.
-  // @returns {function} Una función para desuscribirse del evento (limpieza).
+  /**
+   * Se suscribe a un canal para recibir eventos desde el proceso principal.
+   * @param {string} channel - El canal IPC al que se suscribe.
+   * @param {function} callback - La función que se ejecutará con los datos recibidos.
+   * @returns {function} - Una función para desuscribirse y limpiar el listener.
+   */
   on: (channel, callback) => {
-    // Define los canales válidos para prevenir suscripciones a canales arbitrarios.
-    const validChannels = [
-      'riot-profile-data',     // Datos de Riot API/LCU (historial, ligas, etc.)
-      'live-game-update',      // Actualizaciones del juego en vivo (si el overlay está activo)
-      // Agrega aquí cualquier otro canal que tu `main.js` envíe al frontend.
+    // Lista de canales de escucha válidos
+    const validReceiveChannels = [
+      'riot-profile-data', // Canal principal para los datos de LCU y Riot API
+      'overlay-interaction-toggle',
     ];
     
-    if (validChannels.includes(channel)) {
-      // Wrapper para la función de callback que ignora el objeto de evento de IPC.
+    if (validReceiveChannels.includes(channel)) {
+      // Creamos un listener que solo pasa los argumentos, no el objeto de evento
       const subscription = (event, ...args) => callback(...args);
       ipcRenderer.on(channel, subscription);
-      // Retorna una función para que el componente de React pueda desuscribirse limpiamente.
+      
+      // Devolvemos una función de limpieza para que React pueda desuscribirse
       return () => ipcRenderer.removeListener(channel, subscription);
     } else {
-      console.warn(`[Preload] Intento de suscribirse a canal inválido: ${channel}`);
-      return () => {}; // Retorna una no-op function para evitar errores.
+      console.warn(`[Preload] Intento de suscribirse a un canal inválido: ${channel}`);
+      return () => {}; // Devolvemos una función vacía para evitar errores
     }
   },
 
-  // --- Métodos para desuscribirse explícitamente (alternativa a la función de retorno de `on`) ---
-  // (Aunque la función de retorno de `on` es preferible en React, estos pueden ser útiles)
-  off: (channel, callback) => {
-    const validChannels = [
-      'riot-profile-data',
-      'live-game-update',
-    ];
-    if (validChannels.includes(channel)) {
-      ipcRenderer.removeListener(channel, callback);
-    }
-  },
+  
 });

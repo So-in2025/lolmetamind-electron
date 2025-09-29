@@ -1,64 +1,73 @@
+// src/components/widgets/UnifiedHUD.jsx
 'use client';
+
 import React, { useState, useEffect } from 'react';
-import BuildsHUD from './BuildsHUD';
-import RealtimeCoachHUD from './RealtimeCoachHUD';
-import StrategicHUD from './StrategicHUD';
+import { useLcuData } from '../../hooks/useLcuData';
 
-const UnifiedHUD = () => {
-  const [hudData, setHudData] = useState({
-    // Estado inicial que refleja las claves del servidor WS
-    realtimeAdvice: "Esperando conexión con el Coach...",
-    priorityAction: "STATUS",
-    buildRecommendation: { items: [], runes: [] },
-    strategicAdvice: "Esperando estrategia...",
-  });
-  const [error, setError] = useState(null);
+import ChampSelectCoach from './ChampSelectCoach';
+import InGameCoach from './InGameCoach'; // <-- Importado y AHORA SÍ se usa
 
-  // CRÍTICO: Este hook sustituye COMPLETAMENTE la lógica de WebSocket duplicada.
-  useEffect(() => {
-    // 1. Verificación del entorno Electron y el puente
-    if (typeof window !== 'undefined' && window.electron && window.electron.onLiveCoachUpdate) {
-        
-        // 2. Función Listener (Escuchamos el canal 'live-coach-update' del main.js)
-        const listener = (data) => {
-            console.log('IPC Coach Advice Received:', data);
-            setError(null); 
-            
-            // Actualizamos el estado con la data completa del backend (advice, priority, etc.)
-            setHudData(prevData => ({
-                ...prevData,
-                ...data 
-            }));
-        };
-
-        // 3. Suscribirse al canal IPC
-        window.electron.onLiveCoachUpdate(listener);
-        
-        // No se necesita cleanup aquí ya que la ventana de overlay se cerrará con la app.
-        
-    } else {
-        setError("El Coach no está disponible. Ejecutar en la aplicación de escritorio.");
-        console.warn('El puente de Electron/IPC no está disponible.');
-    }
-  }, []); 
-
-  if (error) {
-    return <div className="p-4 rounded-lg bg-red-900/50 text-red-300 text-center">{error}</div>;
+// --- FUNCIÓN TTS (Text-to-Speech) ---
+const speak = (text, priority = 'normal') => {
+  if (typeof window !== 'undefined' && 'speechSynthesis' in window && text) {
+    if (priority === 'high') window.speechSynthesis.cancel();
+    const utterance = new SpeechSynthesisUtterance(text);
+    utterance.lang = 'es-ES';
+    utterance.rate = 1.1;
+    window.speechSynthesis.speak(utterance);
   }
-  
-  // CRÍTICO: Pasamos los datos como props a los componentes hijos
-  return (
-    <div className="flex flex-col space-y-4">
-      <RealtimeCoachHUD 
-        message={hudData.realtimeAdvice} 
-        priority={hudData.priorityAction}
-        // Pasamos el tiempo de juego si lo necesitas para mostrarlo
-        gameTime={hudData.gameData?.gameTime} 
-      />
-      <BuildsHUD build={hudData.buildRecommendation} />
-      <StrategicHUD message={hudData.strategicAdvice} />
-    </div>
-  );
 };
 
-export default UnifiedHUD;
+// --- COMPONENTE PRINCIPAL (EL CEREBRO DEL OVERLAY) ---
+export default function UnifiedHUD({ isInteractive }) {
+    const lcuData = useLcuData();
+    const [lastSpokenAdvice, setLastSpokenAdvice] = useState('');
+
+    useEffect(() => {
+        if (!lcuData) return;
+        const gamePhase = lcuData.lcuState?.gameflow?.phase;
+
+        if (gamePhase === 'ChampSelect') {
+            const simulatedAdvice = "Analizando el draft. Revisa el HUD para ver las recomendaciones.";
+            if (simulatedAdvice !== lastSpokenAdvice) {
+                speak(simulatedAdvice, 'high');
+                setLastSpokenAdvice(simulatedAdvice);
+            }
+        } else if (gamePhase === 'InProgress') {
+            const inGameAdvice = "Partida en curso. Activa la 'R' de MetaMind para un impulso de IA.";
+            if (inGameAdvice !== lastSpokenAdvice) {
+                speak(inGameAdvice, 'normal');
+                setLastSpokenAdvice(inGameAdvice);
+            }
+        } else {
+            setLastSpokenAdvice('');
+        }
+    }, [lcuData, lastSpokenAdvice]);
+
+    // --- RENDERIZADO CONDICIONAL DEL OVERLAY ---
+    if (!lcuData) return null;
+    const gamePhase = lcuData.lcuState?.gameflow?.phase;
+
+    // Si estamos en Selección de Campeón, mostramos el coach de ChampSelect
+    if (gamePhase === 'ChampSelect') {
+        return (
+            <ChampSelectCoach 
+                champSelectData={lcuData.lcuState.champSelect}
+                isInteractive={isInteractive}
+            />
+        );
+    }
+
+    // 🔑 CORRECCIÓN: Si estamos dentro del juego, mostramos el coach In-Game
+    if (gamePhase === 'InProgress') {
+        return (
+            <InGameCoach
+                liveClientDataStatus={lcuData.liveClientDataStatus}
+                isInteractive={isInteractive}
+            />
+        );
+    }
+    
+    // Si no estamos en una fase activa, no mostramos nada.
+    return null;
+};
