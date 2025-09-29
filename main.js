@@ -125,7 +125,7 @@ function createSplashWindow() {
         frame: false,
         alwaysOnTop: true,
         center: true,
-        backgroundColor: '#00000000', 
+        //backgroundColor: '#00000000', 
         webPreferences: {
             preload: path.join(__dirname, 'preload.js'),
             nodeIntegration: false,
@@ -140,14 +140,14 @@ function createSplashWindow() {
 function createMainWindow() {
     console.log('[MAIN] -> Creando Main Window.'); 
     mainWindow = new BrowserWindow({
-        width: 500,    
-        height: 720,
-        minWidth: 500, 
-        minHeight: 720,
+        width: 1280,    // 🔑 CORRECCIÓN DE TAMAÑO 16:9
+        height: 720,    // 🔑 CORRECCIÓN DE TAMAÑO 16:9
+        minWidth: 1280, // 🔑 CORRECCIÓN DE TAMAÑO
+        minHeight: 720, // 🔑 CORRECCIÓN DE TAMAÑO
         show: false, 
-        frame: false, 
+        frame: false,   // <-- Sin Marco
         transparent: true, 
-        backgroundColor: '#00000000', 
+        backgroundColor: '#00000000', // Debe ser transparente para que el CSS funcione
         
         webPreferences: {
             preload: path.join(__dirname, 'preload.js'),
@@ -245,14 +245,22 @@ function setupWebSocketClient() {
 function startLiveGamePolling() {
     if (pollingInterval) clearInterval(pollingInterval);
     
-    pollingInterval = setInterval(async () => {
+    // 🔑 CORRECCIÓN DE INTERVALO: Aumentado de 5000ms a 15000ms.
+    // Esto reduce la probabilidad de golpear el Rate Limit (403/429).
+    pollingInterval = setInterval(async () => { 
         console.log('[LCU POLLING] 🏃‍♀️ Ejecutando rutina de Polling de LCU/Riot API/Estratégico...');
-        await fetchAndSendLcuData(BACKEND_BASE_URL, LIVE_GAME_UPDATE_ENDPOINT);
         
-    }, 5000); 
+        await fetchAndSendLcuData(
+            BACKEND_BASE_URL, 
+            LIVE_GAME_UPDATE_ENDPOINT, 
+            sendPollingDataToRenderer 
+        );
+        
+    }, 15000); // <--- CAMBIO CRÍTICO AQUÍ
     
-    console.log('[LCU POLLING] 🟢 LCU Polling Iniciado. (Intervalo 5s).');
+    console.log('[LCU POLLING] 🟢 LCU Polling Iniciado. (Intervalo 15s).');
 }
+
 
 function stopLiveGamePolling() {
     if (pollingInterval) {
@@ -282,14 +290,19 @@ ipcMain.on('minimizeWindow', () => {
     }
 });
 
-// 🔑 NUEVO LISTENER: Para guardar la clave API desde el Dashboard.
+// main.js (modificado)
 ipcMain.on('set-riot-api-key', (event, apiKey) => {
     store.set('riotApiKey', apiKey);
-    console.log(`[MAIN STORE] ✅ Clave API Riot guardada.`);
-    // Opcional: reiniciar el polling para probar la nueva clave inmediatamente.
-    // if (pollingInterval) startLiveGamePolling();
-});
+    console.log(`[MAIN STORE] ✅ Clave API Riot guardada. Reiniciando Polling.`);
 
+    // 🔑 Descomentar para reiniciar el polling inmediatamente
+    if (pollingInterval) { 
+        // Primero detenemos el polling para luego iniciarlo de nuevo, asegurando la nueva key
+        clearInterval(pollingInterval); 
+    }
+    // Aseguramos que se inicie el nuevo ciclo con la nueva key.
+    startLiveGamePolling(); 
+});
 
 // ----------------------------------------------------
 // INICIO DEL CICLO DE VIDA DE LA APLICACIÓN

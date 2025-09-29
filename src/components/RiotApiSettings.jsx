@@ -1,80 +1,92 @@
 // src/components/RiotApiSettings.jsx
+"use client";
 
-"use client"; 
-
-import React, { useState } from 'react';
-import { KeyIcon, CheckCircleIcon, ExclamationCircleIcon } from '@heroicons/react/24/solid';
+import React, { useState, useEffect } from 'react';
+import { KeyIcon, CheckCircleIcon, ExclamationTriangleIcon, ArrowPathIcon } from '@heroicons/react/24/solid';
 
 const RiotApiSettings = () => {
-  const [apiKey, setApiKey] = useState('');
-  const [status, setStatus] = useState(null); // null, 'success', 'error'
+    const [apiKey, setApiKey] = useState('');
+    const [status, setStatus] = useState('initial'); // 'initial', 'success', 'error', 'loading'
 
-  const handleSave = () => {
-    const trimmedKey = apiKey.trim();
+    // Simula la obtención de la clave guardada al cargar
+    useEffect(() => {
+        // En un componente real, aquí se llamaría a window.ipcRenderer.send('get-stored-key')
+    }, []);
 
-    if (trimmedKey.length < 30) {
-      setStatus('error');
-      return;
-    }
-
-    if (typeof window !== 'undefined' && window.electronAPI && window.electronAPI.send) {
-      window.electronAPI.send('set-riot-api-key', trimmedKey);
-      setStatus('success');
-    } else {
-      setStatus('error');
-    }
-  };
-
-  const statusMessages = {
-    success: "✅ Clave de Riot API guardada con éxito. El sistema de sondeo la usará en el próximo ciclo.",
-    error: "❌ Error: Clave muy corta o IPC no disponible. Vuelve a intentarlo.",
-  };
-
-  const statusColor = status === 'success' ? 'border-lol-blue-light text-lol-blue-light' : 
-                      status === 'error' ? 'border-red-500 text-red-400' : 'border-lol-gold text-lol-gold';
-
-  return (
-    <div className="bg-lol-gray/50 p-6 rounded-lg shadow-inner shadow-lol-blue/10 border border-lol-grey/20 w-full max-w-3xl mx-auto backdrop-blur-sm">
-      <h3 className="text-2xl font-extrabold text-lol-gold mb-4 flex items-center border-b border-lol-gold/50 pb-2 uppercase tracking-wider">
-        <KeyIcon className="w-7 h-7 mr-3 text-lol-gold" />
-        Configuración de Clave RIOT
-      </h3>
-
-      <p className="text-lol-text mb-6 text-sm">
-        Ingresa tu clave de la API de Riot Games para habilitar la búsqueda de datos de perfil y partidas.
-      </p>
-
-      <div className="flex flex-col sm:flex-row items-stretch sm:space-x-4 space-y-4 sm:space-y-0">
-        <input
-          type="text"
-          value={apiKey}
-          onChange={(e) => { 
-              setApiKey(e.target.value); 
-              setStatus(null);
-          }}
-          placeholder="RGAPI-xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
-          className="flex-grow p-4 bg-lol-input-bg text-lol-text border-2 border-lol-gray/50 rounded-md 
-                     focus:border-lol-blue-light focus:ring-lol-blue-light transition duration-200 shadow-xl shadow-black/30 placeholder-lol-grey"
-        />
+    const handleSaveKey = (e) => {
+        e.preventDefault();
         
-        <button
-          onClick={handleSave}
-          className={`px-6 py-3 rounded-md font-bold uppercase text-lol-dark-blue whitespace-nowrap
-                      bg-lol-gold hover:bg-lol-gold/90 transition duration-200 
-                      shadow-lg shadow-black/50 border border-lol-gold`}
-        >
-          Guardar Clave
-        </button>
-      </div>
+        if (!apiKey || apiKey.length < 30) {
+            setStatus('error');
+            setTimeout(() => setStatus('initial'), 3000);
+            return;
+        }
 
-      {status && (
-        <div className={`mt-5 p-4 rounded-md font-medium border-2 ${statusColor} bg-lol-gray/30 flex items-center`}>
-          {status === 'success' ? <CheckCircleIcon className="w-6 h-6 mr-3" /> : <ExclamationCircleIcon className="w-6 h-6 mr-3" />}
-          {statusMessages[status]}
+        setStatus('loading');
+        
+        // Simulación de envío/reinicio de polling
+        if (window.ipcRenderer) {
+            // 🔑 Lógica real de guardado y reinicio del polling en main.js
+            window.ipcRenderer.send('set-riot-api-key', apiKey);
+            
+            // Simulación de respuesta exitosa
+            setTimeout(() => {
+                setStatus('success');
+                // No reseteamos a initial para que el usuario sepa que está activa
+            }, 1000);
+        } else {
+            console.error("IPC Renderer not available. Cannot save key.");
+            setStatus('error');
+            setTimeout(() => setStatus('initial'), 3000);
+        }
+    };
+
+    const getStatusIcon = () => {
+        if (status === 'success') return <CheckCircleIcon className="w-5 h-5 text-green-400" />;
+        if (status === 'error') return <ExclamationTriangleIcon className="w-5 h-5 text-red-400" />;
+        if (status === 'loading') return <ArrowPathIcon className="w-5 h-5 text-[#FFD700] animate-spin" />;
+        return <KeyIcon className="w-5 h-5 text-[#C89B3C]" />;
+    };
+
+    return (
+        <div className="p-4 bg-[#1A2328] rounded-lg shadow-inner border border-[#C89B3C]/30">
+            <h2 className="text-xl font-bold text-[#F0E6D2] mb-4 border-b border-[#C89B3C]/20 pb-2">
+                Credenciales de Acceso (Riot API Key)
+            </h2>
+            <form onSubmit={handleSaveKey} className="space-y-6">
+                <label className="block">
+                    <span className="text-[#F0E6D2]/80 text-sm mb-2 block">Clave de Desarrollo (Caduca cada 24h)</span>
+                    <div className="relative flex items-center">
+                        <input
+                            type="text"
+                            value={apiKey}
+                            onChange={(e) => setApiKey(e.target.value)}
+                            placeholder="RGAPI-xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
+                            className="w-full px-4 py-2 bg-black/40 border border-[#C89B3C]/60 text-[#F0E6D2] focus:outline-none focus:ring-2 focus:ring-[#FFD700] rounded transition duration-200 shadow-md"
+                            // 🔑 Asegura la interactividad
+                            onMouseDown={(e) => e.stopPropagation()} 
+                        />
+                    </div>
+                </label>
+                
+                <div className="flex justify-between items-center">
+                    <p className={`text-sm ${status === 'error' ? 'text-red-400' : status === 'success' ? 'text-green-400' : 'text-[#F0E6D2]/60'}`}>
+                        {status === 'success' ? 'Clave activa. Polling reiniciado.' : status === 'error' ? '¡Error! Clave demasiado corta o inválida (403 probable).' : 'Recuerde regenerar la clave diariamente.'}
+                    </p>
+                    <button
+                        type="submit"
+                        className="hextech-button-gold text-sm transition duration-300 shadow-lg hover:shadow-xl disabled:opacity-50 disabled:cursor-not-allowed"
+                        disabled={status === 'loading'}
+                    >
+                        {getStatusIcon()}
+                        <span className="-webkit-app-region-no-drag">
+                            {status === 'loading' ? 'Guardando...' : 'Guardar y Testear Conexión'}
+                        </span>
+                    </button>
+                </div>
+            </form>
         </div>
-      )}
-    </div>
-  );
+    );
 };
 
 export default RiotApiSettings;

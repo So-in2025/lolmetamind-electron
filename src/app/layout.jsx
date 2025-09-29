@@ -12,6 +12,7 @@ export const metadata = {
 export default function RootLayout({ children }) {
   return (
     <html lang="es">
+      {/* 🚨 CRÍTICO: El body no tiene ninguna clase de fondo para permitir la transparencia de Electron. */}
       <body>
         <AppStateProvider>
           {children}

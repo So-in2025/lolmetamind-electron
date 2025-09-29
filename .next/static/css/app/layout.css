@@ -1,6 +1,8 @@
 /*!*****************************************************************************************************************************************************************************************************************************************************************!*\
   !*** css ./node_modules/next/dist/build/webpack/loaders/css-loader/src/index.js??ruleSet[1].rules[13].oneOf[12].use[2]!./node_modules/next/dist/build/webpack/loaders/postcss-loader/src/index.js??ruleSet[1].rules[13].oneOf[12].use[3]!./src/app/globals.css ***!
   \*****************************************************************************************************************************************************************************************************************************************************************/
+/* src/app/globals.css - AJUSTE FINAL PARA TRANSPARENCIA Y ARRASTRE */
+
 /*! normalize.css v8.0.1 | MIT License | github.com/necolas/normalize.css */
 
 /* Document
@@ -22269,11 +22271,77 @@ video {
   text-shadow: none;
 }
 
-/* 🚨 CRÍTICO: Forzar la transparencia en los elementos raíz del navegador */
+/* ---------------------------------------------------- */
 
-html, body, #__next {
-  background-color: transparent !important;
+/* --- ELECTRON WINDOW DRAGGING & CLICK-THRU FIX --- */
+
+/* ---------------------------------------------------- */
+
+/* CLAVE: Por defecto, el body y sus elementos principales son ARRASTRABLES */
+
+/* Esto funciona en conjunto con transparent:true y frame:false en main.js */
+
+body {
+  -webkit-app-region: drag; /* Hace que el body sea arrastrable */
+  background-color: transparent !important; /* Es CRÍTICO para la transparencia */
+  margin: 0;
+  padding: 0;
+  /* Otras propiedades de body */
+  font-family: 'Roboto', sans-serif;
+  color: #F0E6D2; /* Color de texto base */
+  overflow: hidden; /* Evita cualquier scroll no deseado en el body */
 }
+
+/* El elemento root de Next.js y los principales contenedores deben seguir las reglas de arrastre */
+
+html, #__next, .flex.w-full.h-full {
+  -webkit-app-region: drag;
+  height: 100%;
+  width: 100%;
+  overflow: hidden; /* Asegura que no haya scroll a nivel HTML */
+}
+
+/* Todos los elementos INTERACTIVOS NO ARRASTRAN (son clickeables) */
+
+button, input, a, select, textarea, /* Elementos HTML interactivos */
+.clickable-element,               /* Clase genérica si necesitas marcar un div como clickeable */
+.-webkit-app-region-no-drag {      /* Clase de utilidad para elementos específicos */
+  -webkit-app-region: no-drag;
+  cursor: pointer; /* Indica que es clickeable */
+}
+
+/* Asegura que el TEXTO dentro de las regiones arrastrables no se seleccione al arrastrar */
+
+.user-select-none {
+  -moz-user-select: none;
+       user-select: none;
+  -webkit-user-select: none; /* Para compatibilidad */
+}
+
+/* Estilos para el efecto de sombra de texto */
+
+.text-shadow-lg {
+  text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.5);
+}
+
+/* Ocultar scrollbars en WebKit (Chrome, Electron) */
+
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+  width: 0px; /* Ancho para WebKit */
+  background: transparent; /* Ocultar el fondo de la barra de desplazamiento */
+}
+
+.no-scrollbar {
+  -ms-overflow-style: none; /* Ocultar scrollbar para IE y Edge */
+  scrollbar-width: none; /* Ocultar scrollbar para Firefox */
+}
+
+/* ---------------------------------------------------- */
+
+/* --- ESTILOS VISUALES (Originales del Usuario & Mejoras Pro) --- */
+
+/* ---------------------------------------------------- */
 
 @font-face {
   font-family: 'BeaufortforLOL-Bold';
@@ -22286,21 +22354,6 @@ html, body, #__next {
 }
 
 @import url('https://fonts.googleapis.com/css2?family=Cinzel:wght@400;700;900&family=Roboto:wght@400;700&display=swap');
-
-body {
-  margin: 0;
-  padding: 0;
-  font-family: 'Roboto', sans-serif;
-  color: #F0E6D2;
-}
-
-.-webkit-app-region-drag {
-  -webkit-app-region: drag;
-}
-
-.-webkit-app-region-no-drag {
-  -webkit-app-region: no-drag;
-}
 
 /* Estilo para el borde animado del formulario */
 
@@ -22432,20 +22485,10 @@ body {
   border-image-source: linear-gradient(180deg, #5A472C 0%, #B89550 50%, #5A472C 100%);
   box-shadow: 0 0 30px rgba(0, 0, 0, 0.7), inset 0 0 20px rgba(10, 25, 40, 0.8);
   padding: 3rem;
-  /* --- SOLUCIÓN DE ARRASTRE Y SELECCIÓN --- */
-  -webkit-app-region: drag; /* HACE QUE ESTE ELEMENTO SEA ARRASTRABLE */
   -webkit-user-select: none;
      -moz-user-select: none;
-          user-select: none; /* EVITA QUE EL TEXTO SE SELECCIONE */
-  cursor: move; /* CAMBIA EL CURSOR PARA INDICAR QUE SE PUEDE MOVER */
-}
-
-/* ... (el resto de tus estilos .lol-frame::before, .lol-title, etc. se mantiene igual) ... */
-
-.lol-button, .close-button {
-  /* --- SOLUCIÓN DE ARRASTRE --- */
-  -webkit-app-region: no-drag; /* HACE QUE LOS BOTONES SEAN CLICKEABLES, NO ARRASTRABLES */
-  cursor: default; /* Devuelve el cursor normal sobre los botones */
+          user-select: none;
+  cursor: default;
 }
 
 .lol-frame::before,
@@ -22486,6 +22529,27 @@ body {
 }
 
 .close-button:hover { color: #F0E6D2; transform: rotate(90deg);
+}
+
+/* Estilos de scrollbar personalizados */
+
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: #0A141A; /* Fondo del scrollbar */
+  border-radius: 10px;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #283036; /* Color del thumb (barra de arrastre) */
+  border-radius: 10px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #C89B3C; /* Color al pasar el mouse */
 }
 
 @media (min-width: 640px) {

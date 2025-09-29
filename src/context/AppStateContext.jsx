@@ -1,34 +1,42 @@
 "use client";
-import React, { createContext, useContext, useState } from 'react';
+import React, { createContext, useContext, useState, useEffect } from 'react';
 
 // Define los estados posibles del flujo de la aplicación
 export const AppFlowState = {
-    // Mantenemos LOADING por si lo necesitas en el splash, pero el flujo principal ya no depende de la verificación
     LOADING: 'LOADING',     
-    LOGIN: 'LOGIN',         // Pantalla de inicio de sesión/registro
-    DASHBOARD: 'DASHBOARD', // Aplicación principal
+    LOGIN: 'LOGIN',         
+    DASHBOARD: 'DASHBOARD', 
 };
 
 // Crea el contexto
 const AppStateContext = createContext(null);
 
 export const AppStateProvider = ({ children }) => {
-    // 🚨 CORRECCIÓN CLAVE: El estado inicial se fuerza a LOGIN.
-    // Ya no verificamos el token en localStorage al inicio.
-    const [flowState, setFlowState] = useState(AppFlowState.LOGIN);
-    
-    // Si necesitas un estado para datos de usuario global, lo defines aquí
-    const [userData, setUserData] = useState(null);
+    // Estado inicial: LOADING
+    const [flowState, setFlowState] = useState(AppFlowState.LOADING);
+    const [userData, setUserData] = useState(null); 
 
-    // 🚨 LÓGICA DE VERIFICACIÓN DE TOKEN EN useEffect HA SIDO ELIMINADA.
-    
+    // Efecto para verificar la autenticación al cargar la aplicación
+    useEffect(() => {
+        const checkAuth = () => {
+            const token = localStorage.getItem('authToken');
+
+            if (token) {
+                setFlowState(AppFlowState.DASHBOARD);
+            } else {
+                setFlowState(AppFlowState.LOGIN);
+            }
+        };
+
+        checkAuth();
+    }, []);
+
     const contextValue = {
         flowState,
-        setFlowState, // Usado para navegar entre estados (como del Login al Dashboard)
-        AppFlowState, // Permite acceder a los nombres de los estados
+        setFlowState, 
+        AppFlowState, 
         userData,
         setUserData,
-        // Puedes añadir aquí una función logout() si la necesitas.
     };
 
     return (
