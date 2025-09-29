@@ -127,10 +127,10 @@ function createSplashWindow() {
  */
 function createMainWindow() {
     mainWindow = new BrowserWindow({
-        width: 1280,
-        height: 800,
-        minWidth: 1280,
-        minHeight: 800,
+        width: 1920,
+        height: 1080,
+        minWidth: 1920,
+        minHeight: 1080,
         show: false, // Ocultar hasta que esté lista
         frame: false,
         transparent: true,
@@ -160,7 +160,7 @@ function createMainWindow() {
     });
     // Solo para desarrollo: abrir DevTools
     if (isDevMode) {
-        mainWindow.webContents.openDevTools();
+       // mainWindow.webContents.openDevTools();
     }
 }
 
