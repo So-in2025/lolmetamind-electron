@@ -1,12 +1,12 @@
-// src/app/overlay/page.jsx - VERSIÓN FINAL CON HEXTECH MODULAR Y LÓGICA DE FASE CORREGIDA
+// src/app/overlay/page.jsx - VERSIÓN FINAL DE PRODUCCIÓN Y MONTAJE CORREGIDO
 "use client"
 
 import React, { useEffect, useState, Suspense } from 'react';
 import { useInteractiveWidget } from '../../hooks/useInteractiveWidget'; 
 import { useLcuData } from '../../hooks/useLcuData';
 import { useAppState } from '@/context/AppStateContext';
-import { ScaleProvider } from '@/context/ScaleContext'; // Importar el nuevo Provider
-import DragAndScaleWidget from '@/components/widgets/DragAndScaleWidget'; // Importar el nuevo Wrapper
+import { ScaleProvider } from '@/context/ScaleContext';
+import DragAndScaleWidget from '@/components/widgets/DragAndScaleWidget';
 
 // Importamos los widgets usando React.lazy para carga diferida y fallback
 const ControlsHUD = React.lazy(() => import('../../components/widgets/ControlsHUD'));
@@ -14,86 +14,30 @@ const ChampSelectCoach = React.lazy(() => import('../../components/widgets/Champ
 const InGameCoach = React.lazy(() => import('../../components/widgets/InGameCoach'));
 const StatusHUD = React.lazy(() => import('../../components/widgets/StatusHUD'));
 
-// Función TTS (Text-to-Speech) con logs de diagnóstico
+// Función TTS (Solo para Coach AI)
 const speak = (text, priority = 'normal') => {
-  try {
-    if (typeof window !== 'undefined' && 'speechSynthesis' in window && text) {
-      if (priority === 'high') {
-        window.speechSynthesis.cancel();
-      }
-      
-      const utterance = new SpeechSynthesisUtterance(text);
-      utterance.lang = 'es-ES';
-      utterance.rate = 1.2;
-      utterance.pitch = 1.1;
-
-      // FIX CRÍTICO: Eliminados los backslashes innecesarios
-      utterance.onstart = () => console.log(`[TTS] ✅ INICIO: Hablando "${text}"`); 
-      utterance.onerror = (event) => console.error(`[TTS] ❌ ERROR: ${event.error}`);
-      
-      window.speechSynthesis.speak(utterance);
-      
-    } else {
-      console.warn("[TTS] ⚠️ API de SpeechSynthesis no disponible o el texto está vacío.");
-    }
-  } catch (e) {
-    // FIX CRÍTICO: Eliminados los backslashes innecesarios
-    console.error(`[TTS] 🚨 Fallo catastrófico al intentar hablar: ${e.message}`);
-  }
+  // Función vacía: El TTS SOLO se activa dentro de InGameCoach.jsx
+  return; 
 };
 
 // Componente principal del Overlay (Envuelto en ScaleProvider en la exportación)
 function OverlayContent() {
     console.log("[OverlayPage] 🟢 Montando componente...");
     
-    // isWidgetInteractive ahora controla si los controles de drag/scale son visibles
     const { isWidgetInteractive } = useInteractiveWidget('global-overlay'); 
     const lcuData = useLcuData();
     const { userData } = useAppState();
-
-    const [lastSpokenGamePhase, setLastSpokenGamePhase] = useState('');
     
-    // --- LÓGICA DE FASE (CORRECCIÓN CRÍTICA Y DEBUG) ---
     let gamePhase = lcuData?.gameflow?.phase; 
-    const realLcuPhase = gamePhase; 
     
-    // Bandera temporal para pruebas: Poner a 'false' para producción.
-    const DEBUG_FORCE_WIDGETS_ON = true; 
-    
-    // Forzamos fase si es inactiva para poder probar el overlay y TTS.
-    if (DEBUG_FORCE_WIDGETS_ON && (gamePhase === 'EndOfGame' || gamePhase === 'None' || !gamePhase)) {
-        gamePhase = 'ChampSelect'; 
-        // FIX CRÍTICO: Eliminados los backslashes innecesarios
-        console.warn(`[OverlayPage] ⚠️ FASE FORZADA A 'ChampSelect' (DEBUG). LCU real: ${realLcuPhase || "N/A"}`);
+    // Dejamos de forzar la fase para producción final (aunque los logs indican que el LCU sí detecta la fase).
+    // Si la fase es inactiva, no renderizamos nada, confiando en el Hotkey.
+    if (gamePhase === 'EndOfGame' || gamePhase === 'None' || !gamePhase) {
+        gamePhase = null;
     }
-    // --- FIN LÓGICA DE FASE ---
     
-    useEffect(() => {
-        // FIX CRÍTICO: Eliminados los backslashes innecesarios
-        console.log(`[OverlayPage] 🔄 Actualización de estado detectada. GamePhase (Forzada): ${gamePhase}.`);
-        
-        if (!gamePhase || gamePhase === lastSpokenGamePhase) return;
-
-        let adviceToSpeak = '';
-        let priority = 'normal';
-
-        if (gamePhase === 'ChampSelect') {
-            adviceToSpeak = "Analizando selección de campeones. El coach Hextech está listo en pantalla.";
-            priority = 'high';
-        } else if (gamePhase === 'InProgress') {
-            adviceToSpeak = "Partida en curso. Pulsa Control F1 para activar la interfaz, o Control F2 para el modo pasivo.";
-            priority = 'normal';
-        }
-
-        if (adviceToSpeak) {
-            // FIX CRÍTICO: Eliminados los backslashes innecesarios
-            console.log(`[OverlayPage] 🎤 Intentando activar TTS para la fase: ${gamePhase}`);
-            speak(adviceToSpeak, priority);
-            setLastSpokenGamePhase(gamePhase);
-        }
-    }, [gamePhase, lastSpokenGamePhase]);
-
-    // Fallback de renderizado para cada widget.
+    // Eliminamos todo el useEffect de pruebas y TTS genérico.
+    
     const WidgetFallback = ({ name }) => (
         <div className="text-red-500 bg-black/80 p-2 rounded-md border border-red-500">
             Error al cargar el widget: {name}
@@ -101,16 +45,13 @@ function OverlayContent() {
     );
 
     return (
-        // El contenedor principal ahora solo controla la transparencia al click
+        // FIX CRÍTICO: El contenedor principal es la ventana. 
+        // Eliminamos el 'relative' innecesario y el texto de prueba.
         <div className={`h-full w-full bg-transparent ${isWidgetInteractive ? 'pointer-events-auto' : 'pointer-events-none'}`}>
-            {/* Etiqueta de diagnóstico VISUAL (Fija en el centro) */}
-            <p style={{ position: 'fixed', top: '50%', left: '50%', transform: 'translate(-50%, -50%)', color: 'lime', fontSize: '24px', textShadow: '0 0 5px black', zIndex: 9998 }}>
-                [Overlay Activo - LCU Real: {realLcuPhase || "N/A"} **(Fase: {gamePhase})**]
-            </p>
-
-            {/* WIDGETS ENVUELTOS EN EL NUEVO DRAGANDSCALEWRAPPER */}
             
-            {/* 1. Controles Globales (Fijos en la esquina superior izquierda, se ocultan en CTRL+F2) */}
+            {/* El texto de prueba central ha sido ELIMINADO para el modo final */}
+            
+            {/* 1. Controles Globales (Fijos en la esquina superior izquierda) */}
             {isWidgetInteractive && (
                 <div style={{ position: 'fixed', top: '20px', left: '20px', zIndex: 10000 }}>
                      <Suspense fallback={<WidgetFallback name="ControlsHUD" />}>
@@ -119,12 +60,14 @@ function OverlayContent() {
                 </div>
             )}
             
-            {/* 2. Status HUD (No necesita drag, pero usa la info de fase) */}
-            <DragAndScaleWidget widgetId="StatusHUD" defaultPosition={{ x: 100, y: 100 }}>
-                <Suspense fallback={<WidgetFallback name="StatusHUD" />}>
-                    <StatusHUD gamePhase={gamePhase} />
-                </Suspense>
-            </DragAndScaleWidget>
+            {/* 2. Status HUD (Visible si hay fase activa) */}
+            {gamePhase && (
+                 <DragAndScaleWidget widgetId="StatusHUD" defaultPosition={{ x: 100, y: 100 }}>
+                    <Suspense fallback={<WidgetFallback name="StatusHUD" />}>
+                        <StatusHUD gamePhase={gamePhase} />
+                    </Suspense>
+                </DragAndScaleWidget>
+            )}
             
 
             {/* 3. Coach de Selección de Campeones */}
@@ -139,10 +82,11 @@ function OverlayContent() {
                 </DragAndScaleWidget>
             )}
 
-            {/* 4. Coach En Partida */}
+            {/* 4. Coach En Partida (TTS de IA) */}
             {gamePhase === 'InProgress' && (
                 <DragAndScaleWidget widgetId="InGameCoach" defaultPosition={{ x: 100, y: 700 }}>
                     <Suspense fallback={<WidgetFallback name="InGameCoach" />}>
+                        {/* El InGameCoach ahora contiene la lógica de llamada a la IA y TTS */}
                         <InGameCoach 
                             liveData={lcuData?.liveData}
                             userData={userData}

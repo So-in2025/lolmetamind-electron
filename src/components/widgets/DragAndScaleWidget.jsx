@@ -1,4 +1,4 @@
-// src/components/widgets/DragAndScaleWidget.jsx - Wrapper Hextech Modular
+// src/components/widgets/DragAndScaleWidget.jsx - Wrapper Hextech Modular (FINAL CSS FIX)
 "use client"
 import React, { useEffect, useRef, useState } from 'react';
 import Draggable from 'react-draggable';
@@ -24,12 +24,17 @@ const HextechButton = ({ children, onClick, className = '' }) => (
 
 export default function DragAndScaleWidget({ children, widgetId, defaultPosition = { x: 0, y: 0 } }) {
     const { widgetStates, loadWidgetState, saveWidgetState } = useWidgetScale();
-    const { isWidgetInteractive } = useInteractiveWidget('global-overlay'); // Estado global CTRL+F1/F2
+    const { isWidgetInteractive } = useInteractiveWidget('global-overlay'); 
+    const [initialStateLoaded, setInitialStateLoaded] = useState(false); 
     const widgetState = widgetStates[widgetId];
     
     // Cargar estado inicial
     useEffect(() => {
-        loadWidgetState(widgetId, 100, defaultPosition);
+        const loadState = async () => {
+            const state = await loadWidgetState(widgetId, 100, defaultPosition);
+            if (state) setInitialStateLoaded(true);
+        };
+        loadState();
     }, [widgetId, loadWidgetState, defaultPosition]);
 
     const scaleWidget = (direction) => {
@@ -52,77 +57,76 @@ export default function DragAndScaleWidget({ children, widgetId, defaultPosition
         saveWidgetState(widgetId, { position: { x: data.x, y: data.y } });
     };
 
-    if (!widgetState) {
-        // Renderizar un fallback mientras se carga el estado
-        return <div className="absolute top-0 left-0 p-2 text-blue-400">Cargando Widget...</div>;
+    if (!initialStateLoaded) {
+        return null;
     }
 
     // Estilo de transformación para la escala
     const scaleStyle = {
-        // FIX CRÍTICO: Eliminados los backslashes innecesarios
         transform: `scale(${widgetState.scale / 100})`,
         transformOrigin: 'top left',
-        transition: isWidgetInteractive ? 'none' : 'transform 0.1s ease-out', // Suavizar solo al jugar
-        width: `calc(100% / (${widgetState.scale / 100}))`, // Corrección para que el contenedor mantenga el tamaño lógico
+        transition: isWidgetInteractive ? 'none' : 'transform 0.1s ease-out',
+        width: `calc(100% / (${widgetState.scale / 100}))`,
         height: `calc(100% / (${widgetState.scale / 100}))`,
-        pointerEvents: isWidgetInteractive ? 'auto' : 'none', // Asegurar que el contenido también sea transparente al click
+        pointerEvents: isWidgetInteractive ? 'auto' : 'none',
     };
     
-    // El widget se convierte en el área de agarre
-    const dragClassName = `relative w-full h-full p-2 rounded-lg transition-shadow duration-300 ${!widgetState.isLocked && isWidgetInteractive ? 'cursor-grab hover:shadow-[0_0_20px_rgba(30,144,255,0.5)]' : 'cursor-default'}`;
-    
-    // Mostrar controles solo en modo interactivo (CTRL+F1)
     const showControls = isWidgetInteractive;
 
     return (
         <Draggable 
             handle={showControls && !widgetState.isLocked ? ".drag-handle" : null}
-            defaultPosition={defaultPosition}
-            position={widgetState.position}
+            position={widgetState.position} 
             onStop={handleDragStop}
             disabled={widgetState.isLocked || !showControls}
-            bounds="parent" // Asegura que no se salga de la pantalla (overlayWindow)
+            bounds="parent" 
         >
+            {/* Contenedor Draggable Wrapper: Posicionamiento absoluto y Z-Index Alto */}
             <div 
-                className={dragClassName} 
-                style={scaleStyle}
+                className="absolute min-w-64 min-h-20 bg-black/10" // Min size para evitar colapso
+                style={{ zIndex: 9999 }} // Nivel Z Alto
             >
-                {/* Controles de la esquina superior izquierda (Fijos para el widget) */}
-                {showControls && (
-                    <div className="absolute top-[-40px] left-0 flex space-x-2 p-1 bg-transparent z-50">
-                        {/* Botón de Bloqueo/Desbloqueo */}
-                        <HextechButton onClick={toggleLock} className="drag-handle">
-                            {widgetState.isLocked ? (
-                                <LockClosedIcon className="w-4 h-4 text-red-400" />
-                            ) : (
-                                <LockOpenIcon className="w-4 h-4 text-green-400" />
-                            )}
-                        </HextechButton>
-                        
-                        {/* Botón de Arrastre (Solo visible si está desbloqueado) */}
-                        {!widgetState.isLocked && (
-                            <HextechButton className="drag-handle" title="Arrastrar Widget">
-                                <ArrowsPointingOutIcon className="w-4 h-4 text-yellow-400" />
-                            </HextechButton>
-                        )}
-                        
-                        {/* Controles de Escala (+ / -) */}
-                        <HextechButton onClick={() => scaleWidget('out')} title="Reducir (40% - 200%)">
-                            <MinusIcon className="w-4 h-4" />
-                        </HextechButton>
-                        <HextechButton onClick={() => scaleWidget('in')} title="Aumentar (40% - 200%)">
-                            <PlusIcon className="w-4 h-4" />
-                        </HextechButton>
-                        
-                        <span className="text-white ml-2 text-sm font-bold p-1 rounded backdrop-blur-sm bg-gray-900/50 border border-gray-500/50">
-                            ${widgetState.scale}%
-                        </span>
-                    </div>
-                )}
                 
-                {/* Contenido del Widget */}
-                <div className="w-full h-full pointer-events-auto">
-                    {children}
+                {/* Contenedor que aplica la escala y el estilo Hextech */}
+                <div style={scaleStyle} className="lol-metamind-widget relative w-full h-full">
+                    
+                    {/* Controles de la esquina superior izquierda (Fijos para el widget) */}
+                    {showControls && (
+                        <div className="absolute top-[-40px] left-0 flex space-x-2 p-1 bg-transparent z-[10001]">
+                            {/* Botón de Bloqueo/Desbloqueo */}
+                            <HextechButton onClick={toggleLock} className="drag-handle">
+                                {widgetState.isLocked ? (
+                                    <LockClosedIcon className="w-4 h-4 text-red-400" />
+                                ) : (
+                                    <LockOpenIcon className="w-4 h-4 text-green-400" />
+                                )}
+                            </HextechButton>
+                            
+                            {/* Botón de Arrastre (Solo visible si está desbloqueado) */}
+                            {!widgetState.isLocked && (
+                                <HextechButton className="drag-handle" title="Arrastrar Widget">
+                                    <ArrowsPointingOutIcon className="w-4 h-4 text-yellow-400" />
+                                </HextechButton>
+                            )}
+                            
+                            {/* Controles de Escala (+ / -) */}
+                            <HextechButton onClick={() => scaleWidget('out')} title="Reducir (40% - 200%)">
+                                <MinusIcon className="w-4 h-4" />
+                            </HextechButton>
+                            <HextechButton onClick={() => scaleWidget('in')} title="Aumentar (40% - 200%)">
+                                <PlusIcon className="w-4 h-4" />
+                            </HextechButton>
+                            
+                            <span className="text-white ml-2 text-sm font-bold p-1 rounded backdrop-blur-sm bg-gray-900/50 border border-gray-500/50">
+                                {widgetState.scale}%
+                            </span>
+                        </div>
+                    )}
+                    
+                    {/* Contenido del Widget */}
+                    <div className="w-full h-full pointer-events-auto">
+                        {children}
+                    </div>
                 </div>
             </div>
         </Draggable>

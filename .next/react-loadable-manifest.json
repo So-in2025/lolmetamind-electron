@@ -1,26 +1,26 @@
 {
   "app\\overlay\\page.jsx -> ../../components/widgets/ChampSelectCoach": {
-    "id": 4960,
+    "id": "app\\overlay\\page.jsx -> ../../components/widgets/ChampSelectCoach",
     "files": [
-      "static/chunks/960.a418aca3cb633384.js"
+      "static/chunks/_app-pages-browser_src_components_widgets_ChampSelectCoach_jsx.js"
     ]
   },
   "app\\overlay\\page.jsx -> ../../components/widgets/ControlsHUD": {
-    "id": 2633,
+    "id": "app\\overlay\\page.jsx -> ../../components/widgets/ControlsHUD",
     "files": [
-      "static/chunks/633.f571ebc2200df33b.js"
+      "static/chunks/_app-pages-browser_src_components_widgets_ControlsHUD_jsx.js"
     ]
   },
   "app\\overlay\\page.jsx -> ../../components/widgets/InGameCoach": {
-    "id": 3187,
+    "id": "app\\overlay\\page.jsx -> ../../components/widgets/InGameCoach",
     "files": [
-      "static/chunks/187.455c5610d83c821c.js"
+      "static/chunks/_app-pages-browser_src_components_widgets_InGameCoach_jsx.js"
     ]
   },
   "app\\overlay\\page.jsx -> ../../components/widgets/StatusHUD": {
-    "id": 5732,
+    "id": "app\\overlay\\page.jsx -> ../../components/widgets/StatusHUD",
     "files": [
-      "static/chunks/732.f26209b363684bd1.js"
+      "static/chunks/_app-pages-browser_src_components_widgets_StatusHUD_jsx.js"
     ]
   }
 }
