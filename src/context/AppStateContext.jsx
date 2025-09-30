@@ -1,67 +1,95 @@
 // src/context/AppStateContext.jsx
-// Este archivo define el Contexto de React para gestionar el estado global de la aplicación.
-// Controla el flujo principal (qué pantalla mostrar) y almacena los datos del usuario
-// una vez que ha iniciado sesión, haciéndolos accesibles desde cualquier componente.
+"use client"
 
-"use client";
+import React, { createContext, useContext, useState } from 'react';
 
-import React, { createContext, useContext, useState, useMemo } from 'react';
-
-// Define un objeto inmutable para los estados posibles del flujo de la aplicación.
-// Usar un objeto como este previene errores de tipeo y hace el código más legible.
-export const AppFlowState = Object.freeze({
+// >>> EXPORTACIÓN CRÍTICA: Se define y exporta correctamente para que otros módulos lo importen.
+export const AppFlowState = {
+    LOADING: 'LOADING',
     LOGIN: 'LOGIN',
-    LOADING: 'LOADING', // Estado intermedio para transiciones o cargas iniciales
-    DASHBOARD: 'DASHBOARD'
-});
+    DASHBOARD: 'DASHBOARD',
+};
 
-// Crea el contexto de la aplicación.
+// Definición de un tipo de perfil de usuario más completo
+const initialUserProfile = {
+    isAuthenticated: false,
+    username: null,
+    token: null,
+    // CAMPOS AÑADIDOS DESDE LA API /profile
+    userId: null, 
+    summonerName: null, 
+    tagline: null, 
+    region: null,
+    zodiacSign: null,
+    puuid: null, 
+    favRole1: null,
+    favChamp1: null,
+};
+
 const AppStateContext = createContext();
 
-/**
- * El Proveedor de Estado (Provider) que envolverá toda la aplicación.
- * Contiene la lógica de estado y lo provee a todos los componentes hijos.
- * @param {object} props - Propiedades del componente, incluyendo `children`.
- */
 export const AppStateProvider = ({ children }) => {
-    // Estado para controlar el flujo de la aplicación (qué pantalla se muestra).
-    // Inicia en la pantalla de LOGIN.
-    const [flowState, setFlowState] = useState(AppFlowState.LOGIN);
+    const [userProfile, setUserProfile] = useState(initialUserProfile);
+    // CRÍTICO: Inicializar flowState a LOGIN.
+    const [flowState, setFlowState] = useState(AppFlowState.LOGIN); 
+    const [liveGameData, setLiveGameData] = useState(null);
     
-    // Estado para almacenar los datos del usuario después de un inicio de sesión exitoso.
-    const [userData, setUserData] = useState(null);
+    /**
+     * Actualiza el perfil con data completa desde la API de login/profile.
+     */
+    const updateProfileFromApi = (data) => {
+        if (!data) return;
+        setUserProfile(prev => ({
+            ...prev,
+            userId: data.userId,
+            summonerName: data.summonerName || prev.summonerName, 
+            tagline: data.tagline || prev.tagline,
+            region: data.region || prev.region,
+            zodiacSign: data.zodiacSign || prev.zodiacSign,
+            puuid: data.puuid || prev.puuid,
+            favRole1: data.favRole1 || prev.favRole1,
+            favChamp1: data.favChamp1 || prev.favChamp1,
+            isAuthenticated: !!data.userId,
+        }));
+    };
 
-    // `useMemo` se usa para optimizar el rendimiento.
-    // Asegura que el objeto `contextValue` solo se recalcule si `flowState` o `userData` cambian.
-    // Esto previene re-renderizados innecesarios en los componentes que consumen el contexto.
-    const contextValue = useMemo(() => ({
+    /**
+     * Solo para el login inicial, guarda token y username.
+     */
+    const login = (username, token) => {
+        setUserProfile(prev => ({
+            ...prev,
+            isAuthenticated: true,
+            username,
+            token,
+        }));
+    };
+
+    const logout = () => {
+        setUserProfile(initialUserProfile);
+        setLiveGameData(null);
+        setFlowState(AppFlowState.LOGIN);
+    };
+
+    const value = {
+        userProfile,
+        userData: userProfile, // Para usar en LoginScreen/AppPage
+        liveGameData,
         flowState,
-        setFlowState,
-        AppFlowState, // Exportamos el enum para que sea fácil de usar en otros componentes
-        userData,
-        setUserData,
-    }), [flowState, userData]);
+        AppFlowState, // Exportamos para uso directo
+        login,
+        logout,
+        setLiveGameData,
+        setFlowState, // CRÍTICO: Exportar setFlowState
+        setUserData: setUserProfile,
+        updateProfileFromApi,
+    };
 
     return (
-        <AppStateContext.Provider value={contextValue}>
+        <AppStateContext.Provider value={value}>
             {children}
         </AppStateContext.Provider>
     );
 };
 
-/**
- * Hook personalizado para consumir el AppStateContext de forma sencilla y segura.
- * Proporciona una forma limpia de acceder al estado global desde cualquier componente.
- * @returns {object} El valor del contexto, que incluye `flowState`, `setFlowState`, etc.
- */
-export const useAppState = () => {
-    const context = useContext(AppStateContext);
-    
-    // Si un componente intenta usar este hook fuera del AppStateProvider,
-    // lanzará un error, lo cual ayuda a detectar problemas de implementación.
-    if (context === undefined) {
-        throw new Error('useAppState debe ser usado dentro de un AppStateProvider');
-    }
-    
-    return context;
-};
+export const useAppState = () => useContext(AppStateContext);

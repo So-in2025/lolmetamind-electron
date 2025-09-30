@@ -1,109 +1,108 @@
-// main.js - VERSIÓN FINAL-FINAL, COMPLETA Y UNIFICADA
+// main.js - VERSIÓN CON LOGIN EN VENTANA INDEPENDIENTE Y RUTAS CORREGIDAS
 
-const { app, BrowserWindow, globalShortcut, screen, ipcMain } = require('electron');
+const { app, BrowserWindow, globalShortcut, screen, ipcMain, session } = require('electron');
 const path = require('path');
 const axios = require('axios');
 const Store = require('electron-store');
-const https = require('https');
-const { LcuApiHandler } = require('./lol-client-api'); // <-- IMPORTAMOS LA NUEVA CLASE "MANEJADORA"
-
 const store = new Store();
+const https = require('https');
+// Asegúrate de que lol-client-api.js esté en el directorio raíz
+const { fetchRiotApiData, pollLcuDataAndSend } = require('./lol-client-api'); 
+
+let mainWindow; // Dashboard Window (Grande, Opaca)
+let loginWindow; // Login Window (Pequeña, Opaca/Transparente, fondo dado por React)
+let splashWindow; // Splash HTML Window (Pequeña, Transparente)
+let overlayWindow; // Overlay Window (Grande, Transparente)
+
+let pollingInterval = null;
 let hasRunInitialLogin = false;
-let lcuHandler = null; // <-- ÚNICA VARIABLE GLOBAL PARA EL MANEJADOR LCU
+let latestRiotApiData = null;
 
 const isDevMode = !!process.defaultApp;
 
 app.commandLine.appendSwitch('ignore-certificate-errors');
 app.disableHardwareAcceleration();
 
-let mainWindow;
-let splashWindow;
-let overlayWindow;
-
-const USE_LOCAL_BACKEND = true;
+// --- URLs y Endpoints ---
 const HTTP_BASE_API_URL = 'http://localhost:3000';
 const BACKEND_BASE_URL = HTTP_BASE_API_URL;
 
 const LIVE_GAME_UPDATE_ENDPOINT = '/api/live-game/update';
 const USER_PROFILE_ENDPOINT = '/api/user/profile';
 
-const INDEX_PATH = isDevMode ? 'http://localhost:3001' : `file://${path.join(__dirname, 'out', 'index.html')}`;
-const OVERLAY_PATH = isDevMode ? 'http://localhost:3001/overlay' : `file://${path.join(__dirname, 'out', 'overlay.html')}`;
+// RUTAS CRÍTICAS: Next.js 'out' genera index.html dentro de cada carpeta
+const INDEX_PATH = isDevMode ? 'http://localhost:3001/dashboard' : `file://${path.join(__dirname, 'out', 'dashboard', 'index.html')}`;
+const LOGIN_PATH = isDevMode ? 'http://localhost:3001' : `file://${path.join(__dirname, 'out', 'index.html')}`;
+const OVERLAY_PATH = isDevMode ? 'http://localhost:3001/overlay' : `file://${path.join(__dirname, 'out', 'overlay', 'index.html')}`;
 
 const backendAgent = new https.Agent({ rejectUnauthorized: false });
-
 const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
 
-// --- FUNCIONES COMPLETAS (INCLUIDAS) ---
-
-/**
- * Envía datos al proceso de renderizado (frontend).
- * @param {string} channel - El canal IPC.
- * @param {object} data - Los datos a enviar.
- */
 function sendDataToRenderer(channel, data) {
-    if (mainWindow && !mainWindow.isDestroyed()) {
-        mainWindow.webContents.send(channel, data);
-    }
-    // 🔑 AÑADIDO: También enviamos los datos al overlay
-    if (overlayWindow && !overlayWindow.isDestroyed()) {
-        overlayWindow.webContents.send(channel, data);
-    }
-
-    // 🔑 LÓGICA DE VISIBILIDAD DEL OVERLAY
-    const gamePhase = data?.lcuState?.gameflow?.phase;
-    if (overlayWindow) {
-        if (gamePhase === 'ChampSelect' || gamePhase === 'InProgress') {
-            if (!overlayWindow.isVisible()) {
-                console.log(`[Overlay] Mostrando overlay. Fase de juego: ${gamePhase}`);
-                overlayWindow.showInactive(); // showInactive para que no robe el foco
-            }
-        } else {
-            if (overlayWindow.isVisible()) {
-                console.log(`[Overlay] Ocultando overlay. Fase de juego: ${gamePhase}`);
-                overlayWindow.hide();
-            }
-        }
+    const window = channel === 'overlay-interaction-toggle' ? overlayWindow : mainWindow;
+    if (window && !window.isDestroyed()) {
+        console.log(`[IPC SEND] Enviando al canal '${channel}'.`);
+        window.webContents.send(channel, data);
     }
 }
 
-
-/**
- * Obtiene el perfil completo del usuario desde la DB.
- */
 async function fetchAndStoreUserProfile(username, token) {
+    console.log(`[DB FETCH] 🔍 Iniciando fetchAndStoreUserProfile para: ${username}`);
     if (!token || typeof token !== 'string' || token.length < 10) {
-        console.error('[DB FETCH] ❌ Falla Crítica: Token inválido o no recibido. Saltando fetch.');
+        console.error('[DB FETCH] ❌ Falla Crítica: Token inválido o no recibido.');
         return false;
     }
-    const MAX_ATTEMPTS = 2;
-    for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
-        try {
-            const response = await axios.get(`${BACKEND_BASE_URL}${USER_PROFILE_ENDPOINT}`, {
-                headers: { 'Authorization': `Bearer ${token}` },
-                params: { username: username },
-                httpsAgent: backendAgent,
-                timeout: 20000
-            });
-            if (response.status === 200 && response.data) {
-                store.set('userData', response.data);
-                store.set('userSummonerName', response.data.summonerName);
-                store.set('userRegion', response.data.region);
-                store.set('userTagline', response.data.tagline);
-                if (response.data.riotApiKey) {
-                    store.set('riotApiKey', response.data.riotApiKey);
-                    console.log('[DB FETCH] ✅ Riot API Key obtenida del perfil y guardada.');
-                }
-                console.log(`[DB FETCH] ✅ Perfil completo guardado para: ${response.data.summonerName}.`);
-                return true;
+
+    try {
+        const response = await axios.get(`${BACKEND_BASE_URL}${USER_PROFILE_ENDPOINT}`, {
+            headers: { 'Authorization': `Bearer ${token}` },
+            params: { username: username },
+            httpsAgent: backendAgent,
+            timeout: 15000
+        });
+
+        if (response.status === 200 && response.data) {
+            const data = response.data;
+            
+            // Asumiendo nombres de columna limpios (summonerName, tagline, region)
+            const summonerName = data.summonerName; 
+            const tagline = data.tagline;
+            const region = data.region;
+            
+            if (!summonerName || !tagline || !region || !data.zodiacSign) { // Validamos campos críticos de IA
+                 console.error('[DB FETCH] ❌ Datos de Riot/IA incompletos en la respuesta del backend.');
+                 store.set('userData', data); // Guardamos lo que haya para debugging
+                 return false;
             }
-        } catch (error) {
-            console.error(`[DB FETCH] ❌ Fallo (Intento ${attempt}): ${error.message}`);
-            if (attempt < MAX_ATTEMPTS) await delay(1500);
+
+            store.set('userData', data); 
+            store.set('userSummonerName', summonerName);
+            store.set('userRegion', region);
+            store.set('userTagline', tagline);
+            
+            if (data.riotApiKey) {
+                store.set('riotApiKey', data.riotApiKey);
+                console.log('[DB FETCH] ✅ Riot API Key obtenida del backend y guardada en Store.');
+            } 
+            
+            console.log(`[DB FETCH] ✅ Perfil guardado para: ${summonerName}.`);
+            return true;
+        } else {
+            console.warn(`[DB FETCH] ⚠️ Perfil no encontrado o incompleto en la DB.`);
+            return false;
         }
+    } catch (error) {
+        console.error(`[DB FETCH] ❌ Fallo crítico al obtener perfil: ${error.message}`);
+        if (error.response) {
+            console.error(`[DB FETCH] ❌ Detalles del error: Status ${error.response.status}, Data: ${JSON.stringify(error.response.data)}`);
+        }
+        return false;
     }
-    return false;
 }
+
+// ==========================================================
+// CREACIÓN DE VENTANAS
+// ==========================================================
 
 function createSplashWindow() {
     splashWindow = new BrowserWindow({
@@ -119,34 +118,90 @@ function createSplashWindow() {
             contextIsolation: true,
         },
     });
-    splashWindow.loadURL(`file://${path.join(__dirname, 'splash.html')}`);
+    // splash.html debe estar en el directorio raíz
+    splashWindow.loadURL(`file://${path.join(__dirname, 'splash.html')}`); 
     splashWindow.on('closed', () => (splashWindow = null));
 }
 
-function createMainWindow() {
-    mainWindow = new BrowserWindow({
-        width: 1920,
-        height: 1080,
-        minWidth: 1920,
-        minHeight: 1080,
-        show: false,
+function createLoginWindow() {
+    if (loginWindow) {
+        loginWindow.focus();
+        return;
+    }
+    
+    loginWindow = new BrowserWindow({
+        width: 600,
+        height: 800,
+        minWidth: 560,
+        minHeight: 700,
+        show: false, 
         frame: false,
-        transparent: true,
-        backgroundColor: '#00000000',
+        
+        // >>> SOLUCIÓN FINAL A LA TRANSPARENCIA Y EL FONDO GRIS <<<
+        transparent: true, // La ventana es sólida.
+        //backgroundColor: '#1E2328', // Fondo sólido (lol-dark-blue)
+        
         webPreferences: {
             preload: path.join(__dirname, 'preload.js'),
             nodeIntegration: false,
             contextIsolation: true,
         },
     });
-    mainWindow.loadURL(INDEX_PATH);
-    mainWindow.once('ready-to-show', () => {
+    
+    loginWindow.loadURL(LOGIN_PATH); 
+
+    loginWindow.once('ready-to-show', () => {
+        const splashDuration = 3000; 
+        
         setTimeout(() => {
             if (splashWindow) splashWindow.close();
-            mainWindow.show();
-            mainWindow.center();
+            loginWindow.show();
+            loginWindow.center();
+            // Ya no necesitamos setIgnoreMouseEvents(false) si transparent es false
+            console.log("[MAIN] ✅ Login Window mostrada. Es opaca y clickeable.");
+        }, splashDuration);
+    });
+
+    loginWindow.on('closed', () => {
+        if (!mainWindow) {
+            app.quit(); 
+        }
+        loginWindow = null;
+    });
+}
+
+function createMainWindow() {
+    if (loginWindow) loginWindow.close(); 
+    
+    mainWindow = new BrowserWindow({
+        width: 1920,
+        height: 1080,
+        minWidth: 1920, 
+        minHeight: 1080,
+        show: false,
+        frame: false,
+        transparent: false, // Dashboard debe tener fondo sólido
+        backgroundColor: '#0A141A', 
+        webPreferences: {
+            preload: path.join(__dirname, 'preload.js'),
+            nodeIntegration: false,
+            contextIsolation: true,
+        },
+    });
+
+    mainWindow.loadURL(LOGIN_PATH); 
+
+    loginWindow.once('ready-to-show', () => {    
+        setTimeout(() => {
+            if (splashWindow) splashWindow.close();
+            loginWindow.show();
+            loginWindow.center();
+            loginWindow.setIgnoreMouseEvents(false);
+            console.log("[MAIN] ✅ Login Window mostrada después de 3s.");
         }, 3000);
     });
+
+
     mainWindow.on('closed', () => {
         mainWindow = null;
     });
@@ -155,12 +210,10 @@ function createMainWindow() {
 function createOverlayWindow() {
     const primaryDisplay = screen.getPrimaryDisplay();
     const { width, height } = primaryDisplay.workAreaSize;
+
     overlayWindow = new BrowserWindow({
-        width: width,
-        height: height,
-        x: 0,
-        y: 0,
-        transparent: true,
+        width, height, x: 0, y: 0,
+        transparent: true, // Overlay debe ser transparente
         frame: false,
         focusable: false,
         alwaysOnTop: true,
@@ -170,50 +223,132 @@ function createOverlayWindow() {
             contextIsolation: true,
         },
     });
+
     overlayWindow.loadURL(OVERLAY_PATH);
     overlayWindow.setIgnoreMouseEvents(true);
     overlayWindow.hide();
     overlayWindow.on('closed', () => (overlayWindow = null));
 }
 
-// =========================================================================
-// MANEJO DE EVENTOS IPC Y LÓGICA DE LA APLICACIÓN
-// =========================================================================
+// ==========================================================
+// LÓGICA DE POLLING (COMPLETA)
+// ==========================================================
+async function executeInitialRiotApiFetchAndStartPolling() {
+    console.log('[MAIN-FLOW] -> Iniciando executeInitialRiotApiFetchAndStartPolling.');
+    stopLiveGamePolling();
+    latestRiotApiData = null;
 
-app.on('ready', () => {
-    console.log('[MAIN] -> APP READY. Creando ventanas y registrando IPC...');
+    const riotApiKey = store.get('riotApiKey');
+    const userRegion = store.get('userRegion');
+    const userSummonerName = store.get('userSummonerName');
+    const userTagline = store.get('userTagline');
 
-    ipcMain.on('closeWindow', () => app.quit());
-    ipcMain.on('minimizeWindow', () => mainWindow?.minimize());
+    console.log('[MAIN-FLOW] Verificando datos necesarios para la llamada a Riot API:');
+    if (!riotApiKey || !userRegion || !userSummonerName || !userTagline) {
+        console.error('[MAIN-FLOW] ❌ Faltan credenciales críticas. No se puede continuar con el polling de Riot API.');
+        sendDataToRenderer('riot-profile-data', { error: 'Faltan credenciales de Riot API. Configura tu API Key en el dashboard.' });
+        return;
+    }
 
-    ipcMain.on('user-logged-in', async (event, userData) => {
-        if (hasRunInitialLogin) {
-            console.warn(`[IPC RECEPCIÓN] ⚠️ Evento de login duplicado para ${userData.username} ignorado.`);
+    latestRiotApiData = await fetchRiotApiData(); 
+
+    if (latestRiotApiData) {
+        console.log('[MAIN-FLOW] ✅ Datos de Riot API (primera pasada) obtenidos. Enviando al frontend y al backend.');
+        sendDataToRenderer('riot-profile-data', latestRiotApiData);
+
+        const userToken = store.get('userToken');
+        if (userToken) {
+            try {
+                await axios.post(
+                    `${BACKEND_BASE_URL}${LIVE_GAME_UPDATE_ENDPOINT}`,
+                    latestRiotApiData,
+                    { headers: { 'Authorization': `Bearer ${userToken}` }, httpsAgent: backendAgent, timeout: 5000 }
+                );
+                console.log('[MAIN-FLOW] ✅ Datos iniciales de Riot API enviados al backend.');
+            } catch (backendError) {
+                console.error(`[MAIN-FLOW] ❌ Fallo al enviar datos iniciales de Riot API al backend: ${backendError.message}`);
+            }
+        }
+        
+        startLcuPolling();
+    } else {
+        console.error('[MAIN-FLOW] ❌ Fallo al obtener datos de Riot API en la primera pasada.');
+        sendDataToRenderer('riot-profile-data', { error: 'Fallo al obtener datos de Riot API. Verifica tu API Key.' });
+    }
+}
+
+function startLcuPolling() {
+    console.log('[LCU POLLING] 🟢 Iniciando ciclo de polling para LCU...');
+    if (pollingInterval) clearInterval(pollingInterval);
+
+    const performPoll = async () => {
+        if (!latestRiotApiData) {
+            console.warn('[LCU POLLING] ⚠️ No hay datos base de Riot API. Deteniendo polling LCU.');
+            stopLiveGamePolling();
             return;
         }
-        hasRunInitialLogin = true;
+        await pollLcuDataAndSend(
+            latestRiotApiData,
+            BACKEND_BASE_URL,
+            LIVE_GAME_UPDATE_ENDPOINT,
+            (data) => sendDataToRenderer('riot-profile-data', data)
+        );
+    };
+    
+    performPoll();
+    pollingInterval = setInterval(performPoll, 15000);
+}
 
-        console.log(`[IPC RECEPCIÓN] ✅ EVENTO RECIBIDO. Usuario: ${userData.username}. INICIANDO PROCESOS POST-LOGIN.`);
-        store.set('userToken', userData.token);
+function stopLiveGamePolling() {
+    if (pollingInterval) {
+        clearInterval(pollingInterval);
+        pollingInterval = null;
+        console.log('[LCU POLLING] 🛑 Polling LCU detenido.');
+    }
+}
+// ==========================================================
+
+
+app.on('ready', () => {
+    console.log('[MAIN] -> App lista. Creando ventanas y configurando IPC.');
+
+    createSplashWindow();
+    createLoginWindow(); // Inicia la carga del Login (ventana pequeña)
+    createOverlayWindow(); 
+
+    ipcMain.on('closeWindow', () => app.quit());
+    ipcMain.on('minimizeWindow', () => {
+        // Decide qué ventana minimizar
+        if (mainWindow) mainWindow.minimize();
+        else if (loginWindow) loginWindow.minimize();
+    });
+    
+    // CRÍTICO: Evento de Login exitoso (Activado por LoginScreen.jsx)
+    ipcMain.on('user-logged-in', async (event, userData) => {
+        console.log(`[IPC RECEIVE] Evento 'user-logged-in' recibido para el usuario: ${userData.username}`);
+        if (hasRunInitialLogin) {
+            console.warn(`[IPC RECEIVE] ⚠️ Evento de login duplicado ignorado.`);
+            return;
+        }
         
+        store.set('userToken', userData.token);
         const profileFetchSuccess = await fetchAndStoreUserProfile(userData.username, userData.token);
 
-        if (profileFetchSuccess) {
-            // 🔑 INICIALIZACIÓN DEL MANEJADOR LCU
-            lcuHandler = new LcuApiHandler(
-                (data) => sendDataToRenderer('riot-profile-data', data), // Función para enviar datos al frontend
-                BACKEND_BASE_URL,
-                LIVE_GAME_UPDATE_ENDPOINT
-            );
-            lcuHandler.start();
-            console.log('[MAIN] ✅ Manejador LCU inicializado y arrancado.');
-        } else {
-            console.error('[IPC RECEPCIÓN] ⚠️ No se pudo obtener el perfil del usuario. No se iniciará el LCU Handler.');
-        }
+        if (profileFetchSuccess || store.get('userData')) {
+            hasRunInitialLogin = true;
+            console.log('[MAIN-FLOW] ✅ Perfil cargado. Cerrando Login y abriendo Dashboard.');
+            
+            // 1. Crear la ventana principal (cierra loginWindow)
+            createMainWindow(); 
+            
+            // 2. INICIAR EL POLLING CON DELAY (Para darle tiempo a React a redirigir a /dashboard)
+            setTimeout(() => {
+                 console.log('[MAIN-FLOW] Retardo de 1s completado. Iniciando flujo de datos Riot/LCU.');
+                 executeInitialRiotApiFetchAndStartPolling(); 
+            }, 1000); 
 
-        if (mainWindow && !mainWindow.isDestroyed()) {
-             mainWindow.setIgnoreMouseEvents(false);
-             console.log('[IPC RECEPCIÓN] 🖱️ Reactivando eventos de ratón para el Dashboard.');
+        } else {
+            console.error('[MAIN-FLOW] ❌ Fallo al obtener perfil. Permanece en Login.');
         }
     });
 
@@ -221,73 +356,70 @@ app.on('ready', () => {
 
     ipcMain.on('set-riot-api-key', async (event, apiKey) => {
         store.set('riotApiKey', apiKey);
-        console.log(`[MAIN STORE] ✅ Clave API Riot guardada.`);
-        if (lcuHandler) {
-            lcuHandler.restart();
+        console.log('[MAIN-STORE] ✅ Clave API Riot guardada. Reiniciando el flujo de polling.');
+        if (mainWindow) {
+            await executeInitialRiotApiFetchAndStartPolling();
         }
-    });
-    
-    // IPC para la creación de runas
-    ipcMain.handle('create-rune-page', async (event, runeData) => {
-        if (lcuHandler) {
-            return await lcuHandler.createRunePage(runeData);
-        }
-        return { error: 'LCU Handler no está inicializado.' };
     });
 
     const makeAIRequest = async (endpoint, payload = {}) => {
         const token = store.get('userToken');
-        if (!token) return { error: 'Usuario no autenticado.' };
+        if (!token) {
+            console.error(`[AI Request] Error: No autenticado para el endpoint ${endpoint}`);
+            return { error: 'Usuario no autenticado.' };
+        }
+
         try {
             const response = await axios.post(`${BACKEND_BASE_URL}${endpoint}`, payload, {
                 headers: { 'Authorization': `Bearer ${token}` },
-                httpsAgent: backendAgent, 
-                timeout: 30000 
+                httpsAgent: backendAgent,
+                timeout: 30000
             });
             return response.data;
         } catch (error) {
-            console.error(`[AI Request Error] en ${endpoint}:`, error.message);
-            return { error: `Error al contactar el backend para la IA: ${error.message}` };
+            const errorMessage = error.response?.data?.message || `Error al contactar el backend para la IA: ${error.message}`;
+            return { error: errorMessage };
         }
     };
-
-    ipcMain.handle('get-meta-analysis', () => makeAIRequest('/api/ai/get-meta'));
-    ipcMain.handle('get-recommendations', (event, payload) => makeAIRequest('/api/ai/get-recommendations', payload));
-    ipcMain.handle('get-weekly-challenges', () => makeAIRequest('/api/ai/get-weekly-challenges'));
-    ipcMain.handle('analyze-matches', (event, payload) => makeAIRequest('/api/ai/analyze-matches', payload));
-
-    // INICIO DEL CICLO DE VIDA DE LA APLICACIÓN
-    createSplashWindow();
-    createMainWindow();
-    createOverlayWindow();
+    
+    ipcMain.handle('get-meta-analysis', (e, payload) => makeAIRequest('/api/ai/get-meta', payload));
+    ipcMain.handle('get-recommendations', (e, payload) => makeAIRequest('/api/ai/get-recommendations', payload));
+    ipcMain.handle('get-weekly-challenges', (e, payload) => makeAIRequest('/api/ai/get-weekly-challenges', payload));
+    ipcMain.handle('analyze-matches', (e, payload) => makeAIRequest('/api/ai/analyze-matches', payload));
 });
 
 app.on('window-all-closed', () => {
-    if (lcuHandler) lcuHandler.stop(); // Detenemos el manejador al cerrar
     if (process.platform !== 'darwin') {
+        stopLiveGamePolling();
         app.quit();
     }
 });
 
 app.on('activate', () => {
-    if (BrowserWindow.getAllWindows().length === 0) createMainWindow();
+    if (BrowserWindow.getAllWindows().length === 0) {
+        if (!loginWindow && !mainWindow) {
+            createSplashWindow();
+            createLoginWindow();
+        }
+    }
 });
 
 app.on('will-quit', () => {
   globalShortcut.unregisterAll();
 });
 
-
 app.whenReady().then(() => {
     globalShortcut.register('Alt+O', () => {
         if (overlayWindow) {
-            const isIgnoringMouseEvents = overlayWindow.isIgnoringMouseEvents();
-            overlayWindow.setIgnoreMouseEvents(!isIgnoringMouseEvents);
-            
-            const isNowInteractive = !isIgnoringMouseEvents;
-            console.log(`[Shortcut] Alt+O presionado. El overlay ahora es: ${isNowInteractive ? 'INTERACTIVO' : 'NO INTERACTIVO'}`);
-            
-            overlayWindow.webContents.send('overlay-interaction-toggle', isNowInteractive);
+            const isVisible = overlayWindow.isVisible();
+            if (isVisible) {
+                overlayWindow.hide();
+                overlayWindow.setIgnoreMouseEvents(true);
+            } else {
+                overlayWindow.showInactive();
+                overlayWindow.setIgnoreMouseEvents(false);
+            }
+            sendDataToRenderer('overlay-interaction-toggle', !isVisible);
         }
     });
 });

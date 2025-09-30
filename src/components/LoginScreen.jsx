@@ -83,32 +83,33 @@ export default function LoginScreen() {
     }, [tagline, summonerName, region, zodiacSign, favChamp1, favRole1, favChamp2, ROLES]);
   
 
-    // 🚨 handleSuccess: Dispara el IPC y luego cambia el estado.
-    const handleSuccess = (token) => {
-        const userProfile = { 
-            username: username, 
-            token: token,
-            summonerName: summonerName, 
-            tagline: tagline, 
-            region: region,
+    // 🚨 handleSuccess: Dispara el IPC a Electron (CORREGIDO).
+        const handleSuccess = (token) => {
+            const userProfile = { 
+                username: username, 
+                token: token,
+                summonerName: summonerName, 
+                tagline: tagline, 
+                region: region,
+            };
+
+            // 1. 🔑 CLAVE: ENVIAR IPC a Electron para que main.js cambie de ventana.
+            if (window.electronAPI && window.electronAPI.send) {
+                window.electronAPI.send('user-logged-in', { 
+                    username: userProfile.username, 
+                    token: userProfile.token 
+                });
+                console.log(`[FRONTEND] ✅ IPC DISPARADO. Electron creará el Dashboard.`);
+            }
+
+            // 2. Actualizar el contexto de React para guardar la sesión.
+            setUserData(userProfile);
+            
+            // 3. LA LÍNEA setFlowState(AppFlowState.DASHBOARD); DEBE SER ELIMINADA SI EXISTÍA EN SU CÓDIGO ORIGINAL.
+            // Si la línea existía: 
+            // if (setFlowState) setFlowState(AppFlowState.DASHBOARD);
+            // Si no existía, el código es simplemente como está arriba.
         };
-
-        // 1. 🔑 CLAVE: ENVIAR IPC CON DATOS REALES E INMEDIATOS ANTES DE CAMBIAR EL ESTADO.
-        if (window.electronAPI && window.electronAPI.send) {
-            window.electronAPI.send('user-logged-in', { 
-                username: userProfile.username, 
-                token: userProfile.token 
-            });
-            console.log(`[FRONTEND] IPC DISPARADO CON TOKEN VÁLIDO. Usuario: ${userProfile.username}`);
-        }
-
-        // 2. Actualizar el contexto.
-        setUserData(userProfile);
-        
-        // 3. Cambiar el estado de flujo.
-        setFlowState(AppFlowState.DASHBOARD);
-        console.log(`[FRONTEND] Login exitoso. Contexto actualizado. Transición a Dashboard.`);
-    };
 
     const handleAuth = async (e) => {
         e.preventDefault();
