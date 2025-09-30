@@ -171,17 +171,20 @@ function createLoginWindow() {
 }
 
 function createMainWindow() {
+    // 1. Cierra la ventana antigua (Login)
     if (loginWindow) loginWindow.close(); 
     
+    // 2. Crea la nueva ventana (Dashboard)
     mainWindow = new BrowserWindow({
+        // CRÍTICO: Reduje el minWidth/minHeight para evitar problemas en monitores pequeños en desarrollo.
         width: 1920,
         height: 1080,
-        minWidth: 1920, 
-        minHeight: 1080,
-        show: false,
+        minWidth: 1000, // Ajustado
+        minHeight: 720, // Ajustado
+        show: false, // Inicia oculto para evitar el flash blanco
         frame: false,
-        transparent: false, // Dashboard debe tener fondo sólido
-        backgroundColor: '#0A141A', 
+        transparent: false, 
+        backgroundColor: '#0A141A', // Fondo sólido para el Dashboard
         webPreferences: {
             preload: path.join(__dirname, 'preload.js'),
             nodeIntegration: false,
@@ -189,16 +192,16 @@ function createMainWindow() {
         },
     });
 
+    // 3. Carga la URL del Dashboard
     mainWindow.loadURL(INDEX_PATH); 
 
-    loginWindow.once('ready-to-show', () => {    
-        setTimeout(() => {
-            if (splashWindow) splashWindow.close();
-            loginWindow.show();
-            loginWindow.center();
-            loginWindow.setIgnoreMouseEvents(false);
-            console.log("[MAIN] ✅ Login Window mostrada después de 3s.");
-        }, 3000);
+    // 4. CRÍTICO: Muestra la ventana del Dashboard SÓLO cuando está lista.
+    // ESTA ERA LA LÓGICA QUE FALTABA Y QUE USTED HABÍA REEMPLAZADO.
+    mainWindow.once('ready-to-show', () => {
+        console.log("[MAIN] READY-TO-SHOW disparado. Mostrando mainWindow (Dashboard).");
+        mainWindow.show();
+        mainWindow.center();
+        // El inicio del polling se hace en el setTimeout de app.on('ready')
     });
 
 

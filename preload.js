@@ -1,4 +1,4 @@
-// preload.js - VERSIÓN FINAL-FINAL, COMPLETA Y UNIFICADA
+// preload.js - VERSIÓN FINAL Y COMPLETA
 
 const { contextBridge, ipcRenderer } = require('electron');
 
@@ -12,7 +12,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
         'closeWindow', 
         'minimizeWindow', 
         'user-logged-in', 
-        'set-riot-api-key'
+        'set-riot-api-key' // Permite el envío de la API Key
     ];
     if (validSendChannels.includes(channel)) {
         ipcRenderer.send(channel, data);
@@ -42,7 +42,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
    */
   on: (channel, callback) => {
     const validReceiveChannels = [
-      'riot-profile-data',
+      'riot-profile-data', // Canal de recepción para datos y ERRORES de Riot API/LCU
       'overlay-interaction-toggle',
     ];
     if (validReceiveChannels.includes(channel)) {

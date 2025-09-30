@@ -1,6 +1,5 @@
-// src/components/RiotApiSettings.jsx
+// src/components/RiotApiSettings.jsx - CORRECCIÓN DE IPC Y FEEDBACK
 // Este componente permite al usuario introducir y guardar su clave de la API de Riot Games.
-// Es crucial para que la aplicación pueda acceder a los datos de la API de Riot.
 
 import React, { useState } from 'react';
 
@@ -14,7 +13,6 @@ const RiotApiSettings = () => {
 
     /**
      * Maneja el evento de guardar la clave API.
-     * Valida la clave y la envía al proceso principal de Electron para su almacenamiento.
      */
     const handleSave = () => {
         // Validación básica de la clave API
@@ -23,21 +21,22 @@ const RiotApiSettings = () => {
             setStatusColor('text-red-400');
             return;
         }
-        if (!apiKey.startsWith('RGAPI-') && apiKey.length < 20) { // Ejemplo de validación mínima
+        // Validación de formato (RGAPI-...)
+        if (!apiKey.startsWith('RGAPI-') || apiKey.length < 30) { 
             setStatusMessage('Formato de clave API inválido. Debe empezar con "RGAPI-" y ser lo suficientemente larga.');
             setStatusColor('text-red-400');
             return;
         }
 
-        // Si la API de Electron está disponible, envía la clave.
-        if (window.electronAPI?.setRiotApiKey) {
-            window.electronAPI.setRiotApiKey(apiKey.trim()); // Envía la clave sin espacios extra
+        // 🔑 CORRECCIÓN: Usar window.electronAPI.send(channel, data)
+        if (window.electronAPI?.send) {
+            window.electronAPI.send('set-riot-api-key', apiKey.trim()); // Envía la clave sin espacios extra
             setStatusMessage('¡Clave API de Riot guardada con éxito! El sistema de polling se ha reiniciado.');
             setStatusColor('text-green-400');
             setApiKey(''); // Limpia el campo después de guardar
-            // Opcional: Oculta el mensaje de estado después de un tiempo
             setTimeout(() => setStatusMessage(''), 5000);
         } else {
+            // Error que usted vio en la captura
             setStatusMessage('Error: No se pudo conectar con el sistema de Electron para guardar la clave.');
             setStatusColor('text-red-400');
         }
