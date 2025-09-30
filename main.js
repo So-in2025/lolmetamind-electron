@@ -9,6 +9,8 @@ const https = require('https');
 // Asegúrate de que lol-client-api.js esté en el directorio raíz
 const { fetchRiotApiData, pollLcuDataAndSend } = require('./lol-client-api'); 
 
+app.setPath('userData', path.join(__dirname, 'electron_data'));
+
 let mainWindow; // Dashboard Window (Grande, Opaca)
 let loginWindow; // Login Window (Pequeña, Opaca/Transparente, fondo dado por React)
 let splashWindow; // Splash HTML Window (Pequeña, Transparente)
@@ -45,6 +47,7 @@ function sendDataToRenderer(channel, data) {
         window.webContents.send(channel, data);
     }
 }
+
 
 async function fetchAndStoreUserProfile(username, token) {
     console.log(`[DB FETCH] 🔍 Iniciando fetchAndStoreUserProfile para: ${username}`);
@@ -99,6 +102,7 @@ async function fetchAndStoreUserProfile(username, token) {
         return false;
     }
 }
+
 
 // ==========================================================
 // CREACIÓN DE VENTANAS
@@ -319,13 +323,27 @@ app.on('ready', () => {
     createLoginWindow(); // Inicia la carga del Login (ventana pequeña)
     createOverlayWindow(); 
 
+    // >>> CRÍTICO: AÑADIDO EL RECEPTOR PARA 'toggle-overlay' <<<
+    ipcMain.on('toggle-overlay', () => {
+        if (overlayWindow) {
+            if (overlayWindow.isVisible()) {
+                overlayWindow.hide();
+                console.log('[IPC RECEIVE] Ocultando Overlay.');
+            } else {
+                overlayWindow.showInactive(); // showInactive para no robar el foco del juego
+                console.log('[IPC RECEIVE] Mostrando Overlay.');
+            }
+        } else {
+            console.error("[IPC RECEIVE] Error: Se intentó mostrar/ocultar un Overlay que no existe.");
+        }
+    });
+
     ipcMain.on('closeWindow', () => app.quit());
     ipcMain.on('minimizeWindow', () => {
-        // Decide qué ventana minimizar
         if (mainWindow) mainWindow.minimize();
         else if (loginWindow) loginWindow.minimize();
     });
-    
+
     // CRÍTICO: Evento de Login exitoso (Activado por LoginScreen.jsx)
     ipcMain.on('user-logged-in', async (event, userData) => {
         console.log(`[IPC RECEIVE] Evento 'user-logged-in' recibido para el usuario: ${userData.username}`);
@@ -389,6 +407,8 @@ app.on('ready', () => {
     ipcMain.handle('get-recommendations', (e, payload) => makeAIRequest('/api/ai/get-recommendations', payload));
     ipcMain.handle('get-weekly-challenges', (e, payload) => makeAIRequest('/api/ai/get-weekly-challenges', payload));
     ipcMain.handle('analyze-matches', (e, payload) => makeAIRequest('/api/ai/analyze-matches', payload));
+     // >>> NUEVO HANDLER <<<
+    ipcMain.handle('get-live-coaching', (e, payload) => makeAIRequest('/api/ai/live-coach', payload));
 });
 
 app.on('window-all-closed', () => {

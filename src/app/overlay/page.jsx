@@ -1,86 +1,114 @@
-// src/app/overlay/page.jsx
+// src/app/overlay/page.jsx - VERSIÓN FINAL DE PRODUCCIÓN CON DIAGNÓSTICO
 "use client"
 
-import React from 'react';
+import React, { useEffect, useState, Suspense } from 'react';
 import { useInteractiveWidget } from '../../hooks/useInteractiveWidget'; 
 import { useLcuData } from '../../hooks/useLcuData';
+import { useAppState } from '@/context/AppStateContext';
 
-// Importamos TODOS los widgets que queremos mostrar
-import ControlsHUD from '../../components/widgets/ControlsHUD';
-import BuildsHUD from '../../components/widgets/BuildsHUD';
-import StrategicHUD from '../../components/widgets/StrategicHUD';
-import ChampSelectCoach from '../../components/widgets/ChampSelectCoach';
-import InGameCoach from '../../components/widgets/InGameCoach';
-import RealtimeCoachHUD from '../../components/widgets/RealtimeCoachHUD'; // El HUD que habla
+// Importamos los widgets usando React.lazy para carga diferida y fallback
+const ControlsHUD = React.lazy(() => import('../../components/widgets/ControlsHUD'));
+const ChampSelectCoach = React.lazy(() => import('../../components/widgets/ChampSelectCoach'));
+const InGameCoach = React.lazy(() => import('../../components/widgets/InGameCoach'));
+const StatusHUD = React.lazy(() => import('../../components/widgets/StatusHUD'));
+
+// Función TTS (Text-to-Speech) con logs de diagnóstico
+const speak = (text, priority = 'normal') => {
+  try {
+    if (typeof window !== 'undefined' && 'speechSynthesis' in window && text) {
+      if (priority === 'high') {
+        window.speechSynthesis.cancel();
+      }
+      
+      const utterance = new SpeechSynthesisUtterance(text);
+      utterance.lang = 'es-ES';
+      utterance.rate = 1.2;
+      utterance.pitch = 1.1;
+
+      utterance.onstart = () => console.log(`[TTS] ✅ INICIO: Hablando "${text}"`);
+      utterance.onerror = (event) => console.error(`[TTS] ❌ ERROR: ${event.error}`);
+      
+      window.speechSynthesis.speak(utterance);
+      
+    } else {
+      console.warn("[TTS] ⚠️ API de SpeechSynthesis no disponible o el texto está vacío.");
+    }
+  } catch (e) {
+    console.error(`[TTS] 🚨 Fallo catastrófico al intentar hablar: ${e.message}`);
+  }
+};
 
 export default function OverlayPage() {
-    // Hook para la interactividad global (Alt+O)
-    const { isWidgetInteractive } = useInteractiveWidget('global-overlay'); // Usamos un ID genérico
+    console.log("[OverlayPage] 🟢 Montando componente...");
     
-    // Hook para recibir los datos de la LCU en tiempo real
+    const { isWidgetInteractive } = useInteractiveWidget('global-overlay');
     const lcuData = useLcuData();
+    const { userData } = useAppState();
 
-    // Clases para permitir o denegar clics en todo el overlay
-    const containerClasses = `h-screen w-screen bg-transparent ${isWidgetInteractive ? 'pointer-events-auto' : 'pointer-events-none'}`;
-    
-    // Extraemos la fase del juego para decidir qué mostrar
-    const gamePhase = lcuData?.lcuState?.gameflow?.phase;
+    const [lastSpokenGamePhase, setLastSpokenGamePhase] = useState('');
+    const gamePhase = lcuData?.gameflow?.phase;
 
-    // --- LÓGICA DE DATOS PARA LOS WIDGETS ---
-    // Aquí preparamos los datos y mensajes que cada widget necesitará
-    
-    const realtimeCoachProps = {
-        message: "Esperando conexión con el cliente de LoL...",
-        priority: "STATUS",
-    };
-    
-    const buildsHUDProps = {
-        build: lcuData?.lcuState?.buildRecommendation || null, // Asumimos que la IA enviará esto
-    };
+    useEffect(() => {
+        console.log(`[OverlayPage] 🔄 Actualización de estado detectada. GamePhase: ${gamePhase}, LCU Data:`, lcuData);
+        
+        if (!gamePhase || gamePhase === lastSpokenGamePhase) return;
 
-    const strategicHUDProps = {
-        message: lcuData?.lcuState?.strategicAdvice || "Mantén la visión en objetivos clave.",
-    };
+        let adviceToSpeak = '';
+        let priority = 'normal';
 
-    // Actualizamos los mensajes basados en la fase del juego
-    if (gamePhase === 'ChampSelect') {
-        realtimeCoachProps.message = "Analizando el draft. Revisa las recomendaciones de MetaMind.";
-        realtimeCoachProps.priority = "ANALYSIS";
-    } else if (gamePhase === 'InProgress') {
-        realtimeCoachProps.message = "Partida en curso. Activa la 'R' de MetaMind para un impulso de IA.";
-        realtimeCoachProps.priority = "ANALYSIS";
-    }
+        if (gamePhase === 'ChampSelect') {
+            adviceToSpeak = "Analizando selección de campeones.";
+            priority = 'high';
+        } else if (gamePhase === 'InProgress') {
+            adviceToSpeak = "Partida en curso. Pulsa la R de MetaMind para un impulso de IA.";
+            priority = 'normal';
+        }
+
+        if (adviceToSpeak) {
+            console.log(`[OverlayPage] 🎤 Intentando activar TTS para la fase: ${gamePhase}`);
+            speak(adviceToSpeak, priority);
+            setLastSpokenGamePhase(gamePhase);
+        }
+    }, [gamePhase, lastSpokenGamePhase, lcuData]);
+
+    // Fallback de renderizado para cada widget. Si uno falla, los otros seguirán funcionando.
+    const WidgetFallback = ({ name }) => (
+        <div style={{ position: 'fixed', top: 0, left: 0, color: 'red', backgroundColor: 'black', padding: '5px', zIndex: 10000 }}>
+            Error al cargar el widget: {name}
+        </div>
+    );
 
     return (
-        <div className={containerClasses}>
-            
-            {/* WIDGETS PERSISTENTES (Siempre visibles si hay datos) */}
-            {lcuData && (
-                <>
-                    <ControlsHUD />
-                    {/* Puedes decidir si estos HUDs se muestran siempre o solo en partida */}
-                    {/* <BuildsHUD build={buildsHUDProps.build} /> */}
-                    {/* <StrategicHUD message={strategicHUDProps.message} /> */}
-                    {/* <RealtimeCoachHUD message={realtimeCoachProps.message} priority={realtimeCoachProps.priority} /> */}
-                </>
-            )}
+        <div className={`h-full w-full bg-transparent ${isWidgetInteractive ? 'pointer-events-auto' : 'pointer-events-none'}`}>
+            <p style={{ position: 'fixed', top: '50%', left: '50%', transform: 'translate(-50%, -50%)', color: 'lime', fontSize: '24px', textShadow: '0 0 5px black', zIndex: 9998 }}>
+                [Overlay Activo - Fase: {gamePhase || "Desconocida"}]
+            </p>
 
-            {/* WIDGETS CONTEXTUALES (Aparecen y desaparecen con la fase del juego) */}
+            <Suspense fallback={<WidgetFallback name="ControlsHUD" />}>
+                <ControlsHUD />
+            </Suspense>
 
-            {/* Si estamos en Selección de Campeón, mostramos el coach de ChampSelect */}
+            <Suspense fallback={<WidgetFallback name="StatusHUD" />}>
+                <StatusHUD gamePhase={gamePhase} />
+            </Suspense>
+
             {gamePhase === 'ChampSelect' && (
-                <ChampSelectCoach 
-                    champSelectData={lcuData.lcuState.champSelect}
-                    isInteractive={isWidgetInteractive} 
-                />
+                <Suspense fallback={<WidgetFallback name="ChampSelectCoach" />}>
+                    <ChampSelectCoach 
+                        champSelectData={lcuData.gameflow}
+                        isInteractive={isWidgetInteractive} 
+                    />
+                </Suspense>
             )}
 
-            {/* Si estamos dentro del juego, mostramos el coach In-Game (con la "R") */}
             {gamePhase === 'InProgress' && (
-                <InGameCoach 
-                    liveClientDataStatus={lcuData.liveClientDataStatus}
-                    isInteractive={isWidgetInteractive}
-                />
+                <Suspense fallback={<WidgetFallback name="InGameCoach" />}>
+                    <InGameCoach 
+                        liveData={lcuData.liveData}
+                        userData={userData}
+                        isInteractive={isWidgetInteractive}
+                    />
+                </Suspense>
             )}
         </div>
     );

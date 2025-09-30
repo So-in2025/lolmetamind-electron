@@ -1,36 +1,37 @@
-// src/components/widgets/ControlsHUD.jsx
+// src/components/widgets/ControlsHUD.jsx - VERSIÓN DE PRUEBA
 'use client';
 
-import { useScale } from '@/context/ScaleContext';
-import { FaPlus, FaMinus } from 'react-icons/fa';
-import { useInteractiveWidget } from '@/hooks/useInteractiveWidget';
+import React from 'react';
+
+// SIN DEPENDENCIAS DE HOOKS O ÍCONOS
 
 export default function ControlsHUD() {
-  const { scale, increaseScale, decreaseScale } = useScale();
-  const { position, isLoaded, handleMouseDown } = useInteractiveWidget('widget-controls', { x: 10, y: 10 });
-
-  if (!isLoaded) return null;
+  
+  const handleTestClick = () => {
+    alert("¡El clic en el Overlay funciona!");
+  };
 
   return (
     <div
-      className="absolute origin-top-left"
+      className="absolute"
       style={{
-        top: `${position.y}px`,
-        left: `${position.x}px`,
-        transform: `scale(${scale})`,
+        top: `10px`,
+        left: `10px`,
+        // Damos un fondo visible para confirmar que se está renderizando
+        backgroundColor: 'rgba(255, 0, 0, 0.7)', 
+        padding: '10px',
+        color: 'white',
+        border: '2px solid white',
+        zIndex: 9999, // Asegurar que esté por encima de todo
       }}
     >
       <div 
-        onMouseDown={handleMouseDown}
-        className="bg-lol-grey-dark/90 border border-lol-gold-dark rounded-md text-lol-gold-light shadow-lg backdrop-blur-sm flex items-center gap-2 p-1 cursor-move"
+        className="flex items-center gap-2 p-1 cursor-move"
+        // Quitamos el onMouseDown para simplificar la prueba
       >
-        <div className="px-1">::</div>
-        <button onClick={decreaseScale} className="bg-lol-grey-light hover:bg-lol-gold-dark p-2 rounded cursor-pointer">
-          <FaMinus />
-        </button>
-        <span className="min-w-[4ch] text-center font-bold">{(scale * 100).toFixed(0)}%</span>
-        <button onClick={increaseScale} className="bg-lol-grey-light hover:bg-lol-gold-dark p-2 rounded cursor-pointer">
-          <FaPlus />
+        <p>OVERLAY ACTIVO</p>
+        <button onClick={handleTestClick} style={{ border: '1px solid white', padding: '5px' }}>
+          Test Clic
         </button>
       </div>
     </div>
