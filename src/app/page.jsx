@@ -1,39 +1,28 @@
-// src/app/page.jsx - FINAL Y COMPACTO PARA VENTANAS SEPARADAS
+// src/app/page.jsx - Versión FINAL sin lógica de enrutamiento de React.
 "use client"
-import React, { useEffect } from 'react';
+import React from 'react';
 import { useAppState, AppFlowState } from '../context/AppStateContext'; 
-import { useRouter } from 'next/navigation'; 
+// ELIMINADO: import { useRouter } from 'next/navigation'; // Ya no es necesario
 import LoginScreen from '../components/LoginScreen'; 
 import DashboardLayout from './dashboard/layout'; 
 import DashboardPage from './dashboard/page'; 
 // NOTA: Eliminamos la importación de LoadingScreen.jsx
 
 export default function AppPage() {
-    const { flowState, userData, setFlowState } = useAppState();
-    const router = useRouter(); 
+    // Si esta página carga, asumimos que fue cargada por Electron.
+    const { flowState, AppFlowState } = useAppState(); 
     
-    // 1. Efecto de Enrutamiento
-    useEffect(() => {
-        // Lógica de Redirección: Se dispara cuando el estado interno cambia a DASHBOARD (después del login)
-        if (flowState === AppFlowState.DASHBOARD) {
-            // Si la URL es la raíz ("/"), redirigimos a la sub-ruta correcta.
-            if (window.location.pathname !== '/dashboard') {
-                 console.log("[AppPage] Redireccionando a /dashboard forzada por estado.");
-                 router.push('/dashboard');
-            }
-        }
-        
-    }, [flowState, router, AppFlowState, setFlowState]);
-
-    // 2. Renderización basada en Estado
+    // 1. Renderización basada en Estado
     switch (flowState) {
         
         case AppFlowState.LOGIN:
-            // Esta ruta ("/") se carga en la loginWindow y muestra el formulario.
+            // Esta ruta ("/") se carga en la loginWindow (Ventana pequeña).
             return <LoginScreen />; 
 
         case AppFlowState.DASHBOARD:
-            // Esta ruta ("/dashboard") se carga en la mainWindow y muestra el panel.
+            // Si el estado es DASHBOARD, significa que Electron cargó la URL del dashboard aquí.
+            // Aunque main.js debería cargar directamente la ruta /dashboard, 
+            // mantenemos la estructura de renderizado para cuando Next.js hace la pre-renderización.
             return (
                 <DashboardLayout>
                     <DashboardPage />
@@ -41,7 +30,7 @@ export default function AppPage() {
             );
             
         default:
-            // Si es LOADING (estado inicial del contexto), mostramos el LOGIN inmediatamente.
+            // Si el estado inicial es cualquier otra cosa (como LOADING), mostramos el LOGIN.
             return <LoginScreen />;
     }
 }

@@ -189,7 +189,7 @@ function createMainWindow() {
         },
     });
 
-    mainWindow.loadURL(LOGIN_PATH); 
+    mainWindow.loadURL(INDEX_PATH); 
 
     loginWindow.once('ready-to-show', () => {    
         setTimeout(() => {
