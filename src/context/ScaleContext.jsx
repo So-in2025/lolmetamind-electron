@@ -1,38 +1,76 @@
-'use client';
-import { createContext, useState, useContext, useEffect } from 'react';
+// src/context/ScaleContext.jsx - Contexto de Escala y Posición Persistente (Hextech Modular)
+"use client"
+
+import React, { createContext, useContext, useState, useCallback } from 'react';
+// IMPORTANTE: Asumo que existe un hook usePersistentIpc o lo quito si no es necesario
+// Ya que la lógica de IPC está en el hook, no necesitamos importarlo aquí.
 
 const ScaleContext = createContext();
 
-export const useScale = () => useContext(ScaleContext);
+export const useWidgetScale = () => useContext(ScaleContext);
 
 export const ScaleProvider = ({ children }) => {
-  const [scale, setScale] = useState(1.0);
+    // CRÍTICO: Se utiliza window.electronAPI.ipcRenderer directamente
+    const { ipcRenderer } = typeof window !== 'undefined' && window.electronAPI ? window.electronAPI : {};
+    const [widgetStates, setWidgetStates] = useState({});
 
-  useEffect(() => {
-    const savedScale = localStorage.getItem('widgets-scale');
-    if (savedScale) {
-      setScale(parseFloat(savedScale));
-    }
-  }, []);
+    // Carga el estado inicial del widget y lo guarda en el estado local
+    const loadWidgetState = useCallback(async (widgetId, defaultScale, defaultPosition) => {
+        if (!ipcRenderer || !widgetId) return;
+        
+        try {
+            const savedState = await ipcRenderer.invoke('get-widget-scale-state', widgetId);
+            
+            const initialState = {
+                scale: savedState?.scale || defaultScale || 100,
+                position: savedState?.position || defaultPosition || { x: 0, y: 0 },
+                isLocked: savedState?.isLocked ?? false, // Usar valor guardado, o false por defecto
+            };
 
-  const updateScale = (newScale) => {
-    // RANGO AJUSTADO: de 40% a 200%
-    const clampedScale = Math.max(0.4, Math.min(2.0, newScale));
-    setScale(clampedScale);
-    localStorage.setItem('widgets-scale', clampedScale.toString());
-  };
+            setWidgetStates(prev => ({
+                ...prev,
+                [widgetId]: initialState,
+            }));
 
-  const increaseScale = () => {
-    updateScale(scale + 0.1);
-  };
+            return initialState;
+        } catch (error) {
+            // FIX CRÍTICO: Eliminados los backslashes innecesarios
+            console.error(`[ScaleContext] Error al cargar el estado de ${widgetId}:`, error);
+            return { scale: defaultScale, position: defaultPosition, isLocked: false };
+        }
+    }, [ipcRenderer]);
 
-  const decreaseScale = () => {
-    updateScale(scale - 0.1);
-  };
+    // Guarda el estado del widget a través de IPC (persistente en electron-store)
+    const saveWidgetState = useCallback((widgetId, newState) => {
+        if (!ipcRenderer || !widgetId) return;
 
-  return (
-    <ScaleContext.Provider value={{ scale, increaseScale, decreaseScale }}>
-      {children}
-    </ScaleContext.Provider>
-  );
+        setWidgetStates(prev => {
+            const finalState = { ...prev[widgetId], ...newState };
+            
+            // Envío asíncrono a Electron
+            ipcRenderer.send('set-widget-scale-state', {
+                widgetId,
+                scale: finalState.scale,
+                position: finalState.position,
+                isLocked: finalState.isLocked,
+            });
+
+            return {
+                ...prev,
+                [widgetId]: finalState,
+            };
+        });
+    }, [ipcRenderer]);
+
+    const value = {
+        widgetStates,
+        loadWidgetState,
+        saveWidgetState,
+    };
+
+    return (
+        <ScaleContext.Provider value={value}>
+            {children}
+        </ScaleContext.Provider>
+    );
 };

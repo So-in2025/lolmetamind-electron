@@ -1,14 +1,11 @@
-// src/components/widgets/StatusHUD.jsx
+// src/components/widgets/StatusHUD.jsx - VERSIÓN CORREGIDA (Hextech Modular Compliant)
 'use client';
 
 import React from 'react';
-import { useScale } from '@/context/ScaleContext';
-import { useInteractiveWidget } from '@/hooks/useInteractiveWidget';
+// NOTA: Se eliminan las importaciones de useScale y useInteractiveWidget,
+// ya que el DragAndScaleWidget ahora maneja la posición y la escala.
 
 export default function StatusHUD({ gamePhase }) {
-  const { scale } = useScale();
-  const { position, isLoaded, handleMouseDown } = useInteractiveWidget('widget-status', { x: 500, y: 10 });
-
   // Mensaje a mostrar basado en la fase del juego
   let statusText = "Esperando Conexión...";
   let statusColor = "text-gray-400";
@@ -34,24 +31,14 @@ export default function StatusHUD({ gamePhase }) {
       break;
   }
 
-  if (!isLoaded) return null;
-
+  // Retorna solo el contenido, el wrapper DragAndScaleWidget se encarga de
+  // posición, escala y arrastre.
   return (
-    <div
-      className="absolute origin-top-left"
-      style={{
-        top: `${position.y}px`,
-        left: `${position.x}px`,
-        transform: `scale(${scale})`,
-      }}
+    <div 
+      className="bg-black/80 border border-gray-500 rounded-md shadow-lg backdrop-blur-sm flex items-center gap-4 p-2"
     >
-      <div 
-        onMouseDown={handleMouseDown}
-        className="bg-black/80 border border-gray-500 rounded-md shadow-lg backdrop-blur-sm flex items-center gap-4 p-2 cursor-move"
-      >
-        <div className="px-1 text-gray-500">::</div>
-        <p className={`font-bold text-sm ${statusColor}`}>{statusText}</p>
-      </div>
+      <div className="px-1 text-gray-500">::</div>
+      <p className={`font-bold text-sm ${statusColor}`}>{statusText}</p>
     </div>
   );
 }
