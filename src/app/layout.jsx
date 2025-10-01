@@ -7,7 +7,6 @@
 
 import { AppStateProvider } from '@/context/AppStateContext';
 import './globals.css'; 
-// NOTA: Se ha eliminado la importación de ScaleProvider para solucionar el error de compilación.
 
 // Metadata para el SEO y la pestaña del navegador.
 export const metadata = {
@@ -32,7 +31,6 @@ export default function RootLayout({ children }) {
           Aquí envolvemos toda la aplicación con el AppStateProvider.
         */}
         <AppStateProvider>
-            {/* El ScaleProvider ha sido eliminado para corregir el error de compilación. */}
             {children}
         </AppStateProvider>
       </body>

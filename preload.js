@@ -13,7 +13,6 @@ contextBridge.exposeInMainWorld('electronAPI', {
         'minimizeWindow', 
         'user-logged-in', 
         'set-riot-api-key',
-        'toggle-overlay' // >>> CRÍTICO: DEBE ESTAR AQUÍ <<<
     ];
     if (validSendChannels.includes(channel)) {
         ipcRenderer.send(channel, data);
@@ -45,7 +44,6 @@ contextBridge.exposeInMainWorld('electronAPI', {
   on: (channel, callback) => {
     const validReceiveChannels = [
       'riot-profile-data',
-      'overlay-interaction-toggle',
     ];
     if (validReceiveChannels.includes(channel)) {
       const subscription = (event, ...args) => callback(...args);

@@ -14,7 +14,6 @@ app.setPath('userData', path.join(__dirname, 'electron_data'));
 let mainWindow; // Dashboard Window (Grande, Opaca)
 let loginWindow; // Login Window (Pequeña, Opaca/Transparente, fondo dado por React)
 let splashWindow; // Splash HTML Window (Pequeña, Transparente)
-let overlayWindow; // Overlay Window (Grande, Transparente)
 
 let pollingInterval = null;
 let hasRunInitialLogin = false;
@@ -35,13 +34,12 @@ const USER_PROFILE_ENDPOINT = '/api/user/profile';
 // RUTAS CRÍTICAS: Next.js 'out' genera index.html dentro de cada carpeta
 const INDEX_PATH = isDevMode ? 'http://localhost:3001/dashboard' : `file://${path.join(__dirname, 'out', 'dashboard', 'index.html')}`;
 const LOGIN_PATH = isDevMode ? 'http://localhost:3001' : `file://${path.join(__dirname, 'out', 'index.html')}`;
-const OVERLAY_PATH = isDevMode ? 'http://localhost:3001/overlay' : `file://${path.join(__dirname, 'out', 'overlay', 'index.html')}`;
 
 const backendAgent = new https.Agent({ rejectUnauthorized: false });
 const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
 
 function sendDataToRenderer(channel, data) {
-    const window = channel === 'overlay-interaction-toggle' ? overlayWindow : mainWindow;
+    const window = mainWindow;
     if (window && !window.isDestroyed()) {
         console.log(`[IPC SEND] Enviando al canal '${channel}'.`);
         window.webContents.send(channel, data);
@@ -209,43 +207,6 @@ function createMainWindow() {
     });
 }
 
-function createOverlayWindow() {
-    const primaryDisplay = screen.getPrimaryDisplay();
-    const { width, height } = primaryDisplay.workAreaSize;
-
-    overlayWindow = new BrowserWindow({
-        width, height, x: 0, y: 0,
-        transparent: true, 
-        frame: false,
-        focusable: false,
-        alwaysOnTop: true,
-        skipTaskbar: true, 
-        webPreferences: {
-            preload: path.join(__dirname, 'preload.js'),
-            nodeIntegration: false,
-            contextIsolation: true,
-        },
-    });
-
-    overlayWindow.loadURL(OVERLAY_PATH);
-    
-    // FIX DE VISIBILIDAD CRÍTICO (MODO DEV) Y ORDEN Z MÁS ALTO
-    if (isDevMode) {
-        overlayWindow.once('ready-to-show', () => {
-             // CRÍTICO: Usamos 'screen-saver' para el Z-order más alto.
-             overlayWindow.setAlwaysOnTop(true, 'screen-saver');
-             overlayWindow.showInactive(); 
-             console.log("[OVERLAY] ✅ Ventana de Overlay visible (Z-Order: Screen Saver). Use CTRL+F1/F2.");
-        });
-    } else {
-        overlayWindow.hide();
-        overlayWindow.setAlwaysOnTop(true); 
-    }
-
-    // Estado inicial de interacción: Pasivo (transparente a clicks)
-    overlayWindow.setIgnoreMouseEvents(true); 
-    overlayWindow.on('closed', () => (overlayWindow = null));
-}
 
 // ==========================================================
 // LÓGICA DE POLLING
@@ -330,37 +291,6 @@ app.on('ready', () => {
 
     createSplashWindow();
     createLoginWindow(); 
-    createOverlayWindow(); 
-
-    // IPC: Manejo del toggle de visibilidad (Alt+O original)
-    ipcMain.on('toggle-overlay', () => {
-        if (overlayWindow) {
-            if (overlayWindow.isVisible()) {
-                overlayWindow.hide();
-                overlayWindow.setIgnoreMouseEvents(true);
-                sendDataToRenderer('overlay-interaction-toggle', false); 
-                console.log('[IPC RECEIVE] Ocultando Overlay.');
-            } else {
-                overlayWindow.showInactive(); 
-                overlayWindow.setIgnoreMouseEvents(true);
-                sendDataToRenderer('overlay-interaction-toggle', false);
-                console.log('[IPC RECEIVE] Mostrando Overlay.'); 
-            }
-        } else {
-            console.error("[IPC RECEIVE] Error: Se intentó mostrar/ocultar un Overlay que no existe.");
-        }
-    });
-    
-    // IPC: Manejo de persistencia de escala de widgets
-    ipcMain.handle('get-widget-scale-state', async (event, widgetId) => {
-        return store.get(`widgetScale-${widgetId}`);
-    });
-
-    ipcMain.on('set-widget-scale-state', (event, { widgetId, scale, position, isLocked }) => {
-        store.set(`widgetScale-${widgetId}`, { scale, position, isLocked });
-        console.log(`[IPC STORE] ✅ Estado de widget ${widgetId} guardado. Escala: ${scale}`);
-    });
-
 
     ipcMain.on('closeWindow', () => app.quit());
     ipcMain.on('minimizeWindow', () => {
@@ -391,12 +321,6 @@ app.on('ready', () => {
                  console.log('[MAIN-FLOW] Retardo de 1s completado. Iniciando flujo de datos Riot/LCU.');
                  executeInitialRiotApiFetchAndStartPolling();
                  
-                 // CRÍTICO: Aseguramos que el Overlay esté por encima del Dashboard (solo si existe y es visible)
-                 if (overlayWindow && overlayWindow.isVisible()) {
-                     overlayWindow.setAlwaysOnTop(true, 'screen-saver'); 
-                     overlayWindow.focus(); 
-                     console.log('[Z-ORDER-FIX] ✅ Overlay forzado a primer plano (Z-Order Fix).');
-                 }
             }, 1000); 
 
         } else {
@@ -438,76 +362,8 @@ app.on('ready', () => {
     ipcMain.handle('get-recommendations', (e, payload) => makeAIRequest('/api/ai/get-recommendations', payload));
     ipcMain.handle('get-weekly-challenges', (e, payload) => makeAIRequest('/api/ai/get-weekly-challenges', payload));
     ipcMain.handle('analyze-matches', (e, payload) => makeAIRequest('/api/ai/analyze-matches', payload));
-    ipcMain.handle('get-builds-tactical', (e, payload) => makeAIRequest('/api/ai/build-advisor', payload));
-    ipcMain.handle('get-strategic-advice', (e, payload) => makeAIRequest('/api/ai/strategy-coach', payload));
-    ipcMain.handle('get-builds-tactical', (e, payload) => makeAIRequest('/api/ai/build-advisor', payload));
     ipcMain.handle('get-strategic-advice', (e, payload) => makeAIRequest('/api/ai/strategy-coach', payload));
     ipcMain.handle('get-live-coaching', (e, payload) => makeAIRequest('/api/ai/live-coach', payload));
-
-    // CRÍTICO: Manejador para la creación de páginas de runas a través de LCU
-    ipcMain.handle('create-rune-page', async (e, runeData) => {
-        console.log(`[LCU RUNES] 🔑 Solicitud para crear runas: ${runeData.name}`);
-        // ESTO DEBE SER REEMPLAZADO CON SU LÓGICA DE LCU-CONNECTOR
-        return { success: true, message: "Página de runas creada (Integración LCU Pendiente)" };
-    });
-
-    // CRÍTICO: Manejador para el Text-to-Speech (TTS) en el frontend
-    ipcMain.on('speak-text', (event, text) => {
-        if (mainWindow && text) {
-            mainWindow.webContents.send('tts-narrate', text);
-        } else if (overlayWindow && text) {
-             overlayWindow.webContents.send('tts-narrate', text);
-        }
-    });
-
-    // CRÍTICO: Manejador para la creación de páginas de runas a través de LCU
-
-    // CRÍTICO: Manejador para el Text-to-Speech (TTS) en el frontend
-
-    // CRÍTICO: Manejador para la creación de páginas de runas a través de LCU
-
-    // CRÍTICO: Manejador para el Text-to-Speech (TTS) en el frontend
-    // CRÍTICO: Manejador para la creación de páginas de runas a través de LCU
-        console.log(`[LCU RUNES] 🔑 Solicitud para crear runas: ${runeData.name}`);
-        // ESTO DEBE SER REEMPLAZADO CON SU LÓGICA DE LCU-CONNECTOR
-        return { success: true, message: "Página de runas creada (Integración LCU Pendiente)" };
-    
-
-    // CRÍTICO: Manejador para la creación de páginas de runas a través de LCU
-        console.log(`[LCU RUNES] 🔑 Solicitud para crear runas: ${runeData.name}`);
-        // ESTO DEBE SER REEMPLAZADO CON SU LÓGICA DE LCU-CONNECTOR
-        return { success: true, message: "Página de runas creada (Integración LCU Pendiente)" };
-    
-
-    // CRÍTICO: Manejador para el Text-to-Speech (TTS) en el frontend
-
-    // CRÍTICO: Manejador para el Text-to-Speech (TTS) en el frontend
-
-    // CRÍTICO: Manejador para la creación de páginas de runas a través de LCU
-        console.log(`[LCU RUNES] 🔑 Solicitud para crear runas: ${runeData.name}`);
-        // ESTO DEBE SER REEMPLAZADO CON SU LÓGICA DE COMUNICACIÓN CON LCU-CONNECTOR
-        return { success: true, message: "Página de runas creada (Integración LCU Pendiente)" };
-    
-
-    // CRÍTICO: Manejador para el Text-to-Speech (TTS) en el frontend
-
-    // CRÍTICO: Manejador para la creación de páginas de runas a través de LCU
-        console.log(`[LCU RUNES] 🔑 Solicitud para crear runas: ${runeData.name}`);
-        // ESTO DEBE SER REEMPLAZADO CON SU LÓGICA DE COMUNICACIÓN CON LCU-CONNECTOR
-        return { success: true, message: "Página de runas creada (Integración LCU Pendiente)" };
-    
-
-    // CRÍTICO: Manejador para el Text-to-Speech (TTS) en el frontend
-    ipcMain.handle('get-strategic-advice', (e, payload) => makeAIRequest('/api/ai/strategy-coach', payload));
-    ipcMain.handle('get-builds-tactical', (e, payload) => makeAIRequest('/api/ai/build-advisor', payload));
-
-    // CRÍTICO: Manejador para la creación de páginas de runas a través de LCU
-        console.log(`[LCU RUNES] 🔑 Solicitud para crear runas: ${runeData.name}`);
-        // AHORA DEBE INTEGRAR AQUÍ SU LÓGICA CON LCU-CONNECTOR
-        // EJEMPLO: const result = await createLcuRunePage(runeData);
-        // RECUERDE, REQUIERE UN MÉTODO QUE SE COMUNIQUE CON EL CLIENTE LOL PARA MODIFICAR DATOS.
-        return { success: true, message: "Página de runas creada (Integración LCU Pendiente)" };
-    });
 
 
 app.on('window-all-closed', () => {
@@ -530,57 +386,4 @@ app.on('will-quit', () => {
   globalShortcut.unregisterAll();
 });
 
-// CRÍTICO: Cierre de la función app.on(ready) que está al inicio del archivo
-
-// ==========================================================
-// LÓGICA DE HOTKEYS (CTRL+F1/F2)
-// ==========================================================
-
-app.whenReady().then(() => {
-    // Hotkey para alternar la visibilidad del Overlay (Alt+O original)
-    globalShortcut.register('Alt+O', () => {
-        if (overlayWindow) {
-            const isVisible = overlayWindow.isVisible();
-            if (isVisible) {
-                overlayWindow.hide();
-                overlayWindow.setIgnoreMouseEvents(true);
-                sendDataToRenderer('overlay-interaction-toggle', false);
-            } else {
-                overlayWindow.showInactive();
-                overlayWindow.setIgnoreMouseEvents(true);
-                sendDataToRenderer('overlay-interaction-toggle', false);
-            }
-        }
-    });
-
-    // CRÍTICO: CTRL+F1 - MODO ACTIVO (Clickeable, Drag, Botones +/-, Overlay Visible si está oculto)
-    globalShortcut.register('CommandOrControl+F1', () => { 
-        if (overlayWindow) {
-            console.log('[HOTKEY] ⌨️ CTRL+F1 activado: Modo Interactivo (Clickeable).');
-            overlayWindow.setIgnoreMouseEvents(false);
-            if (!overlayWindow.isVisible()) overlayWindow.showInactive(); 
-            sendDataToRenderer('overlay-interaction-toggle', true); 
-        }
-    });
-    
-    // CRÍTICO: CTRL+F2 - MODO PASIVO (Mouse-transparent, Botones ocultos, Overlay Visible)
-    globalShortcut.register('CommandOrControl+F2', () => { 
-        if (overlayWindow) {
-            console.log('[HOTKEY] ⌨️ CTRL+F2 activado: Modo Pasivo (Transparente al click).');
-            overlayWindow.setIgnoreMouseEvents(true);
-            if (!overlayWindow.isVisible()) overlayWindow.showInactive(); 
-            sendDataToRenderer('overlay-interaction-toggle', false); 
-        }
-    });
-    
-    // Configurar estado inicial al cargar si no existe
-    if (overlayWindow && !globalShortcut.isRegistered('CommandOrControl+F2')) {
-         console.log('[HOTKEY] ⚙️ Inicializando en modo Pasivo (CTRL+F2: setIgnoreMouseEvents(true))');
-         overlayWindow.setIgnoreMouseEvents(true);
-         sendDataToRenderer('overlay-interaction-toggle', false);
-    }
-});
-
-app.on('will-quit', () => {
-  globalShortcut.unregisterAll();
 });

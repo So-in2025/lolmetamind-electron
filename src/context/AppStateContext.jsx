@@ -32,7 +32,6 @@ export const AppStateProvider = ({ children }) => {
     const [userProfile, setUserProfile] = useState(initialUserProfile);
     // CRÍTICO: Inicializar flowState a LOGIN.
     const [flowState, setFlowState] = useState(AppFlowState.LOGIN); 
-    const [liveGameData, setLiveGameData] = useState(null);
     
     /**
      * Actualiza el perfil con data completa desde la API de login/profile.
@@ -67,19 +66,16 @@ export const AppStateProvider = ({ children }) => {
 
     const logout = () => {
         setUserProfile(initialUserProfile);
-        setLiveGameData(null);
         setFlowState(AppFlowState.LOGIN);
     };
 
     const value = {
         userProfile,
         userData: userProfile, // Para usar en LoginScreen/AppPage
-        liveGameData,
         flowState,
         AppFlowState, // Exportamos para uso directo
         login,
         logout,
-        setLiveGameData,
         setFlowState, // CRÍTICO: Exportar setFlowState
         setUserData: setUserProfile,
         updateProfileFromApi,
