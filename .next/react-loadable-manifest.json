@@ -1,4 +1,10 @@
 {
+  "app\\overlay\\page.jsx -> ../../components/widgets/BuildsHUD": {
+    "id": "app\\overlay\\page.jsx -> ../../components/widgets/BuildsHUD",
+    "files": [
+      "static/chunks/_app-pages-browser_src_components_widgets_BuildsHUD_jsx.js"
+    ]
+  },
   "app\\overlay\\page.jsx -> ../../components/widgets/ChampSelectCoach": {
     "id": "app\\overlay\\page.jsx -> ../../components/widgets/ChampSelectCoach",
     "files": [

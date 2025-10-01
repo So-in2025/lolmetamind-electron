@@ -1,4 +1,4 @@
-// src/app/overlay/page.jsx - MONTAJE FINAL Y COMPLETO CON COACH DE IA Y TTS (V4.0 FIX)
+// src/app/overlay/page.jsx - MONTAJE FINAL Y COMPLETO CON COACH DE IA Y TTS (V5.0 FIX)
 "use client"
 
 import React, { useEffect, useState, Suspense } from 'react';
@@ -43,7 +43,7 @@ function OverlayContent() {
     const { isWidgetInteractive } = useInteractiveWidget('global-overlay'); 
     const lcuData = useLcuData();
     
-    // No se realiza NINGÚN FILTRADO DE FASE aquí. La lógica se delega a cada Widget.
+    // El filtrado de fase (InProgress, ChampSelect) se maneja DENTRO de cada Widget.
 
     return (
         <React.Fragment> 
@@ -62,28 +62,28 @@ function OverlayContent() {
                     </Suspense>
                 </div>
                 
-                {/* 2. Status HUD (Fixed, Posición 100, 100) */}
+                {/* 2. Status HUD (Fixed, Posición 100, 100) - Recibe lcuData completo */}
                 <div style={{ position: 'fixed', top: '100px', left: '100px', zIndex: 9000, pointerEvents: isWidgetInteractive ? 'auto' : 'none' }}>
                     <Suspense fallback={null}>
                         <StatusHUD lcuData={lcuData} />
                     </Suspense>
                 </div>
             
-                {/* 3. Coach de Selección de Campeones (Fixed, Posición 200, 500) */}
+                {/* 3. Coach de Selección de Campeones (Fixed, Posición 200, 500) - Recibe lcuData completo */}
                 <div style={{ position: 'fixed', top: '200px', left: '500px', zIndex: 9000, pointerEvents: isWidgetInteractive ? 'auto' : 'none' }}>
                     <Suspense fallback={null}>
                         <ChampSelectCoach lcuData={lcuData} isInteractive={isWidgetInteractive} />
                     </Suspense>
                 </div>
 
-                {/* 4. Coach En Partida (Fixed, Posición 250, 700) */}
+                {/* 4. Coach En Partida (Fixed, Posición 250, 700) - Recibe lcuData completo */}
                 <div style={{ position: 'fixed', top: '250px', left: '700px', zIndex: 9000, pointerEvents: isWidgetInteractive ? 'auto' : 'none' }}>
                     <Suspense fallback={null}>
                         <InGameCoach lcuData={lcuData} isInteractive={isWidgetInteractive} />
                     </Suspense>
                 </div>
 
-                {/* 5. BuildHUD (Fixed, Posición 400, 20) */}
+                {/* 5. BuildHUD (Fixed, Posición 400, 20) - Recibe lcuData completo */}
                 <div style={{ position: 'fixed', top: '400px', left: '20px', zIndex: 9000, pointerEvents: isWidgetInteractive ? 'auto' : 'none' }}>
                     <Suspense fallback={null}>
                         <BuildsHUD lcuData={lcuData} />

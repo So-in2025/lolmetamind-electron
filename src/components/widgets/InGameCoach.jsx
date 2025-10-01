@@ -14,7 +14,6 @@ const LoadingSpinner = () => (
     <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-lol-accent-gold"></div>
 );
 
-// Nota: Ahora usa el endpoint único 'get-live-coaching' para los 3 tipos de consejos.
 export default function InGameCoach({ lcuData, isInteractive }) { 
     const { userData } = useAppState();
     const [strategyAdvice, setStrategyAdvice] = useState('');
@@ -22,13 +21,12 @@ export default function InGameCoach({ lcuData, isInteractive }) {
     const [eliteCoachAdvice, setEliteCoachAdvice] = useState('');
     const [isLoading, setIsLoading] = useState(false);
     
-    // ** LÓGICA CLAVE DE FASE (FIX DE BLOQUEO) **
+    // ** LÓGICA CLAVE DE FASE **
     const inGameData = lcuData?.gameflow?.phase === 'InProgress' ? lcuData : null;
     const gameTime = inGameData?.liveData?.gameData?.gameTime || 0;
     const currentGold = inGameData?.liveData?.activePlayer?.currentGold || 0;
     const currentCS = inGameData?.liveData?.activePlayer?.cs || inGameData?.liveData?.activePlayer?.scores?.creepScore || 0;
     
-    // El payload contiene toda la data, el backend remoto decide qué análisis correr.
     const coachPayload = useMemo(() => ({
         summoner: userData,
         matchData: inGameData,
@@ -37,17 +35,14 @@ export default function InGameCoach({ lcuData, isInteractive }) {
         currentGold: currentGold,
     }), [userData, inGameData, gameTime, currentCS, currentGold]);
 
-    // Función unificada para llamar a la IA
     const callLiveCoach = useCallback(async (triggerType, payload, setState, narration) => {
         if (!window.electronAPI || !inGameData) return;
         setIsLoading(true);
         try {
-            // El payload ahora incluye el tipo de trigger para que el backend remoto diferencie la petición.
             const result = await window.electronAPI.invoke('get-live-coaching', { ...payload, triggerType });
             
             if (result.error) throw new Error(result.error);
             
-            // Asumimos que el backend devuelve el campo de advice relevante para el trigger.
             const advice = result.advice || result.strategy || result.message || JSON.stringify(result);
             setState(advice);
             
@@ -68,9 +63,8 @@ export default function InGameCoach({ lcuData, isInteractive }) {
         if (!inGameData || gameTime < 290) return; 
         
         if (Math.abs(gameTime % 300) < 20 && gameTime > 0) { 
-            console.log(`[IA ESTRATÉGICA] Disparo a tiempo: ${gameTime}s.`);
             callLiveCoach(
-                'STRATEGY', // Trigger para backend
+                'STRATEGY', 
                 coachPayload, 
                 setStrategyAdvice, 
                 'MetaMind, consejo estratégico: '
@@ -85,7 +79,7 @@ export default function InGameCoach({ lcuData, isInteractive }) {
 
          if (Math.abs(gameTime % 60) < 15 && gameTime > 0) {
               callLiveCoach(
-                  'BUILDS', // Trigger para backend
+                  'BUILDS', 
                   coachPayload, 
                   setBuildsAdvice, 
                   'Asesor de Builds: '
@@ -104,7 +98,7 @@ export default function InGameCoach({ lcuData, isInteractive }) {
             const payload = { ...coachPayload, event: `CS_DEFICIT_${csDeficit}` };
             
             callLiveCoach(
-                'ELITE', // Trigger para backend
+                'ELITE', 
                 payload, 
                 setEliteCoachAdvice, 
                 '¡Atención Jugador! ' 

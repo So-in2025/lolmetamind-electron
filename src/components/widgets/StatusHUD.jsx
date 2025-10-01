@@ -1,16 +1,15 @@
-// src/components/widgets/StatusHUD.jsx - VERSIÓN CORREGIDA (Renderizado Garantizado)
+// src/components/widgets/StatusHUD.jsx - VERSIÓN FINAL (FIX de Compilación)
 'use client';
 
 import React from 'react';
 
 export default function StatusHUD({ lcuData }) {
+  const gamePhase = lcuData?.gameflow?.phase;
   let statusText = "Esperando Conexión...";
-  const gamePhase = lcuData?.gameflow?.phase;
-
-  const gamePhase = lcuData?.gameflow?.phase;
+  // ** CRÍTICO FIX: gamePhase se define solo UNA vez
   let statusColor = "text-gray-400";
 
-    switch (gamePhase) {
+  switch (gamePhase) {
     case 'Lobby':
     case 'Matchmaking':
     case 'ReadyCheck':
@@ -34,7 +33,6 @@ export default function StatusHUD({ lcuData }) {
   return (
     <div 
       className="bg-black/80 border border-gray-500 rounded-md shadow-lg backdrop-blur-sm flex items-center gap-4 p-2"
-      // CRÍTICO: Forzamos el tamaño para anular cualquier colapso interno.
       style={{ minWidth: '350px', display: 'flex', justifyContent: 'space-between' }}
     >
       <div className="px-1 text-gray-500">::</div>

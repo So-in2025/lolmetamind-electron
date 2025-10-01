@@ -443,33 +443,9 @@ app.on('ready', () => {
     ipcMain.handle('get-builds-tactical', (e, payload) => makeAIRequest('/api/ai/build-advisor', payload));
     ipcMain.handle('get-strategic-advice', (e, payload) => makeAIRequest('/api/ai/strategy-coach', payload));
     ipcMain.handle('get-live-coaching', (e, payload) => makeAIRequest('/api/ai/live-coach', payload));
-    // CRÍTICO: Manejador para la creación de páginas de runas a través de LCU
-    ipcMain.handle('create-rune-page', async (e, runeData) => {
-
-    // CRÍTICO: Manejador para el Text-to-Speech (TTS) en el frontend
-    ipcMain.on('speak-text', (event, text) => {
-        if (mainWindow && text) {
-            mainWindow.webContents.send('tts-narrate', text);
-        } else if (overlayWindow && text) {
-             overlayWindow.webContents.send('tts-narrate', text);
-        }
-    });
-        console.log(`[LCU RUNES] 🔑 Solicitud para crear runas: ${runeData.name}`);
-        // ESTO DEBE SER REEMPLAZADO CON SU LÓGICA DE LCU-CONNECTOR
-        return { success: true, message: "Página de runas creada (Integración LCU Pendiente)" };
-    });
 
     // CRÍTICO: Manejador para la creación de páginas de runas a través de LCU
     ipcMain.handle('create-rune-page', async (e, runeData) => {
-
-    // CRÍTICO: Manejador para el Text-to-Speech (TTS) en el frontend
-    ipcMain.on('speak-text', (event, text) => {
-        if (mainWindow && text) {
-            mainWindow.webContents.send('tts-narrate', text);
-        } else if (overlayWindow && text) {
-             overlayWindow.webContents.send('tts-narrate', text);
-        }
-    });
         console.log(`[LCU RUNES] 🔑 Solicitud para crear runas: ${runeData.name}`);
         // ESTO DEBE SER REEMPLAZADO CON SU LÓGICA DE LCU-CONNECTOR
         return { success: true, message: "Página de runas creada (Integración LCU Pendiente)" };
@@ -484,86 +460,55 @@ app.on('ready', () => {
         }
     });
 
+    // CRÍTICO: Manejador para la creación de páginas de runas a través de LCU
+
     // CRÍTICO: Manejador para el Text-to-Speech (TTS) en el frontend
-    ipcMain.on('speak-text', (event, text) => {
-        if (mainWindow && text) {
-            mainWindow.webContents.send('tts-narrate', text);
-        } else if (overlayWindow && text) {
-             overlayWindow.webContents.send('tts-narrate', text);
-        }
-    });
 
     // CRÍTICO: Manejador para la creación de páginas de runas a través de LCU
-    ipcMain.handle('create-rune-page', async (e, runeData) => {
 
     // CRÍTICO: Manejador para el Text-to-Speech (TTS) en el frontend
-    ipcMain.on('speak-text', (event, text) => {
-        if (mainWindow && text) {
-            mainWindow.webContents.send('tts-narrate', text);
-        } else if (overlayWindow && text) {
-             overlayWindow.webContents.send('tts-narrate', text);
-        }
-    });
+    // CRÍTICO: Manejador para la creación de páginas de runas a través de LCU
+        console.log(`[LCU RUNES] 🔑 Solicitud para crear runas: ${runeData.name}`);
+        // ESTO DEBE SER REEMPLAZADO CON SU LÓGICA DE LCU-CONNECTOR
+        return { success: true, message: "Página de runas creada (Integración LCU Pendiente)" };
+    
+
+    // CRÍTICO: Manejador para la creación de páginas de runas a través de LCU
+        console.log(`[LCU RUNES] 🔑 Solicitud para crear runas: ${runeData.name}`);
+        // ESTO DEBE SER REEMPLAZADO CON SU LÓGICA DE LCU-CONNECTOR
+        return { success: true, message: "Página de runas creada (Integración LCU Pendiente)" };
+    
+
+    // CRÍTICO: Manejador para el Text-to-Speech (TTS) en el frontend
+
+    // CRÍTICO: Manejador para el Text-to-Speech (TTS) en el frontend
+
+    // CRÍTICO: Manejador para la creación de páginas de runas a través de LCU
         console.log(`[LCU RUNES] 🔑 Solicitud para crear runas: ${runeData.name}`);
         // ESTO DEBE SER REEMPLAZADO CON SU LÓGICA DE COMUNICACIÓN CON LCU-CONNECTOR
         return { success: true, message: "Página de runas creada (Integración LCU Pendiente)" };
-    });
+    
 
     // CRÍTICO: Manejador para el Text-to-Speech (TTS) en el frontend
-    ipcMain.on('speak-text', (event, text) => {
-        if (mainWindow && text) {
-            mainWindow.webContents.send('tts-narrate', text);
-        } else if (overlayWindow && text) {
-             overlayWindow.webContents.send('tts-narrate', text);
-        }
-    });
 
     // CRÍTICO: Manejador para la creación de páginas de runas a través de LCU
-    ipcMain.handle('create-rune-page', async (e, runeData) => {
-
-    // CRÍTICO: Manejador para el Text-to-Speech (TTS) en el frontend
-    ipcMain.on('speak-text', (event, text) => {
-        if (mainWindow && text) {
-            mainWindow.webContents.send('tts-narrate', text);
-        } else if (overlayWindow && text) {
-             overlayWindow.webContents.send('tts-narrate', text);
-        }
-    });
         console.log(`[LCU RUNES] 🔑 Solicitud para crear runas: ${runeData.name}`);
         // ESTO DEBE SER REEMPLAZADO CON SU LÓGICA DE COMUNICACIÓN CON LCU-CONNECTOR
         return { success: true, message: "Página de runas creada (Integración LCU Pendiente)" };
-    });
+    
 
     // CRÍTICO: Manejador para el Text-to-Speech (TTS) en el frontend
-    ipcMain.on('speak-text', (event, text) => {
-        // Reenviar el texto al proceso de renderizado para narración (Web Speech API)
-        if (mainWindow && text) {
-            mainWindow.webContents.send('tts-narrate', text);
-        } else if (overlayWindow && text) {
-             overlayWindow.webContents.send('tts-narrate', text);
-        }
-    });
     ipcMain.handle('get-strategic-advice', (e, payload) => makeAIRequest('/api/ai/strategy-coach', payload));
     ipcMain.handle('get-builds-tactical', (e, payload) => makeAIRequest('/api/ai/build-advisor', payload));
 
     // CRÍTICO: Manejador para la creación de páginas de runas a través de LCU
-    ipcMain.handle('create-rune-page', async (e, runeData) => {
-
-    // CRÍTICO: Manejador para el Text-to-Speech (TTS) en el frontend
-    ipcMain.on('speak-text', (event, text) => {
-        if (mainWindow && text) {
-            mainWindow.webContents.send('tts-narrate', text);
-        } else if (overlayWindow && text) {
-             overlayWindow.webContents.send('tts-narrate', text);
-        }
-    });
         console.log(`[LCU RUNES] 🔑 Solicitud para crear runas: ${runeData.name}`);
         // AHORA DEBE INTEGRAR AQUÍ SU LÓGICA CON LCU-CONNECTOR
         // EJEMPLO: const result = await createLcuRunePage(runeData);
         // RECUERDE, REQUIERE UN MÉTODO QUE SE COMUNIQUE CON EL CLIENTE LOL PARA MODIFICAR DATOS.
         return { success: true, message: "Página de runas creada (Integración LCU Pendiente)" };
     });
-});
+
 
 app.on('window-all-closed', () => {
     if (process.platform !== 'darwin') {
@@ -584,6 +529,8 @@ app.on('activate', () => {
 app.on('will-quit', () => {
   globalShortcut.unregisterAll();
 });
+
+// CRÍTICO: Cierre de la función app.on(ready) que está al inicio del archivo
 
 // ==========================================================
 // LÓGICA DE HOTKEYS (CTRL+F1/F2)
