@@ -282,7 +282,8 @@ async function fetchLiveGameData() {
 }
 
 
-async function pollLcuDataAndSend(initialRiotApiData, BACKEND_BASE_URL, LIVE_GAME_UPDATE_ENDPOINT, ipcSender) {
+    async function pollLcuDataAndSend(initialRiotApiData, BACKEND_BASE_URL, LIVE_GAME_UPDATE_ENDPOINT, ipcSender, overlaySender) { 
+
     let consolidatedData = { ...initialRiotApiData };
     let lcuModeActive = false;
 
@@ -349,6 +350,17 @@ async function pollLcuDataAndSend(initialRiotApiData, BACKEND_BASE_URL, LIVE_GAM
 
     ipcSender(consolidatedData);
 
+    // 🚨 AÑADIR ESTE BLOQUE 🚨
+    // El frontend espera este formato de datos:
+    const gameFlowPhase = consolidatedData.gameflow?.phase || 'None';
+
+     overlaySender({
+        lcuStatus: lcuModeActive || gameFlowPhase !== 'None' ? 'ONLINE' : 'OFFLINE',
+        gamePhase: gameFlowPhase,
+        draftData: gameFlowPhase === 'ChampSelect' ? consolidatedData.gameflow.session : null, // Asumo que el draft está en gameflow.session
+    });
+    // -------------------------
+    
     const userToken = store.get('userToken');
     if (userToken) {
         try {
@@ -364,7 +376,41 @@ async function pollLcuDataAndSend(initialRiotApiData, BACKEND_BASE_URL, LIVE_GAM
     }
 }
 
+/**
+ * Función genérica para enviar comandos (POST/PUT) al LCU.
+ * Esta función es llamada desde main.js (via IPC handle).
+ * @param {object} creds - Credenciales LCU (port, token).
+ * @param {string} method - Método HTTP (POST, PUT, DELETE).
+ * @param {string} endpoint - /lol-perks/v1/pages o similar.
+ * @param {object} payload - Cuerpo de la solicitud.
+ */
+async function sendLcuCommand(creds, method, endpoint, payload) {
+    if (!creds || !creds.port || !creds.token) {
+        throw new Error("LCU Offline o credenciales no disponibles.");
+    }
+
+    const url = `https://127.0.0.1:${creds.port}${endpoint}`;
+    
+    // Utiliza su axios y su agente HTTPS (lcuAgent)
+    const response = await axios({
+        method: method,
+        url: url,
+        headers: { 
+            'Authorization': `Basic ${creds.token}`,
+            'Content-Type': 'application/json'
+        },
+        data: payload,
+        httpsAgent: lcuAgent, // Su agente HTTPS existente
+        timeout: 5000 
+    });
+    
+    // Devuelve el resultado. La LCU a menudo devuelve 204 (No Content)
+    return response.data; 
+}
+
+
 module.exports = {
     fetchRiotApiData,
-    pollLcuDataAndSend
+    pollLcuDataAndSend,
+    sendLcuCommand
 };

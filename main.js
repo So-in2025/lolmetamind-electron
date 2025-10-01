@@ -6,8 +6,7 @@ const axios = require('axios');
 const Store = require('electron-store');
 const store = new Store();
 const https = require('https');
-// Asegúrate de que lol-client-api.js esté en el directorio raíz
-const { fetchRiotApiData, pollLcuDataAndSend } = require('./lol-client-api'); 
+const { fetchRiotApiData, pollLcuDataAndSend, sendLcuCommand, getLcuCredentials } = require('./lol-client-api'); 
 
 app.setPath('userData', path.join(__dirname, 'electron_data'));
 
@@ -18,6 +17,7 @@ let splashWindow; // Splash HTML Window (Pequeña, Transparente)
 let pollingInterval = null;
 let hasRunInitialLogin = false;
 let latestRiotApiData = null;
+let overlayWindow; // Ventana para el Coach/Overlay (Transparente, sin foco)
 
 const isDevMode = !!process.defaultApp;
 
@@ -46,6 +46,52 @@ function sendDataToRenderer(channel, data) {
     }
 }
 
+// --- FUNCIÓN PARA CREAR LA VENTANA DEL OVERLAY ---
+function createOverlayWindow() {
+    if (overlayWindow) return;
+
+    // Obtener las dimensiones de la pantalla principal
+    const primaryDisplay = screen.getPrimaryDisplay();
+
+    overlayWindow = new BrowserWindow({
+        title: 'MetaMind Coach Overlay',
+        width: primaryDisplay.workAreaSize.width,
+        height: primaryDisplay.workAreaSize.height,
+        transparent: true, // CLAVE: para que solo se vea el contenido de React
+        frame: false, // CLAVE: sin bordes ni controles de ventana
+        hasShadow: false,
+        alwaysOnTop: true, // Siempre encima del juego (LoL)
+        fullscreen: true,
+        skipTaskbar: true,
+        resizable: false,
+        show: false,
+        webPreferences: {
+            preload: path.join(__dirname, 'preload.js'),
+            contextIsolation: true,
+            nodeIntegration: false,
+        },
+    });
+
+    const OVERLAY_PATH = isDevMode ? 'http://localhost:3000/overlay' : path.join(app.getAppPath(), 'out', 'overlay.html');
+
+    if (isDevMode) {
+        overlayWindow.loadURL(OVERLAY_PATH);
+    } else {
+        overlayWindow.loadFile(OVERLAY_PATH);
+    }
+
+    // Por defecto, la ventana ignora los clics del ratón (click-through)
+    overlayWindow.setIgnoreMouseEvents(true, { forward: true });
+
+    overlayWindow.once('ready-to-show', () => {
+        overlayWindow.show();
+        console.log('[Electron] Overlay Window creado y listo.');
+    });
+
+    overlayWindow.on('closed', () => {
+        overlayWindow = null;
+    });
+}
 
 async function fetchAndStoreUserProfile(username, token) {
     console.log(`[DB FETCH] 🔍 Iniciando fetchAndStoreUserProfile para: ${username}`);
@@ -259,6 +305,15 @@ function startLcuPolling() {
     console.log('[LCU POLLING] 🟢 Iniciando ciclo de polling para LCU...');
     if (pollingInterval) clearInterval(pollingInterval);
 
+    // 🚨 MODIFICACIÓN QUIRÚRGICA 1: Emitter IPC para el Overlay 🚨
+    const overlayIpcSender = (data) => {
+        if (overlayWindow && overlayWindow.webContents) {
+            // Envía el estado (gamePhase, draftData, etc.) al frontend React
+            overlayWindow.webContents.send('lcu-state-update', data); 
+        }
+    };
+    // -------------------------------------------------------------
+
     const performPoll = async () => {
         if (!latestRiotApiData) {
             console.warn('[LCU POLLING] ⚠️ No hay datos base de Riot API. Deteniendo polling LCU.');
@@ -269,12 +324,13 @@ function startLcuPolling() {
             latestRiotApiData,
             BACKEND_BASE_URL,
             LIVE_GAME_UPDATE_ENDPOINT,
-            (data) => sendDataToRenderer('riot-profile-data', data)
+            (data) => sendDataToRenderer('riot-profile-data', data),
+            overlayIpcSender // 🚨 MODIFICACIÓN QUIRÚRGICA 2: Pasamos el nuevo sender 🚨
         );
     };
     
     performPoll();
-    pollingInterval = setInterval(performPoll, 15000);
+    pollingInterval = setInterval(performPoll, 15000); // Tu intervalo original
 }
 
 function stopLiveGamePolling() {
@@ -358,6 +414,27 @@ app.on('ready', () => {
         }
     };
     
+    // 🚨 NUEVO HANDLER: Comando LCU genérico para inyección de runas 🚨
+    ipcMain.handle('lcu-command', async (event, method, endpoint, payload) => {
+        try {
+            // Asumo que tiene una función para obtener las credenciales LCU
+            const creds = getLcuCredentials(); // Función que lee el lockfile
+            
+            if (!creds) {
+                return { error: 'LCU CORE OFFLINE. Inyección fallida.' };
+            }
+            
+            // Ejecuta el comando real en su lol-client-api.js
+            const result = await sendLcuCommand(creds, method, endpoint, payload);
+            
+            return { success: result };
+        } catch (error) {
+            // Manejo de errores de su lol-client-api.js (ej. 404, 500, timeout)
+            const errorMessage = error.message || 'Error desconocido en el Core LCU.';
+            console.error(`[LCU COMMAND FAIL] Error al ejecutar comando: ${errorMessage}`);
+            return { error: `Comando LCU fallido: ${errorMessage}` };
+        }
+    });
     ipcMain.handle('get-meta-analysis', (e, payload) => makeAIRequest('/api/ai/get-meta', payload));
     ipcMain.handle('get-recommendations', (e, payload) => makeAIRequest('/api/ai/get-recommendations', payload));
     ipcMain.handle('get-weekly-challenges', (e, payload) => makeAIRequest('/api/ai/get-weekly-challenges', payload));
