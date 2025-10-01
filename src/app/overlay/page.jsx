@@ -1,4 +1,4 @@
-// src/app/overlay/page.jsx - MONTAJE FINAL Y COMPLETO CON COACH DE IA EN POSICIÓN GARANTIZADA (V23.0)
+// src/app/overlay/page.jsx - MONTAJE FINAL Y COMPLETO CON COACH DE IA Y TTS (V4.0 FIX)
 "use client"
 
 import React, { useEffect, useState, Suspense } from 'react';
@@ -6,87 +6,96 @@ import { useInteractiveWidget } from '../../hooks/useInteractiveWidget';
 import { useLcuData } from '../../hooks/useLcuData';
 import { useAppState } from '@/context/AppStateContext';
 
-// Importamos los widgets 
+// Importamos los widgets
 const ControlsHUD = React.lazy(() => import('../../components/widgets/ControlsHUD'));
 const ChampSelectCoach = React.lazy(() => import('../../components/widgets/ChampSelectCoach'));
 const InGameCoach = React.lazy(() => import('../../components/widgets/InGameCoach'));
 const StatusHUD = React.lazy(() => import('../../components/widgets/StatusHUD'));
+const BuildsHUD = React.lazy(() => import('../../components/widgets/BuildsHUD')); // Nuevo Import
 
-// Función TTS (Solo para Coach AI, sin cambios aquí)
-// La implementación real de 'speak' está en InGameCoach.jsx
-const speak = (text, priority = 'normal') => { return; }; 
+// Componente CRÍTICO para activar el TTS del sistema
+const TTS_NARRATION_HANDLER = () => {
+    useEffect(() => {
+        if (!window.electronAPI || !window.speechSynthesis) return;
+
+        const handleTtsRequest = (text) => {
+            const utterance = new SpeechSynthesisUtterance(text);
+            utterance.lang = "es-ES";
+            utterance.pitch = 1;
+            utterance.rate = 1.1;
+
+            window.speechSynthesis.cancel();
+            window.speechSynthesis.speak(utterance);
+        };
+
+        const unsubscribe = window.electronAPI.on("tts-narrate", handleTtsRequest);
+        return () => {
+            window.speechSynthesis.cancel();
+            unsubscribe();
+        };
+    }, []);
+    return null;
+};
 
 function OverlayContent() {
     console.log("[OverlayPage] 🟢 Montando componente.");
     
     const { isWidgetInteractive } = useInteractiveWidget('global-overlay'); 
     const lcuData = useLcuData();
-    const { userData } = useAppState();
     
-    let gamePhase = lcuData?.gameflow?.phase; 
-    
-    // Si la fase no es activa, no renderizamos nada.
-    if (gamePhase === 'EndOfGame' || gamePhase === 'None' || !gamePhase) {
-        gamePhase = null;
-    }
+    // No se realiza NINGÚN FILTRADO DE FASE aquí. La lógica se delega a cada Widget.
 
     return (
-        // Contenedor Final: Totalmente transparente, confiando en 'fixed' de los hijos.
-        // Asegura que el overlay es interactivo o pasivo según el estado de la hotkey (CTRL+F1/F2).
-        <div className={`h-full w-full bg-transparent ${isWidgetInteractive ? 'pointer-events-auto' : 'pointer-events-none'}`}>
+        <React.Fragment> 
+            <Suspense fallback={null}>
+                {/* CRÍTICO: El manejador de TTS debe estar activo en la raíz */}
+                <TTS_NARRATION_HANDLER /> 
+            </Suspense>
+
+            {/* Contenedor principal: interactivo o pasivo según la hotkey */}
+            <div className={`h-full w-full bg-transparent ${isWidgetInteractive ? 'pointer-events-auto' : 'pointer-events-none'}`}>
             
-            {/* 1. Controles Globales (Fixed, Posición 20, 20) */}
-            {/* Estos controles son siempre visibles y permiten alternar la interactividad del overlay. */}
-            <div style={{ position: 'fixed', top: '20px', left: '20px', zIndex: 10000, pointerEvents: 'auto' }}>
-                <Suspense fallback={null}>
-                    <ControlsHUD isInteractive={isWidgetInteractive} />
-                </Suspense>
-            </div>
-            
-            {/* 2. Status HUD (Fixed, Posición 100, 100) */}
-            {/* Visible cuando hay una fase de juego detectada. */}
-            
-                 <div style={{ position: 'fixed', top: '100px', left: '100px', zIndex: 9000, pointerEvents: isWidgetInteractive ? 'auto' : 'none' }}>
+                {/* 1. Controles Globales (Fixed, Posición 20, 20) - Siempre interactivo */}
+                <div style={{ position: 'fixed', top: '20px', left: '20px', zIndex: 10000, pointerEvents: 'auto' }}>
                     <Suspense fallback={null}>
-                        <StatusHUD gamePhase={gamePhase} />
+                        <ControlsHUD isInteractive={isWidgetInteractive} />
+                    </Suspense>
+                </div>
+                
+                {/* 2. Status HUD (Fixed, Posición 100, 100) */}
+                <div style={{ position: 'fixed', top: '100px', left: '100px', zIndex: 9000, pointerEvents: isWidgetInteractive ? 'auto' : 'none' }}>
+                    <Suspense fallback={null}>
+                        <StatusHUD lcuData={lcuData} />
                     </Suspense>
                 </div>
             
-            
-
-            {/* 3. Coach de Selección de Campeones (Fixed, Posición 200, 500) */}
-            {/* Visible solo durante la fase de 'ChampSelect'. */}
-           
+                {/* 3. Coach de Selección de Campeones (Fixed, Posición 200, 500) */}
                 <div style={{ position: 'fixed', top: '200px', left: '500px', zIndex: 9000, pointerEvents: isWidgetInteractive ? 'auto' : 'none' }}>
                     <Suspense fallback={null}>
-                        <ChampSelectCoach 
-                            champSelectData={lcuData?.gameflow}
-                            isInteractive={isWidgetInteractive} 
-                        />
+                        <ChampSelectCoach lcuData={lcuData} isInteractive={isWidgetInteractive} />
                     </Suspense>
                 </div>
 
-
-            {/* 4. Coach En Partida (Fixed, ¡AHORA EN LA POSICIÓN DEL ANTIGUO TEXTO DE PRUEBA!) */}
-            {/* Visible solo durante la fase de 'InProgress'. Incluye el TTS de IA. */}
-           
-                // Posición: top: '250px', left: '700px' (donde solía verse el texto de prueba)
+                {/* 4. Coach En Partida (Fixed, Posición 250, 700) */}
                 <div style={{ position: 'fixed', top: '250px', left: '700px', zIndex: 9000, pointerEvents: isWidgetInteractive ? 'auto' : 'none' }}>
                     <Suspense fallback={null}>
-                        <InGameCoach 
-                            liveData={lcuData?.liveData}
-                            userData={userData}
-                            isInteractive={isWidgetInteractive}
-                        />
+                        <InGameCoach lcuData={lcuData} isInteractive={isWidgetInteractive} />
+                    </Suspense>
+                </div>
+
+                {/* 5. BuildHUD (Fixed, Posición 400, 20) */}
+                <div style={{ position: 'fixed', top: '400px', left: '20px', zIndex: 9000, pointerEvents: isWidgetInteractive ? 'auto' : 'none' }}>
+                    <Suspense fallback={null}>
+                        <BuildsHUD lcuData={lcuData} />
                     </Suspense>
                 </div>
       
-        </div>
+            </div>
+        </React.Fragment>
     );
 }
 
 // Exportación FINAL simplificada del componente OverlayPage.
-// Este es el punto de entrada principal para el overlay en Next.js.
 export default function OverlayPage() {
     return (
        <OverlayContent />

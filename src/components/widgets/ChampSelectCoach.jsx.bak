@@ -51,7 +51,7 @@ export default function ChampSelectCoach({ lcuData, isInteractive }) {
                 summoner: userData, 
                 gameflowData: champSelectData
             };
-            // Llamada REAL a la IA usando el endpoint existente
+            // Llamada REAL a la IA
             const result = await window.electronAPI.invoke('get-recommendations', payload);
             
             if (result.error) throw new Error(result.error);
@@ -80,6 +80,7 @@ export default function ChampSelectCoach({ lcuData, isInteractive }) {
     const handleCreateRunes = async () => {
         if (!isInteractive || !recommendations?.runes || !window.electronAPI) return;
         try {
+            // Llama al manejador CRÍTICO en main.js
             const result = await window.electronAPI.invoke('create-rune-page', recommendations.runes);
             if (result.success) {
                 speak("Página de runas creada con éxito. Recuerda, la integración LCU está pendiente.");
