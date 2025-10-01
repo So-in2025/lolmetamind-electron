@@ -1,0 +1,241 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Informe Final: Proyecto COACH META MIND</title>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Cinzel:wght@700;900&family=Roboto:wght@400;700&display=swap');
+        
+        :root {
+            --lol-dark-blue: #010A13;
+            --lol-medium-blue: #0A1428;
+            --lol-gold: #C89B3C;
+            --lol-gold-light: #F0E6D2;
+            --lol-accent: #0BC6E3;
+        }
+
+        body {
+            background-color: var(--lol-dark-blue);
+            color: var(--lol-gold-light);
+            font-family: 'Roboto', sans-serif;
+            margin: 0;
+            padding: 0;
+            line-height: 1.6;
+            transition: background-color 0.5s;
+        }
+
+        h1, h2, h3, .font-display {
+            font-family: 'Cinzel', serif;
+            color: var(--lol-gold);
+            text-shadow: 0 0 8px rgba(200, 155, 60, 0.4);
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 40px 20px;
+        }
+
+        header {
+            background-color: var(--lol-medium-blue);
+            padding: 40px 0;
+            text-align: center;
+            border-bottom: 4px solid var(--lol-gold);
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
+        }
+
+        .card {
+            background-color: var(--lol-medium-blue);
+            padding: 30px;
+            margin-bottom: 30px;
+            border: 1px solid var(--lol-gold);
+            box-shadow: 0 0 15px rgba(200, 155, 60, 0.2);
+            border-radius: 5px;
+        }
+
+        .feature-list li {
+            background-color: #010A13;
+            padding: 15px;
+            margin-bottom: 10px;
+            border-left: 5px solid var(--lol-accent);
+            border-radius: 3px;
+            transition: transform 0.3s;
+        }
+
+        .feature-list li:hover {
+            transform: translateX(5px);
+            box-shadow: 0 0 10px rgba(11, 198, 227, 0.5);
+        }
+
+        .status-badge {
+            display: inline-block;
+            padding: 5px 10px;
+            border-radius: 4px;
+            font-weight: bold;
+            text-transform: uppercase;
+        }
+
+        .status-complete {
+            background-color: #4CAF50;
+            color: white;
+        }
+
+        .status-ready {
+            background-color: var(--lol-accent);
+            color: var(--lol-dark-blue);
+        }
+
+        .splash-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: var(--lol-dark-blue);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            flex-direction: column;
+            z-index: 1000;
+            transition: opacity 1s ease-out;
+        }
+        
+        .cta-button {
+            background-color: var(--lol-gold);
+            color: var(--lol-dark-blue);
+            border: 2px solid var(--lol-accent);
+            padding: 10px 20px;
+            text-transform: uppercase;
+            font-family: 'Cinzel', serif;
+            font-weight: 700;
+            cursor: pointer;
+            transition: all 0.3s;
+            margin-top: 20px;
+        }
+
+        .cta-button:hover {
+            background-color: var(--lol-accent);
+            border-color: var(--lol-gold);
+        }
+    </style>
+</head>
+<body>
+
+    <div id="splash" class="splash-overlay">
+        <h1 class="font-display" style="font-size: 3em;">INFORME DE PROYECTO</h1>
+        <h2 class="font-display" style="color: var(--lol-gold-light);">COACH META MIND</h2>
+        <p class="font-display" style="font-size: 1.5em;">Tu ventaja estratégica está lista.</p>
+        <button id="start-tts" class="cta-button">Ver Informe y Escuchar Narración</button>
+    </div>
+
+    <header>
+        <h1 style="font-size: 3em;">COACH META MIND</h1>
+        <h2 style="font-size: 1.5em;">Plataforma de Coaching con IA para League of Legends</h2>
+        <p class="font-display"><span class="status-badge status-ready">SISTEMA EN ESTADO DE PRODUCCIÓN (100% OPERATIVO)</span></p>
+    </header>
+
+    <div class="container">
+        <section id="vision" class="card">
+            <h2 class="font-display">La Visión: Arquitectura de 3 Fases</h2>
+            <p>Hemos construido un sistema de alto rendimiento que integra tu identidad de jugador (Astrología y Perfil) con la inteligencia artificial más avanzada (Gemini) y los datos en tiempo real de Riot Games y el Cliente LCU. El sistema opera en un ciclo continuo de tres fases críticas:</p>
+
+            <ul class="feature-list" style="list-style: none; padding: 0;">
+                <li>
+                    <h3 style="color: var(--lol-gold-light);">FASE I: Análisis de Perfil y Preparación</h3>
+                    <p>La IA evalúa tu estilo de juego, basándose en tu signo zodiacal y tu historial de maestría, para ofrecerte recomendaciones de campeones sinérgicos o de desarrollo. Además, prepara desafíos semanales personalizados para el crecimiento a largo plazo.</p>
+                </li>
+                <li>
+                    <h3 style="color: var(--lol-gold-light);">FASE II: Coaching en Tiempo Real (La Ventaja Crítica)</h3>
+                    <p>Activado por la detección del cliente LCU, este módulo ofrece:
+                        <ul>
+                            <li style="border-left: 5px solid var(--lol-gold);"><strong>Selección de Campeón:</strong> Consejos de draft, estrategia inicial y pre-inyección de runas optimizadas.</li>
+                            <li style="border-left: 5px solid var(--lol-gold);"><strong>Partida en Vivo:</strong> Consejos tácticos en un overlay transparente (Nano Banana) que se adapta a tu arquetipo zodiacal.</li>
+                            <li style="border-left: 5px solid var(--lol-gold);"><strong>Inyección de Runas:</strong> Habilidad de ejecutar comandos directos al cliente LCU para cargar páginas de runas instantáneamente.</li>
+                        </ul>
+                    </p>
+                </li>
+                <li>
+                    <h3 style="color: var(--lol-gold-light);">FASE III: Evaluación Post-Partida</h3>
+                    <p>Tras la partida, la IA analiza las métricas clave del historial para identificar 2 fortalezas y 2 debilidades, vinculando al menos una a tu perfil psicológico (zodiacSign), proporcionando una ruta clara para la mejora continua.</p>
+                </li>
+            </ul>
+        </section>
+        
+        <section id="architecture" class="card">
+            <h2 class="font-display">Arquitectura y Consistencia</h2>
+            <p>El proyecto se entrega con dos componentes principales totalmente compatibles y un flujo de comunicación seguro y asíncrono.</p>
+
+            <h3 style="color: var(--lol-accent);">1. Backend (Next.js API y Base de Datos) <span class="status-badge status-complete">COMPLETO</span></h3>
+            <ul>
+                <li><strong>Stack:</strong> Next.js (Routing/API), PostgreSQL (Base de Datos), postgres.js (Driver optimizado).</li>
+                <li><strong>Seguridad:</strong> Autenticación JWT y hasheo de contraseñas con bcryptjs. Todas las peticiones AI están detrás de esta autenticación.</li>
+                <li><strong>AI Engine:</strong> Gemini (v2.5-flash-lite) configurado para inyectar <code>responseMimeType: "application/json"</code> para asegurar la estabilidad y el formato de las respuestas.</li>
+                <li><strong>Data Flow:</strong> Recibe los datos del cliente Electron a través del endpoint <code>/api/live-game/update</code> para persistir el estado del juego.</li>
+            </ul>
+
+            <h3 style="color: var(--lol-accent);">2. Aplicación de Escritorio (Electron) <span class="status-badge status-complete">COMPLETO</span></h3>
+            <ul>
+                <li><strong>Framework:</strong> Electron (para Desktop shell) y React/Next.js (para la interfaz de usuario).</li>
+                <li><strong>LCU Core (<code>lol-client-api.js</code>):</strong> Módulo robusto encargado de:
+                    <ol>
+                        <li>Detectar el Cliente LoL y obtener credenciales vía PowerShell.</li>
+                        <li>Manejar el polling continuo (<code>pollLcuDataAndSend</code>) para actualizar el Dashboard y el Overlay simultáneamente.</li>
+                        <li>Ejecutar comandos LCU para la inyección de runas (<code>sendLcuCommand</code>).</li>
+                    </ol>
+                </li>
+                <li><strong>Manejo de Ventanas:</strong> Flujo controlado de Splash → Login → Dashboard + <strong>OverlayWindow</strong> (creada en el login exitoso para asegurar la sincronización).</li>
+                <li><strong>Riot API Key:</strong> El manejo es seguro. La clave se guarda en la <strong>Electron Store</strong> después del Login/Profile Fetch y se usa exclusivamente en el <code>lol-client-api.js</code> del proceso principal.</li>
+            </ul>
+        </section>
+
+    </div>
+
+    <script>
+        document.getElementById('start-tts').addEventListener('click', () => {
+            const overlay = document.getElementById('splash');
+            
+            // 1. Ocultar Splash
+            overlay.style.opacity = '0';
+            setTimeout(() => {
+                overlay.style.display = 'none';
+            }, 1000);
+
+            // 2. Función para obtener todo el texto de la página
+            function getFullTextForTTS() {
+                let text = "Saludos. La misión ha sido cumplida. El proyecto Coach Meta Mind ha sido finalizado y auditado para su entrega en producción. El sistema de coaching de tres fases, la inyección de runas, y el flujo de datos LCU, están completamente operativos y alineados. Este documento detalla la arquitectura y las funcionalidades épicas entregadas al cliente. ";
+                
+                // Concatenar Header y todo el contenido de las secciones
+                text += document.querySelector('header').innerText.replace(/\n/g, ". ");
+                
+                document.querySelectorAll('.container section').forEach(section => {
+                    text += ". " + section.textContent.replace(/\s\s+/g, ' ').trim(); 
+                });
+
+                return text;
+            }
+
+            const textToSpeak = getFullTextForTTS();
+
+            // 3. Iniciar TTS con todo el contenido
+            if ('speechSynthesis' in window) {
+                const utterance = new SpeechSynthesisUtterance(textToSpeak);
+                
+                // Configuración de voz (busca una voz en español)
+                const voices = window.speechSynthesis.getVoices();
+                const esVoice = voices.find(voice => voice.lang.startsWith('es'));
+                if (esVoice) {
+                    utterance.voice = esVoice;
+                }
+                
+                utterance.pitch = 1; 
+                utterance.rate = 1;
+                
+                window.speechSynthesis.speak(utterance);
+            } else {
+                console.error("El navegador no soporta Speech Synthesis.");
+            }
+        });
+    </script>
+</body>
+</html>

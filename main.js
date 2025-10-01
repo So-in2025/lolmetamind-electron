@@ -354,7 +354,7 @@ app.on('ready', () => {
         else if (loginWindow) loginWindow.minimize();
     });
 
-    // CRÍTICO: Evento de Login exitoso
+     // CRÍTICO: Evento de Login exitoso
     ipcMain.on('user-logged-in', async (event, userData) => {
         console.log(`[IPC RECEIVE] Evento 'user-logged-in' recibido para el usuario: ${userData.username}`);
         if (hasRunInitialLogin) {
@@ -370,15 +370,16 @@ app.on('ready', () => {
             console.log('[MAIN-FLOW] ✅ Perfil cargado. Cerrando Login y abriendo Dashboard.');
             
             // 1. Crear la ventana principal (cierra loginWindow)
-            createMainWindow(); 
+            createMainWindow();
+            // 🚨 CORRECCIÓN QUIRÚRGICA: CREAR LA VENTANA DEL OVERLAY 🚨
+            createOverlayWindow(); // <-- ¡ESTA ES LA LÍNEA QUE FALTABA! [cite: 128]
             
             // 2. INICIAR EL POLLING CON DELAY
             setTimeout(() => {
                  console.log('[MAIN-FLOW] Retardo de 1s completado. Iniciando flujo de datos Riot/LCU.');
                  executeInitialRiotApiFetchAndStartPolling();
                  
-            }, 1000); 
-
+            }, 1000);
         } else {
             console.error('[MAIN-FLOW] ❌ Fallo al obtener perfil. Permanece en Login.');
         }
