@@ -1,9 +1,9 @@
 // src/components/widgets/InGameCoach.jsx - VERSIÓN FINAL (TTS solo para IA)
 "use client"
-import React, { useEffect, useState } from 'react'; // <--- SINTAXIS CORREGIDA: 'from' en lugar de '=>'
+import React, { useEffect, useState } from 'react'; // <--- SINTAXIS CORREGIDA
 import { useInteractiveWidget } from '@/hooks/useInteractiveWidget'; 
 
-// Función TTS (copiada del OverlayPage para ser autónoma en el coach)
+// Función TTS (copiada para ser autónoma)
 const speak = (text, priority = 'normal') => {
   try {
     if (typeof window !== 'undefined' && 'speechSynthesis' in window && text) {
@@ -27,12 +27,10 @@ const speak = (text, priority = 'normal') => {
 };
 
 export default function InGameCoach({ liveData, userData, isInteractive }) {
-    // CRÍTICO: Asumiendo que window.electronAPI existe debido a preload.js
     const { ipcRenderer } = typeof window !== 'undefined' && window.electronAPI ? window.electronAPI : {};
     const [advice, setAdvice] = useState("Esperando impulso de IA (Presiona el botón para solicitar consejo)...");
     const [lastAdviceSpoken, setLastAdviceSpoken] = useState(null);
     
-    // Función para solicitar consejo de IA
     const requestAIAdvice = async () => {
         if (!ipcRenderer || !liveData || !userData) {
             setAdvice("Error: Cliente de Electron o datos de usuario no disponibles.");
@@ -72,15 +70,12 @@ export default function InGameCoach({ liveData, userData, isInteractive }) {
         }
     };
 
-    // Usaremos un useEffect para simular que el hotkey dispara esta función
-    // Esto debería ser disparado por CTRL+F1 o un botón. Mantenemos el botón de prueba.
-
     return (
-        <div className="p-4 bg-gray-900/90 border border-yellow-500 rounded-lg shadow-2xl relative">
+        <div className="p-4 bg-gray-900/90 border border-yellow-500 rounded-lg shadow-2xl relative" style={{ minWidth: 320, minHeight: 150 }}>
             <h3 className="text-lg font-bold text-yellow-400 mb-2">COACH IA EN VIVO</h3>
             <p className="text-sm text-gray-200">{advice}</p>
             
-            {/* Botón de prueba para disparar el TTS de la IA */}
+            {/* Botón para solicitar consejo de IA (Visible en modo interactivo) */}
             {isInteractive && (
                  <button 
                     onClick={requestAIAdvice}

@@ -1,12 +1,9 @@
-// src/components/widgets/StatusHUD.jsx - VERSIÓN CORREGIDA (Hextech Modular Compliant)
+// src/components/widgets/StatusHUD.jsx - VERSIÓN CORREGIDA (Renderizado Garantizado)
 'use client';
 
 import React from 'react';
-// NOTA: Se eliminan las importaciones de useScale y useInteractiveWidget,
-// ya que el DragAndScaleWidget ahora maneja la posición y la escala.
 
 export default function StatusHUD({ gamePhase }) {
-  // Mensaje a mostrar basado en la fase del juego
   let statusText = "Esperando Conexión...";
   let statusColor = "text-gray-400";
 
@@ -31,11 +28,11 @@ export default function StatusHUD({ gamePhase }) {
       break;
   }
 
-  // Retorna solo el contenido, el wrapper DragAndScaleWidget se encarga de
-  // posición, escala y arrastre.
   return (
     <div 
       className="bg-black/80 border border-gray-500 rounded-md shadow-lg backdrop-blur-sm flex items-center gap-4 p-2"
+      // CRÍTICO: Forzamos el tamaño para anular cualquier colapso interno.
+      style={{ minWidth: '350px', display: 'flex', justifyContent: 'space-between' }}
     >
       <div className="px-1 text-gray-500">::</div>
       <p className={`font-bold text-sm ${statusColor}`}>{statusText}</p>

@@ -156,7 +156,7 @@ const DashboardPage = () => {
                 <div className="lg:col-span-2 flex flex-col gap-6"> 
                     
                     {/* >>> SECCIÓN DEL COACH DE CHAMP SELECT <<< */}
-                    {gamePhase === 'ChampSelect' && ( 
+          
                         <div className="bg-lol-dark-blue p-6 rounded-lg border border-lol-blue-accent/50 shadow-lg">
                             <h3 className="text-2xl font-bold text-lol-blue-accent mb-4 border-b border-lol-blue-accent/30 pb-2">
                                 Coach en Selección de Campeón
@@ -168,7 +168,7 @@ const DashboardPage = () => {
                                 isInteractive={true} 
                             />
                         </div>
-                    )} 
+                    
                     
                     <AIAnalysis onAnalysis={handleAnalysisRequest} result={analysisResult} userData={userData} /> 
                     <DashboardTabs userData={userData} metaData={metaData} weeklyChallenges={weeklyChallenges} recommendations={recommendations} onAnalysisRequest={handleAnalysisRequest} /> 

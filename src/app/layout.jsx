@@ -6,9 +6,8 @@
 // (como el flujo de la aplicación y los datos del usuario) esté disponible en todas partes.
 
 import { AppStateProvider } from '@/context/AppStateContext';
-import './globals.css'; // Importa los estilos globales de Tailwind CSS
-import { ScaleProvider } from '@/context/ScaleContext'; // <-- AGREGADO
 import './globals.css'; 
+// NOTA: Se ha eliminado la importación de ScaleProvider para solucionar el error de compilación.
 
 // Metadata para el SEO y la pestaña del navegador.
 export const metadata = {
@@ -31,14 +30,10 @@ export default function RootLayout({ children }) {
       <body className="bg-transparent">
         {/*
           Aquí envolvemos toda la aplicación con el AppStateProvider.
-          Cualquier componente renderizado dentro de `{children}` (es decir, cualquier página)
-          ahora podrá usar el hook `useAppState()` para acceder al estado global.
         */}
         <AppStateProvider>
-          {/* Se añade ScaleProvider para evitar el error de contexto indefinido en SSR */}
-            <ScaleProvider>
-                {children}
-            </ScaleProvider>
+            {/* El ScaleProvider ha sido eliminado para corregir el error de compilación. */}
+            {children}
         </AppStateProvider>
       </body>
     </html>
