@@ -47,6 +47,14 @@ function sendDataToRenderer(channel, data) {
 }
 
 
+function stopLiveGamePolling() {
+    if (pollingInterval) {
+        clearInterval(pollingInterval);
+        pollingInterval = null;
+        console.log('[MAIN] LCU polling detenido.');
+    }
+}
+
 // --- FUNCIÓN PARA CREAR LA VENTANA DEL OVERLAY ---
 function createOverlayWindow() {
     if (overlayWindow) return;
@@ -449,10 +457,21 @@ app.on('ready', () => {
     // 2. Escucha el token cuando el login/registro es exitoso
     ipcMain.on('save-token', (event, token) => {
         console.log('[MAIN] Token recibido del login/registro:', token);
-        store.set('authToken', token); // Guarda el token de forma persistente
+        store.set('authToken', token);
         
-        // Llama a la función para crear la ventana principal
-        createMainWindow(token); 
+        // 1. Creamos la ventana principal del dashboard (esto ya lo hacías)
+        createMainWindow(token);
+
+        // 2. ✅ ¡LE DAMOS ARRANQUE AL MOTOR DEL LCU! ✅
+        // Justo después de crear la ventana, iniciamos el monitoreo.
+        // Usamos 'setTimeout' para darle 2 segundos a la ventana para que se dibuje tranquila.
+        setTimeout(() => {
+            if (mainWindow) { // Verificamos que la ventana principal exista
+                console.log('[MAIN] Iniciando LCU polling...');
+                // La función pollLcuDataAndSend es de tu archivo lol-client-api.js
+                pollingInterval = pollLcuDataAndSend(mainWindow); 
+            }
+        }, 2000); 
     });
 
     // 🚨 NUEVO HANDLER: Comando LCU genérico para inyección de runas 🚨

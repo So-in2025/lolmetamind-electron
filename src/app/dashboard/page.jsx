@@ -112,10 +112,16 @@ const DashboardPage = () => {
                         riotError={null} 
                     />
                 </div> 
-                <div className="lg:col-span-2 flex flex-col gap-6">                  
-                    <AIAnalysis onAnalysis={handleAnalysisRequest} result={analysisResult} userData={userData} /> 
-                    <DashboardTabs userData={userData} metaData={metaData} weeklyChallenges={weeklyChallenges} recommendations={recommendations} onAnalysisRequest={handleAnalysisRequest} /> 
-                </div> 
+                <div className="lg:col-span-2 flex flex-col gap-6">                   
+                <AIAnalysis onAnalysis={handleAnalysisRequest} result={analysisResult} userData={userData} /> 
+                <DashboardTabs 
+                    userData={userData} 
+                    metaData={metaData} 
+                    weeklyChallenges={weeklyChallenges} 
+                    recommendations={recommendations} 
+                    onAnalysis={handleAnalysisRequest} 
+                /> 
+            </div>
             </main> 
         </div> 
     );
