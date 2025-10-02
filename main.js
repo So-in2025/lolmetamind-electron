@@ -26,83 +26,34 @@ const isDevMode = !!process.defaultApp;
 app.commandLine.appendSwitch('ignore-certificate-errors');
 app.disableHardwareAcceleration();
 
-// --- URLs y Endpoints ---
-const HTTP_BASE_API_URL = 'http://localhost:3000';
-const BACKEND_BASE_URL = HTTP_BASE_API_URL;
-
+// --- URLs y Endpoints (CORREGIDO) ---
+// El backend de Next.js corre en el puerto 3001 según tu package.json
+const HTTP_BASE_API_URL = 'http://localhost:3001';
+// 1. El BACKEND (donde viven tus APIs como /api/user/profile) está en el puerto 3000.
+const BACKEND_BASE_URL = 'http://localhost:3000';
+// 2. El FRONTEND (donde viven tus páginas de React/Next.js) está en el puerto 3001.
+const FRONTEND_BASE_URL = 'http://localhost:3001';
+// 3. Los endpoints de la API se definen por separado.
 const LIVE_GAME_UPDATE_ENDPOINT = '/api/live-game/update';
 const USER_PROFILE_ENDPOINT = '/api/user/profile';
-
-// RUTAS CRÍTICAS: Next.js 'out' genera index.html dentro de cada carpeta
-const INDEX_PATH = isDevMode ? 'http://localhost:3001/dashboard' : `file://${path.join(__dirname, 'out', 'dashboard', 'index.html')}`;
-const LOGIN_PATH = isDevMode ? 'http://localhost:3001' : `file://${path.join(__dirname, 'out', 'index.html')}`;
+// 4. Las RUTAS a las páginas de la aplicación deben apuntar al FRONTEND_BASE_URL (puerto 3001).
+//    Se ha añadido la sintaxis correcta con backticks (`).
+const INDEX_PATH = isDevMode ? `${FRONTEND_BASE_URL}/dashboard` : `file://${path.join(__dirname, 'out', 'dashboard', 'index.html')}`;
+const LOGIN_PATH = isDevMode ? `${FRONTEND_BASE_URL}` : `file://${path.join(__dirname, 'out', 'index.html')}`;
 
 const backendAgent = new https.Agent({ rejectUnauthorized: false });
 const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
 
+
 function sendDataToRenderer(channel, data) {
-    const window = mainWindow;
-    if (window && !window.isDestroyed()) {
+    // ✅ MEJORA: Añadida la comprobación !isDestroyed() por consistencia
+    if (mainWindow && !mainWindow.isDestroyed()) {
         console.log(`[IPC SEND] Enviando al canal '${channel}'.`);
-        window.webContents.send(channel, data);
+        mainWindow.webContents.send(channel, data);
     }
 }
 
-
-function stopLiveGamePolling() {
-    if (pollingInterval) {
-        clearInterval(pollingInterval);
-        pollingInterval = null;
-        console.log('[MAIN] LCU polling detenido.');
-    }
-}
-
-// --- FUNCIÓN PARA CREAR LA VENTANA DEL OVERLAY ---
-function createOverlayWindow() {
-    if (overlayWindow) return;
-
-    // Obtener las dimensiones de la pantalla principal
-    const primaryDisplay = screen.getPrimaryDisplay();
-
-    overlayWindow = new BrowserWindow({
-        title: 'MetaMind Coach Overlay',
-        width: primaryDisplay.workAreaSize.width,
-        height: primaryDisplay.workAreaSize.height,
-        transparent: true, // CLAVE: para que solo se vea el contenido de React
-        frame: false, // CLAVE: sin bordes ni controles de ventana
-        hasShadow: false,
-        alwaysOnTop: true, // Siempre encima del juego (LoL)
-        fullscreen: true,
-        skipTaskbar: true,
-        resizable: false,
-        show: false,
-        webPreferences: {
-            preload: path.join(__dirname, 'preload.js'),
-            contextIsolation: true,
-            nodeIntegration: false,
-        },
-    });
-
-    const OVERLAY_PATH = isDevMode ? 'http://localhost:3000/overlay' : path.join(app.getAppPath(), 'out', 'overlay.html');
-
-    if (isDevMode) {
-        overlayWindow.loadURL(OVERLAY_PATH);
-    } else {
-        overlayWindow.loadFile(OVERLAY_PATH);
-    }
-
-    // Por defecto, la ventana ignora los clics del ratón (click-through)
-    overlayWindow.setIgnoreMouseEvents(true, { forward: true });
-
-    overlayWindow.once('ready-to-show', () => {
-        overlayWindow.show();
-        console.log('[Electron] Overlay Window creado y listo.');
-    });
-
-    overlayWindow.on('closed', () => {
-        overlayWindow = null;
-    });
-}
+// main.js
 
 async function fetchAndStoreUserProfile(username, token) {
     console.log(`[DB FETCH] 🔍 Iniciando fetchAndStoreUserProfile para: ${username}`);
@@ -112,9 +63,14 @@ async function fetchAndStoreUserProfile(username, token) {
     }
 
     try {
+        // 🚨 CORRECCIÓN CLAVE: Se elimina la propiedad 'params'.
+        // Tu API de backend (`/api/user/profile/route.js`) está diseñada para
+        // identificar al usuario a través del token JWT en la cabecera 'Authorization',
+        // no a través de un parámetro de URL. Al quitar 'params', la petición
+        // ahora coincide con lo que tu API espera.
         const response = await axios.get(`${BACKEND_BASE_URL}${USER_PROFILE_ENDPOINT}`, {
             headers: { 'Authorization': `Bearer ${token}` },
-            params: { username: username },
+            // params: { username: username }, // <-- ESTA LÍNEA HA SIDO ELIMINADA
             httpsAgent: backendAgent,
             timeout: 15000
         });
@@ -122,14 +78,13 @@ async function fetchAndStoreUserProfile(username, token) {
         if (response.status === 200 && response.data) {
             const data = response.data;
             
-            // Asumiendo nombres de columna limpios (summonerName, tagline, region)
             const summonerName = data.summonerName; 
             const tagline = data.tagline;
             const region = data.region;
             
-            if (!summonerName || !tagline || !region || !data.zodiacSign) { // Validamos campos críticos de IA
+            if (!summonerName || !tagline || !region || !data.zodiacSign) {
                  console.error('[DB FETCH] ❌ Datos de Riot/IA incompletos en la respuesta del backend.');
-                 store.set('userData', data); // Guardamos lo que haya para debugging
+                 store.set('userData', data);
                  return false;
             }
 
@@ -193,12 +148,9 @@ function createLoginWindow() {
         height: 800,
         minWidth: 560,
         minHeight: 700,
-        show: false, 
+        show: false, // Empieza oculta
         frame: false,
-        
-        // >>> SOLUCIÓN FINAL A LA TRANSPARENCIA Y EL FONDO GRIS <<<
-        transparent: true, 
-        
+        transparent: true, // Vuelve a ser transparente
         webPreferences: {
             preload: path.join(__dirname, 'preload.js'),
             nodeIntegration: false,
@@ -208,6 +160,8 @@ function createLoginWindow() {
     
     loginWindow.loadURL(LOGIN_PATH); 
 
+    // Esta es la lógica original que funcionaba: espera a que la ventana esté lista,
+    // espera a que termine el splash, y luego la muestra.
     loginWindow.once('ready-to-show', () => {
         const splashDuration = 3000; 
         
@@ -215,7 +169,7 @@ function createLoginWindow() {
             if (splashWindow) splashWindow.close();
             loginWindow.show();
             loginWindow.center();
-            console.log("[MAIN] ✅ Login Window mostrada. Es opaca y clickeable.");
+            console.log("[MAIN] ✅ Login Window mostrada.");
         }, splashDuration);
     });
 
@@ -224,6 +178,63 @@ function createLoginWindow() {
             app.quit(); 
         }
         loginWindow = null;
+    });
+}
+
+// --- FUNCIÓN PARA CREAR LA VENTANA DEL OVERLAY ---
+function createOverlayWindow() {
+    if (overlayWindow) return;
+
+    // Obtener las dimensiones de la pantalla principal
+    const primaryDisplay = screen.getPrimaryDisplay();
+
+    overlayWindow = new BrowserWindow({
+        title: 'MetaMind Coach Overlay',
+        width: primaryDisplay.workAreaSize.width,
+        height: primaryDisplay.workAreaSize.height,
+        transparent: true,
+        frame: false,
+        hasShadow: false,
+        alwaysOnTop: true,
+
+        // 🚨 LA LÍNEA MÁGICA QUE SOLUCIONA EL PROBLEMA VISUAL 🚨
+        // 'screen-saver' es un nivel de apilamiento especial que se asegura
+        // de que esta ventana se renderice por encima de las ventanas de aplicaciones normales.
+        level: 'floating',
+
+        fullscreen: true,
+        skipTaskbar: true,
+        resizable: false,
+        show: false,
+        webPreferences: {
+            preload: path.join(__dirname, 'preload.js'),
+            contextIsolation: true,
+            nodeIntegration: false,
+        },
+    });
+
+    // 🚨 2. SOLUCIÓN DE RUTA: Apunta al puerto correcto (3001) para el modo desarrollo
+    const OVERLAY_PATH = isDevMode ? `${FRONTEND_BASE_URL}/overlay` : path.join(app.getAppPath(), 'out', 'overlay.html');
+
+    if (isDevMode) {
+        overlayWindow.loadURL(OVERLAY_PATH);
+         // 🚨 ESTE ES EL CÓDIGO MÁS IMPORTANTE AHORA 🚨
+        // Abre las herramientas de desarrollador para la ventana del overlay en una ventana separada.
+        overlayWindow.webContents.openDevTools({ mode: 'detach' });
+    } else {
+        overlayWindow.loadFile(OVERLAY_PATH);
+    }
+
+    // Por defecto, la ventana ignora los clics del ratón (click-through)
+    overlayWindow.setIgnoreMouseEvents(true, { forward: true });
+
+    overlayWindow.once('ready-to-show', () => {
+        overlayWindow.show();
+        console.log('[Electron] Overlay Window creado y listo.');
+    });
+
+    overlayWindow.on('closed', () => {
+        overlayWindow = null;
     });
 }
 
@@ -312,36 +323,59 @@ async function executeInitialRiotApiFetchAndStartPolling() {
     }
 }
 
+
 function startLcuPolling() {
     console.log('[LCU POLLING] 🟢 Iniciando ciclo de polling para LCU...');
     if (pollingInterval) clearInterval(pollingInterval);
 
-    // 🚨 MODIFICACIÓN QUIRÚRGICA 1: Emitter IPC para el Overlay 🚨
+    // 🚨 1. LA LÓGICA AHORA ESTÁ AQUÍ 🚨
+    // Esta función se encarga de enriquecer los datos del juego con los datos del usuario.
     const overlayIpcSender = (data) => {
-        if (overlayWindow && overlayWindow.webContents) {
-            // Envía el estado (gamePhase, draftData, etc.) al frontend React
-            overlayWindow.webContents.send('lcu-state-update', data); 
+        // Verificamos si la ventana del overlay existe y está lista
+        if (overlayWindow && !overlayWindow.isDestroyed() && overlayWindow.webContents) {
+            
+            // Obtenemos los datos del usuario guardados en el store en este preciso momento.
+            const storedUserData = store.get('userData');
+
+            // Creamos un nuevo paquete de datos (payload) que combina ambas informaciones.
+            const payloadCompleto = {
+                ...data, // Esto incluye lcuStatus, gamePhase, draftData
+                userData: storedUserData // ¡Añadimos el usuario al paquete!
+            };
+
+            // Enviamos el paquete completo al overlay.
+            console.log('[IPC SEND] Enviando payload completo al OVERLAY...');
+            overlayWindow.webContents.send('lcu-state-update', payloadCompleto); 
         }
     };
-    // -------------------------------------------------------------
 
     const performPoll = async () => {
-        if (!latestRiotApiData) {
-            console.warn('[LCU POLLING] ⚠️ No hay datos base de Riot API. Deteniendo polling LCU.');
-            stopLiveGamePolling();
-            return;
+        try {
+            if (!latestRiotApiData) {
+                console.warn('[LCU POLLING] ⚠️ No hay datos base de Riot API. Deteniendo polling LCU.');
+                stopLiveGamePolling();
+                return;
+            }
+            
+            // 🚨 2. LA LLAMADA SE MANTIENE IGUAL 🚨
+            // Le pasamos nuestra nueva y más inteligente función 'overlayIpcSender'.
+            await pollLcuDataAndSend(
+                latestRiotApiData,
+                BACKEND_BASE_URL,
+                LIVE_GAME_UPDATE_ENDPOINT,
+                (data) => sendDataToRenderer('riot-profile-data', data), // La función para el dashboard (sin cambios)
+                overlayIpcSender // La función para el overlay (ahora enriquecida)
+            );
+        } catch (error) {
+            console.error(`[LCU POLLING] ❌ Error en un ciclo de sondeo, el siguiente ciclo continuará. Error: ${error.message}`);
         }
-        await pollLcuDataAndSend(
-            latestRiotApiData,
-            BACKEND_BASE_URL,
-            LIVE_GAME_UPDATE_ENDPOINT,
-            (data) => sendDataToRenderer('riot-profile-data', data),
-            overlayIpcSender // 🚨 MODIFICACIÓN QUIRÚRGICA 2: Pasamos el nuevo sender 🚨
-        );
     };
     
-    performPoll();
-    pollingInterval = setInterval(performPoll, 15000); // Tu intervalo original
+    performPoll(); // Ejecutar la primera vez
+    
+    // 🚨 3. (OPCIONAL PERO RECOMENDADO) VELOCIDAD DE SONDEO 🚨
+    // Cambiado a 3 segundos para una mayor reactividad.
+    pollingInterval = setInterval(performPoll, 3000); 
 }
 
 function stopLiveGamePolling() {
@@ -392,15 +426,14 @@ app.on('ready', () => {
             
             // 1. Crear la ventana principal (cierra loginWindow)
             createMainWindow();
-            // 🚨 CORRECCIÓN QUIRÚRGICA: CREAR LA VENTANA DEL OVERLAY 🚨
-            createOverlayWindow(); // <-- ¡ESTA ES LA LÍNEA QUE FALTABA! [cite: 128]
+            createOverlayWindow(); 
             
             // 2. INICIAR EL POLLING CON DELAY
             setTimeout(() => {
-                 console.log('[MAIN-FLOW] Retardo de 1s completado. Iniciando flujo de datos Riot/LCU.');
+                 console.log('[MAIN-FLOW] Retardo de 1.5s completado. Iniciando flujo de datos Riot/LCU.');
                  executeInitialRiotApiFetchAndStartPolling();
                  
-            }, 1000);
+            }, 1500);
         } else {
             console.error('[MAIN-FLOW] ❌ Fallo al obtener perfil. Permanece en Login.');
         }
@@ -408,7 +441,7 @@ app.on('ready', () => {
 
     ipcMain.handle('get-user-data', async () => {
         console.log('[MAIN] El Dashboard está pidiendo los datos del usuario.');
-        const token = store.get('authToken');
+        const token = store.get('userToken');
         if (!token) {
             console.error('[MAIN] No se encontró token para get-user-data');
             return null;
@@ -454,34 +487,7 @@ app.on('ready', () => {
             return { error: errorMessage };
         }
     };
-    
 
-    // 2. Escucha el token cuando el login/registro es exitoso
-    ipcMain.on('save-token', (event, token) => {
-        console.log('[MAIN] Token recibido del login/registro:', token);
-        store.set('authToken', token);
-        
-        // 1. Creamos la ventana principal del dashboard (esto ya lo hacías)
-        createMainWindow(token);
-
-        // 2. ✅ ¡LE DAMOS ARRANQUE AL MOTOR DEL LCU! ✅
-        // Justo después de crear la ventana, iniciamos el monitoreo.
-        // Usamos 'setTimeout' para darle 2 segundos a la ventana para que se dibuje tranquila.
-            setTimeout(() => {
-                if (mainWindow || overlayWindow) {
-                pollLcuDataAndSend(
-                    latestRiotApiData,
-                    BACKEND_BASE_URL,
-                    LIVE_GAME_UPDATE_ENDPOINT,
-                    mainWindow,
-                    overlayWindow
-                ).catch(err => {
-                    // Añadimos un catch aquí por si algo explota dentro de la función
-                    console.error('[MAIN POLLING CATCH] Error en un ciclo de sondeo:', err.message);
-                });
-            }
-        }, 2000); 
-    });
 
     // 🚨 NUEVO HANDLER: Comando LCU genérico para inyección de runas 🚨
     ipcMain.handle('lcu-command', async (event, method, endpoint, payload) => {

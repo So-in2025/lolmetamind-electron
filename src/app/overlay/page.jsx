@@ -1,3 +1,4 @@
+// src/app/overlay/page.jsx - VERSIÓN CORREGIDA
 'use client';
 import React, { useMemo } from 'react';
 import { useLcuData } from '@/hooks/useLcuData';
@@ -6,51 +7,50 @@ import PreGameCoach from '@/components/widgets/PreGameCoach';
 import ChampSelectCoach from '@/components/widgets/ChampSelectCoach';
 import InGameCoach from '@/components/widgets/InGameCoach'; 
 import { FaWifi, FaTools, FaSync } from 'react-icons/fa';
-import { AppStateProvider, useAppState } from '@/context/AppStateContext';
+import { AppStateProvider } from '@/context/AppStateContext';
 import { ScaleProvider } from '@/context/ScaleContext';
 
 function CoachContainer() {
-    const { gamePhase, draftData, LCU_STATUS } = useLcuData();
+    // 1. Obtenemos todos los datos necesarios, incluyendo 'userData', desde el hook central.
+    const { gamePhase, draftData, LCU_STATUS, userData } = useLcuData();
     const { isInteractive, setInteractive } = useInteractiveWidget(false); 
-    const { isLoadingUser, userData } = useAppState(); 
     
-    // 3. Lógica de renderizado condicional de Fases
+    // Ya no se necesita `useAppState` aquí.
+
     const CurrentWidget = useMemo(() => {
         // --- LOGS DE DEPURACIÓN ---
         console.log('[OVERLAY] Evaluando widget. Estado actual:');
-        console.log(` -> isLoadingUser: ${isLoadingUser}`);
         console.log(` -> LCU_STATUS: ${LCU_STATUS}`);
         console.log(` -> userData:`, userData);
         console.log(` -> gamePhase: ${gamePhase}`);
-        console.log(` -> draftData:`, draftData);
-        // -------------------------
-
-        if (isLoadingUser || LCU_STATUS === 'OFFLINE' || !userData) {
-            console.log('[OVERLAY] Condición de corte inicial. No se muestra ningún widget.');
+        
+        // La condición de corte ahora funcionará porque 'userData' llegará con el sondeo.
+        if (LCU_STATUS === 'OFFLINE' || !userData) {
+            console.log('[OVERLAY] Condición de corte: LCU offline o no hay datos de usuario. No se muestra ningún widget.');
             return null;
         }
         
-        // 🚨 Flujo de Coaching Completo de Producción 🚨
+        // 🚨 CAMBIO CLAVE: Pasamos 'userData' como prop a cada widget.
         switch (gamePhase) {
+            case 'Lobby':
             case 'Matchmaking':
             case 'ReadyCheck':
                 console.log('[OVERLAY] RENDER: PreGameCoach');
-                return <PreGameCoach LCU_STATUS={LCU_STATUS} />;
+                return <PreGameCoach LCU_STATUS={LCU_STATUS} userData={userData} />;
             case 'ChampSelect':
                 if (draftData) {
-                    console.log('[OVERLAY] RENDER: ChampSelectCoach con draftData.');
-                    return <ChampSelectCoach draftData={draftData} LCU_STATUS={LCU_STATUS} />;
+                    console.log('[OVERLAY] RENDER: ChampSelectCoach');
+                    return <ChampSelectCoach draftData={draftData} LCU_STATUS={LCU_STATUS} userData={userData} />;
                 }
-                console.log('[OVERLAY] RENDER: Nulo (ChampSelect pero sin draftData)');
                 return null;
             case 'InProgress':
                 console.log('[OVERLAY] RENDER: InGameCoach');
-                return <InGameCoach LCU_STATUS={LCU_STATUS} />;
+                return <InGameCoach LCU_STATUS={LCU_STATUS} userData={userData} />;
             default:
                 console.log(`[OVERLAY] RENDER: Nulo (gamePhase '${gamePhase}' no reconocido)`);
                 return null;
         }
-    }, [gamePhase, draftData, LCU_STATUS, isLoadingUser, userData]);
+    }, [gamePhase, draftData, LCU_STATUS, userData]); // 'userData' está en las dependencias.
 
     const baseClass = "absolute inset-0 transition-all duration-300";
 
@@ -65,7 +65,8 @@ function CoachContainer() {
                 onMouseEnter={() => setInteractive(true)}
                 onMouseLeave={() => setInteractive(false)}
             >
-                {isLoadingUser ? (
+                {/* La lógica de carga ahora se basa en si tenemos 'userData' */}
+                {!userData ? (
                     <FaSync className="animate-spin mr-2" />
                 ) : (
                     <FaWifi className={`mr-2 ${LCU_STATUS === 'ONLINE' ? 'text-lol-blue-accent' : 'text-red-500'}`} />
@@ -85,6 +86,8 @@ function CoachContainer() {
 }
 
 export default function OverlayPage() {
+    // Aunque CoachContainer ya no usa AppState directamente, los widgets hijos sí lo hacen.
+    // Mantenemos AppStateProvider aquí para que toda la aplicación tenga acceso al contexto.
     return (
         <AppStateProvider> 
             <ScaleProvider>

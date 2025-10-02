@@ -1,0 +1,111 @@
+El polling se detiene después del primer ciclo debido a errores no capturados en funciones asíncronas y problemas con el envío de datos a las ventanas.
+
+Causas Principales
+Falta de Manejo de Errores en Funciones Async
+La función performPoll() es asíncrona pero no tiene un bloque try-catch que capture errores. En main.js (línea ~485), se ejecuta sin protección:
+
+javascript
+performPoll()
+pollingInterval = setInterval(performPoll, 15000)
+Si pollLcuDataAndSend() lanza una excepción no capturada, la función falla silenciosamente y el setInterval deja de funcionar.
+
+Envío de Datos Sin Protección en pollLcuDataAndSend
+En lol-client-api.js, la sección de envío de datos a las ventanas no está envuelta en un try-catch global:
+
+javascript
+// --- Envo de datos a las ventanas ---
+if (ipcSender?.webContents) {
+  ipcSender.webContents.send('lcu-state-update', consolidatedData)
+}
+Si mainWindow fue destruida o webContents no está disponible, esto lanza una excepción que detiene todo el polling.
+
+Overlay Window No Disponible
+Los logs muestran: "No se pudo enviar datos al Overlay (overlaySender no válido)". Esto ocurre porque overlayWindow no está lista cuando se intenta usar:
+
+createOverlayWindow() se llama pero la ventana tarda en estar lista
+
+overlayWindow.webContents es null o indefinido durante el primer ciclo
+
+El código intenta acceder a overlayWindow.webContents.send() antes de que esté disponible
+
+Soluciones
+1. Envolver performPoll en Try-Catch
+En main.js, modifica la función startLcuPolling() para capturar errores:
+
+javascript
+const performPoll = async () => {
+  try {
+    if (!latestRiotApiData) {
+      console.warn('[LCU POLLING] No hay datos base de Riot API. Deteniendo polling LCU.')
+      stopLiveGamePolling()
+      return
+    }
+    await pollLcuDataAndSend(
+      latestRiotApiData,
+      BACKENDBASEURL,
+      LIVEGAMEUPDATEENDPOINT,
+      (data) => sendDataToRenderer('riot-profile-data', data),
+      overlayIpcSender
+    )
+  } catch (error) {
+    console.error('[LCU POLLING] Error en ciclo de polling:', error.message)
+    // No detenemos el polling, solo registramos el error
+  }
+}
+2. Agregar Try-Catch Global en pollLcuDataAndSend
+En lol-client-api.js, envuelve toda la función en un bloque try-catch:
+
+javascript
+async function pollLcuDataAndSend(initialRiotApiData, BACKENDBASEURL, LIVEGAMEUPDATEENDPOINT, ipcSender, overlaySender) {
+  try {
+    console.log('\n--- INICIO DE CICLO DE POLLING ---')
+    let consolidatedData = { ...initialRiotApiData }
+    // ... resto del código ...
+
+    // --- Envo de datos a las ventanas ---
+    if (ipcSender?.webContents && !ipcSender.isDestroyed()) {
+      console.log('[POLLING] Enviando datos al DASHBOARD...')
+      ipcSender.webContents.send('lcu-state-update', consolidatedData)
+    } else {
+      console.warn('[POLLING] Dashboard no disponible para envío.')
+    }
+
+    if (overlaySender?.webContents && !overlaySender.isDestroyed()) {
+      console.log('[POLLING] Enviando datos al OVERLAY', overlayPayload)
+      overlaySender.webContents.send('lcu-state-update', overlayPayload)
+    } else {
+      console.warn('[POLLING] Overlay no disponible (puede estar cargando).')
+    }
+
+    console.log('--- FIN DE CICLO DE POLLING ---')
+  } catch (error) {
+    console.error('[POLLING] Error crítico en ciclo:', error.message)
+    // No lanzamos el error para que el setInterval continúe
+  }
+}
+3. Verificar Estado de las Ventanas
+Añade validación para verificar que las ventanas no estén destruidas antes de enviar datos:
+
+javascript
+const overlayIpcSender = (data) => {
+  if (overlayWindow && !overlayWindow.isDestroyed() && overlayWindow.webContents) {
+    overlayWindow.webContents.send('lcu-state-update', data)
+  }
+}
+4. Agregar Delay para Overlay Window
+En main.js, espera a que el overlay esté listo antes de iniciar el polling:
+
+javascript
+ipcMain.on('user-logged-in', async (event, userData) => {
+  // ... código existente ...
+  
+  // Crear overlay y esperar a que esté listo
+  createOverlayWindow()
+  
+  // Dar tiempo para que ambas ventanas se inicialicen
+  setTimeout(() => {
+    console.log('[MAIN-FLOW] Retardo completado. Iniciando flujo de datos Riot/LCU.')
+    executeInitialRiotApiFetchAndStartPolling()
+  }, 2000) // Aumentar de 1000 a 2000ms
+})
+Estas correcciones garantizarán que el polling continúe ejecutándose cada 15 segundos sin interrupciones y que los overlays de coaching aparezcan correctamente.

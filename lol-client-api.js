@@ -124,98 +124,6 @@ async function fetchRiotApiData() {
     }
     await delay(200);
 
-    // ==========================================================
-    // PASO 2: OBTENER Summoner ID Cifrado (SOLO SI NO SE OBTUVO DEL LCU)
-    // ==========================================================
-    if (puuid && !encryptedSummonerId) {
-        try {
-            console.log(`\n[TEST 2/3 - Summoner V4] 🔑 Buscando Summoner ID en ${platformId}...`);
-            const summonerResponse = await axios.get(
-                `https://${platformId.toLowerCase()}.api.riotgames.com/lol/summoner/v4/summoners/by-puuid/${puuid}`,
-                { headers: { 'X-Riot-Token': riotApiKey }, httpsAgent: lcuAgent }
-            );
-            
-            // Intentar capturar 'id' (Puede ser undefined en clave de desarrollo)
-            encryptedSummonerId = summonerResponse.data.id; 
-
-            if (!encryptedSummonerId) {
-                console.warn(`[TEST 2/3] ⚠️ ADVERTENCIA: Summoner ID no obtenido (Clave de Desarrollo). Funcionalidad Spectator/Runas limitada.`);
-                consolidatedData.error = 'Clave de Desarrollo (24h) limita la obtención de IDs. Funcionalidad avanzada limitada.';
-            } else {
-                 console.log(`[TEST 2/3] ✅ ÉXITO: Summoner ID cifrado obtenido.`);
-            }
-        } catch (error) {
-            console.warn(`[TEST 2/3] ❌ Fallo al obtener Summoner ID. Status: ${error.response?.status || 'Network'}. Saltando Masteries/Spectator.`);
-            encryptedSummonerId = null;
-        }
-    }
-    await delay(200);
-
-
-    // ==========================================================
-    // PASO 3: LLAMADAS EN PARALELO (Rank, Mastery, Match History)
-    // ==========================================================
-    
-    // Las llamadas que requieren encryptedSummonerId (Rank/Mastery/Spectator) deben ser condicionales.
-    
-    const parallelCalls = [
-        // 1. Ligas (Requiere Summoner ID)
-        encryptedSummonerId 
-            ? axios.get(`https://${platformId.toLowerCase()}.api.riotgames.com/lol/league/v4/entries/by-summoner/${encryptedSummonerId}`, { headers: { 'X-Riot-Token': riotApiKey } })
-            : Promise.resolve({ status: 400, reason: 'ID_NULL' }),
-        
-        // 2. Maestrías (Requiere Summoner ID)
-        encryptedSummonerId
-            ? axios.get(`https://${platformId.toLowerCase()}.api.riotgames.com/lol/champion-mastery/v4/champion-masteries/by-summoner/${encryptedSummonerId}`, { headers: { 'X-Riot-Token': riotApiKey } })
-            : Promise.resolve({ status: 400, reason: 'ID_NULL' }),
-
-        // 3. Historial de Partidas (Requiere PUUID) - CRÍTICO, SIEMPRE DEBE FUNCIONAR.
-        axios.get(`https://${regionalRouting.toLowerCase()}.api.riotgames.com/lol/match/v5/matches/by-puuid/${puuid}/ids?start=0&count=10`, { headers: { 'X-Riot-Token': riotApiKey } }),
-
-        // 4. Partida Activa (Requiere Summoner ID)
-        encryptedSummonerId
-            ? axios.get(`https://${platformId.toLowerCase()}.api.riotgames.com/lol/spectator/v5/active-games/by-summoner/${encryptedSummonerId}`, { headers: { 'X-Riot-Token': riotApiKey } })
-            : Promise.resolve({ status: 400, reason: 'ID_NULL' }),
-    ];
-
-    try {
-        const results = await Promise.allSettled(parallelCalls);
-
-        // [0] Ligas
-        if (results[0].status === 'fulfilled' && results[0].value?.data) {
-            consolidatedData.summonerRankData = results[0].value.data;
-        } else if (results[0].reason?.reason !== 'ID_NULL') {
-            console.warn(`[RIOT API] ⚠️ Fallo al obtener datos de Liga. Status: ${results[0].reason?.response?.status || 'Network Error'}`);
-        }
-
-        // [1] Maestrías
-        if (results[1].status === 'fulfilled' && results[1].value?.data) {
-            consolidatedData.championMasteries = results[1].value.data;
-        } else if (results[1].reason?.reason !== 'ID_NULL') {
-            console.warn(`[RIOT API] ⚠️ Fallo al obtener Maestrías.`);
-        }
-        
-        // [2] Historial de Partidas (PUUID)
-        if (results[2].status === 'fulfilled' && results[2].value?.data) {
-            consolidatedData.matchHistory = results[2].value.data;
-            console.log(`[RIOT API] ✅ Historial de Partidas obtenido (${consolidatedData.matchHistory.length} IDs).`);
-        } else {
-            console.error(`[RIOT API] ❌ Fallo CRÍTICO al obtener Historial de Partidas (Match V5).`);
-            consolidatedData.error = consolidatedData.error || 'No se pudo cargar el historial de partidas (Match V5).';
-        }
-
-        // [3] Partida Activa
-        if (results[3].status === 'fulfilled' && results[3].value?.data) {
-            consolidatedData.activeGame = results[3].value.data;
-            console.log(`[RIOT API] ✅ Partida activa encontrada.`);
-        } else if (results[3].reason?.response?.status !== 404 && results[3].reason?.reason !== 'ID_NULL') {
-            console.warn(`[RIOT API] ⚠️ Fallo al obtener Partida Activa. (404 esperado si no está jugando)`);
-        }
-
-    } catch (parallelError) {
-        console.error('[RIOT API] ❌ Error inesperado durante las llamadas en paralelo:', parallelError);
-    }
-
     console.log('[RIOT API] ✅ Batería de pruebas completada. Devolviendo datos consolidados.');
     return {
         puuid,
@@ -282,7 +190,7 @@ async function fetchLiveGameData() {
 }
 
 
-  async function pollLcuDataAndSend(initialRiotApiData, BACKEND_BASE_URL, LIVE_GAME_UPDATE_ENDPOINT, ipcSender, overlaySender) { 
+ async function pollLcuDataAndSend(initialRiotApiData, BACKEND_BASE_URL, LIVE_GAME_UPDATE_ENDPOINT, ipcSender, overlaySender) {
     console.log('\n--- INICIO DE CICLO DE POLLING ---');
     let consolidatedData = { ...initialRiotApiData };
     let lcuModeActive = false;
@@ -300,27 +208,32 @@ async function fetchLiveGameData() {
             };
 
             const gameflowResponse = await axios.get(`${LCU_BASE_URL}/lol-gameflow/v1/session`, options);
-            
+
             if (gameflowResponse.status === 200 && gameflowResponse.data?.phase) {
                 const phase = gameflowResponse.data.phase;
                 console.log(`[POLLING] Fase detectada: ${phase}`);
-                
-                if (['ChampSelect', 'InProgress'].includes(phase)) {
+
+                // 🚨 MEJORA: Se amplía la lista de fases consideradas "activas" para el coach.
+                const activePhases = ['Lobby', 'Matchmaking', 'ReadyCheck', 'ChampSelect', 'InProgress'];
+
+                if (activePhases.includes(phase)) {
                     lcuModeActive = true;
                     console.log(`[POLLING] Fase activa detectada (${phase}). Entrando en modo Realtime.`);
-                    const liveClientData = phase === 'InProgress' ? await fetchLiveGameData() : null;
                     
+                    // Esta lógica se mantiene: solo busca datos de partida si la fase es 'InProgress'.
+                    const liveClientData = phase === 'InProgress' ? await fetchLiveGameData() : null;
+
                     consolidatedData = {
                         ...consolidatedData,
                         mode: 'Realtime',
-                        gameflow: gameflowResponse.data,
+                        gameflow: gameflowResponse.data, // Crucial para tener siempre la fase actual.
                         liveData: liveClientData || { status: 'NotAvailable', reason: 'Live client data no disponible (Vanguard activado o no en partida)' },
                     };
-                    
+
                     if (phase === 'InProgress' && liveClientData?.activePlayer) {
                         const active = liveClientData.activePlayer;
                         const currentCS = active.cs ?? active.scores?.creepScore;
-                        
+
                         console.log('--- DETALLES LIVE GAME ---');
                         console.log(`  -> Tiempo: ${liveClientData.gameData.gameTime}s`);
                         console.log(`  -> Jugador: ${active.summonerName}`);
@@ -332,9 +245,6 @@ async function fetchLiveGameData() {
         } catch (error) {
             if (error.response?.status !== 404) {
                 console.warn(`[POLLING] ⚠️  No se pudo obtener sesión de LCU. Error: ${error.message}`);
-            } else {
-                // Este log es normal si estás en el cliente pero no en partida, lo comento para no ensuciar la terminal.
-                // console.log(`[POLLING] ℹ️ No hay sesión de juego activa (404 esperado).`);
             }
         }
     } else {
@@ -346,30 +256,31 @@ async function fetchLiveGameData() {
     }
     console.log(`[POLLING] Modo final determinado: ${consolidatedData.mode}`);
 
-    // --- Envío de datos a las ventanas ---
-    if (ipcSender && ipcSender.webContents) {
+    // --- Envío de datos al Dashboard ---
+    if (ipcSender) {
         console.log('[POLLING] Enviando datos al DASHBOARD...');
-        ipcSender.webContents.send('lcu-state-update', consolidatedData);
+        ipcSender(consolidatedData);
     } else {
         console.warn('[POLLING] ⚠️  No se pudo enviar datos al Dashboard (ipcSender no válido).');
     }
 
+    // 🚨 MEJORA: Se asegura de que la fase y el estado se envíen correctamente al overlay.
     const gameFlowPhase = consolidatedData.gameflow?.phase || 'None';
     const overlayPayload = {
-        lcuStatus: lcuModeActive || gameFlowPhase !== 'None' ? 'ONLINE' : 'OFFLINE',
-        gamePhase: gameFlowPhase,
+        lcuStatus: lcuModeActive ? 'ONLINE' : 'OFFLINE',
+        gamePhase: lcuModeActive ? gameFlowPhase : 'None',
         draftData: gameFlowPhase === 'ChampSelect' ? consolidatedData.gameflow : null,
     };
 
-    if (overlaySender && overlaySender.webContents) {
+    if (overlaySender) {
         console.log('[POLLING] Enviando datos al OVERLAY:', overlayPayload);
-        overlaySender.webContents.send('lcu-state-update', overlayPayload);
+        overlaySender(overlayPayload);
     } else {
         console.warn('[POLLING] ⚠️  No se pudo enviar datos al Overlay (overlaySender no válido).');
     }
-    
+
     // --- Envío de datos al Backend ---
-    const userToken = store.get('authToken'); // Asegurándonos de usar 'authToken'
+    const userToken = store.get('userToken');
     if (userToken) {
         try {
             await axios.post(
@@ -377,10 +288,11 @@ async function fetchLiveGameData() {
                 consolidatedData,
                 { headers: { 'Authorization': `Bearer ${userToken}` }, httpsAgent: lcuAgent, timeout: 5000 }
             );
-            // console.log(`[POLLING] ✅ Datos enviados al backend.`);
         } catch (backendError) {
             console.error(`[POLLING] ❌ ERROR al enviar datos al backend: ${backendError.message}`);
         }
+    } else {
+        console.warn('[POLLING] ⚠️ No se encontró userToken para enviar datos al backend.');
     }
     console.log('--- FIN DE CICLO DE POLLING ---\n');
 }

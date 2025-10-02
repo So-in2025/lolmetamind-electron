@@ -34,7 +34,7 @@ const CloseButton = () => (
 
 
 export default function LoginScreen() {
-    const { setFlowState, AppFlowState, setUserData } = useAppState();
+    const { setAppState } = useAppState();
     
     // ESTADOS COMPLETOS
     const [isRegister, setIsRegister] = useState(false);
@@ -150,11 +150,18 @@ export default function LoginScreen() {
 
             // --- LÓGICA DE ÉXITO UNIFICADA ---
             // Si llegamos aquí, significa que tenemos un token (tanto para login como para registro).
+            console.log("[FRONTEND] ✅ Autenticación exitosa. Notificando a Electron...");
 
-            // 1. Guardamos el token de forma segura en Electron.
-            await window.electronAPI.saveToken(data.token);
-
-            // 2. Actualizamos el estado de la aplicación para mostrar el dashboard. ¡Esta es la clave!
+            // 1. 🔑 ¡LA CLAVE! Notificar al proceso principal de Electron que el login fue exitoso.
+            //    Le pasamos el username y el token, que es lo que 'main.js' necesita.
+            if (window.electronAPI) {
+                window.electronAPI.notifyLoginSuccess({ 
+                    username: username, 
+                    token: data.token 
+                });
+            }
+            // 2. Actualizamos el estado de React. Electron se encargará de cambiar la ventana,
+            //    pero esto es bueno para la consistencia interna de React.
             setAppState(prevState => ({
                 ...prevState,
                 isAuthenticated: true,

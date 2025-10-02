@@ -1,17 +1,24 @@
+// src/components/widgets/PreGameCoach.jsx - VERSIÓN CORREGIDA
 'use client';
 import React, { useEffect, useState } from 'react';
 import { FaSync, FaBrain, FaMicrophoneAlt } from 'react-icons/fa';
 import { useWebSocketCoach } from '@/hooks/useWebSocketCoach';
 import { useTTS } from '@/hooks/useTTS';
 import { useInteractiveWidget } from '@/hooks/useInteractiveWidget';
-import { useAppState } from '@/context/AppStateContext';
+// 🚨 'useAppState' ya no es necesario aquí.
+// import { useAppState } from '@/context/AppStateContext';
 
-export default function PreGameCoach({ LCU_STATUS }) {
+// 🚨 1. ACEPTAMOS 'userData' COMO PROP
+//    Ahora el componente recibe los datos del usuario directamente de su padre (CoachContainer).
+export default function PreGameCoach({ LCU_STATUS, userData }) {
     console.log('[PreGameCoach] --- RENDERIZANDO ---');
     console.log('[PreGameCoach] Props recibidas -> LCU_STATUS:', LCU_STATUS);
+    console.log('[PreGameCoach] Props recibidas -> userData:', userData);
 
-    const { userData, isFirstTimeUser, isLoadingUser } = useAppState();
+    // 🚨 2. ELIMINAMOS LA LLAMADA A 'useAppState'
+    // const { userData, isFirstTimeUser, isLoadingUser } = useAppState();
 
+    // 'useWebSocketCoach' ahora usa el 'userData' que viene de las props.
     const { aiAdvice, wsStatus, sendQueueUpdate } = useWebSocketCoach({
         userData,
         targetEvent: 'QUEUE_ADVICE'
@@ -25,15 +32,16 @@ export default function PreGameCoach({ LCU_STATUS }) {
 
     useEffect(() => {
         console.log('[PreGameCoach] useEffect [wsStatus, userData] -> Verificando condiciones para enviar actualización de cola.');
-        if (wsStatus === 'CONNECTED' && !adviceSpoken && userData && !isLoadingUser) {
+        // 🚨 La condición se simplifica: ya no necesitamos 'isLoadingUser'.
+        if (wsStatus === 'CONNECTED' && !adviceSpoken && userData) {
             console.log('[PreGameCoach] Condiciones cumplidas. Enviando "QueueUpdate" al WebSocket.');
             sendQueueUpdate();
             setIsLoadingAdvice(true);
             setAdviceSpoken(true); // Para que no se envíe en cada re-render
         } else {
-            console.log('[PreGameCoach] Condiciones para "QueueUpdate" no cumplidas.');
+            console.log('[PreGameCoach] Condiciones para "QueueUpdate" no cumplidas (WS no conectado, ya enviado, o sin userData).');
         }
-    }, [wsStatus, adviceSpoken, sendQueueUpdate, userData, isLoadingUser]);
+    }, [wsStatus, adviceSpoken, sendQueueUpdate, userData]);
 
     useEffect(() => {
         console.log('[PreGameCoach] useEffect [aiAdvice] -> Verificando si hay nuevo consejo de la IA.');
@@ -54,36 +62,34 @@ export default function PreGameCoach({ LCU_STATUS }) {
                 speak(welcomeText);
             }
         } else {
-            console.log('[PreGameCoach] No hay un nuevo consejo de IA válido para hablar.');
+            // No hay consejo nuevo o ya no estamos en la fase de carga de consejo.
         }
     }, [aiAdvice, speak, isLoadingAdvice, userData]);
 
     const isReady = aiAdvice && LCU_STATUS === 'ONLINE';
-    console.log('[PreGameCoach] ¿Está listo para mostrar contenido? -> isReady:', isReady);
-    console.log('[PreGameCoach] ¿Está cargando el consejo? -> isLoadingAdvice:', isLoadingAdvice);
-
+    
     return (
         <div
             className={`transition-all duration-300 max-w-xl mx-auto p-5 rounded-xl shadow-lol-lg ${isInteractive ? 'bg-lol-blue-medium/95 border-2 border-lol-blue-accent' : 'bg-lol-blue-medium/80 border border-lol-gold-dark'}`}
             onMouseEnter={() => setInteractive(true)}
             onMouseLeave={() => setInteractive(false)}
         >
+            {/* El JSX ahora usará el 'userData' de las props, mostrando el nombre y signo correctos. */}
             <h2 className="font-display text-2xl font-bold text-lol-gold flex items-center mb-3">
                 <FaBrain className="mr-2 text-lol-blue-accent" />
                 COACH EN COLA: {userData?.summonerName || 'Invocador'} ({userData?.zodiacSign || 'N/A'})
             </h2>
 
+            {/* La lógica de renderizado condicional se mantiene, pero ahora se resolverá correctamente. */}
             {!isReady || isLoadingAdvice ? (
                 <div className="text-center p-4 bg-lol-blue-dark rounded">
-                    {console.log('[PreGameCoach] RENDER: Mostrando pantalla de carga.')}
                     <FaSync className="animate-spin text-lol-gold mx-auto text-3xl mb-3" />
                     <p className="text-lol-gold-light">
-                        {isFirstTimeUser ? 'Generando perfil inicial...' : 'Esperando respuesta de MetaMind...'} ({wsStatus})
+                        Esperando respuesta de MetaMind... ({wsStatus})
                     </p>
                 </div>
             ) : (
                 <div className="space-y-4">
-                    {console.log('[PreGameCoach] RENDER: Mostrando contenido del consejo de IA.')}
                     <div className="p-3 bg-lol-blue-dark rounded border-l-4 border-lol-gold">
                         <h3 className="text-lol-gold font-bold mb-1">{aiAdvice.playstyleAnalysis.title}</h3>
                         <p className="text-lol-gold-light text-sm italic">Estilo: {aiAdvice.playstyleAnalysis.style}</p>
@@ -93,7 +99,6 @@ export default function PreGameCoach({ LCU_STATUS }) {
                     <button 
                         onClick={() => {
                             const text = `Tu diagnóstico es ${aiAdvice.playstyleAnalysis.style}.`;
-                            console.log('[PreGameCoach] Botón "REPETIR" presionado. Hablando:', text);
                             speak(text);
                         }} 
                         className="w-full py-2 bg-lol-blue-accent hover:bg-lol-blue-medium font-bold rounded text-lol-blue-dark transition-colors"

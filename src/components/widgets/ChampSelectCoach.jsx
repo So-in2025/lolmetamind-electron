@@ -1,13 +1,14 @@
+// src/components/widgets/ChampSelectCoach.jsx - VERSIÓN CORREGIDA
 import React, { useEffect, useMemo, useState } from 'react';
 import { useWebSocketCoach } from '@/hooks/useWebSocketCoach';
 import { useTTS } from '@/hooks/useTTS';
 import { useInteractiveWidget } from '@/hooks/useInteractiveWidget';
 import RuneInjector from './RuneInjector';
 import { FaMicrophoneAlt, FaSync, FaRedo, FaHandPointer, FaStar, FaCircle } from 'react-icons/fa';
-import { useAppState } from '@/context/AppStateContext';
+// 🚨 'useAppState' ya no es necesario aquí.
+// import { useAppState } from '@/context/AppStateContext';
 
 const RunePerk = ({ perkId, isPrimary }) => {
-    // Este componente es simple, no necesita logs por ahora.
     const iconClass = isPrimary ? 'text-lol-gold' : 'text-lol-blue-accent';
     const Icon = isPrimary ? FaStar : FaCircle;
     return (
@@ -17,13 +18,17 @@ const RunePerk = ({ perkId, isPrimary }) => {
     );
 };
 
-export default function ChampSelectCoach({ draftData, LCU_STATUS }) {
+// 🚨 1. ACEPTAMOS 'userData' COMO PROP
+export default function ChampSelectCoach({ draftData, LCU_STATUS, userData }) {
     console.log('[ChampSelectCoach] --- RENDERIZANDO ---');
     console.log('[ChampSelectCoach] Props recibidas -> LCU_STATUS:', LCU_STATUS);
     console.log('[ChampSelectCoach] Props recibidas -> draftData:', draftData);
+    console.log('[ChampSelectCoach] Props recibidas -> userData:', userData);
 
-    const { userData } = useAppState();
+    // 🚨 2. ELIMINAMOS LA LLAMADA A 'useAppState'
+    // const { userData } = useAppState();
     
+    // El hook 'useWebSocketCoach' ahora recibe el 'userData' de las props.
     const { aiAdvice, wsStatus, sendChampSelectUpdate } = useWebSocketCoach({
         userData,
         targetEvent: 'CHAMP_SELECT_ADVICE'
@@ -31,49 +36,43 @@ export default function ChampSelectCoach({ draftData, LCU_STATUS }) {
     const { speak } = useTTS();
     const { isInteractive, setInteractive } = useInteractiveWidget(false);
     const [lastDraftData, setLastDraftData] = useState(null);
+    const [lastSpokenAdvice, setLastSpokenAdvice] = useState(null); // Para no repetir el TTS
 
     // CRÍTICO: Enviar actualización de Draft cuando cambian los picks/bans
     useEffect(() => {
         console.log('[ChampSelectCoach] useEffect [draftData] -> Verificando si el draft cambió.');
         const draftStateChanged = JSON.stringify(draftData) !== JSON.stringify(lastDraftData);
         
-        if (draftData && draftStateChanged) {
+        // Solo enviar si hay datos, el estado cambió y el WS está conectado y tenemos usuario
+        if (draftData && draftStateChanged && wsStatus === 'CONNECTED' && userData) {
             console.log('[ChampSelectCoach] ¡El draft cambió! Enviando actualización al WebSocket.');
             sendChampSelectUpdate(draftData);
             setLastDraftData(draftData);
         } else {
-            console.log('[ChampSelectCoach] El draft no ha cambiado o no hay datos.');
+            // El draft no ha cambiado o faltan condiciones.
         }
-    }, [draftData, lastDraftData, sendChampSelectUpdate]);
+    }, [draftData, lastDraftData, sendChampSelectUpdate, wsStatus, userData]);
 
     // Lógica para TTS cuando llega un nuevo consejo
     useEffect(() => {
         console.log('[ChampSelectCoach] useEffect [aiAdvice] -> Verificando si hay nuevo consejo de la IA.');
-        if (aiAdvice?.champion && aiAdvice?.runes?.name) {
+        const newAdviceText = aiAdvice?.champion; // Usamos el nombre del campeón como identificador único del consejo
+        if (newAdviceText && newAdviceText !== lastSpokenAdvice) {
             const ttsText = `Recomendación para ${aiAdvice.champion}. Runas: ${aiAdvice.runes.name}. Prioridad: ${aiAdvice.earlyGame.split('.')[0]}.`;
             console.log('[ChampSelectCoach] Nuevo consejo recibido. Texto para hablar:', ttsText);
             speak(ttsText);
-        } else {
-            console.log('[ChampSelectCoach] No hay un nuevo consejo de IA válido para hablar.');
-            console.log('[ChampSelectCoach] aiAdvice actual:', aiAdvice);
+            setLastSpokenAdvice(newAdviceText); // Guardamos el identificador del consejo que acabamos de decir
         }
-    }, [aiAdvice, speak]);
+    }, [aiAdvice, speak, lastSpokenAdvice]);
 
     const handleReanalyze = () => {
         if (draftData) {
             console.log('[ChampSelectCoach] Botón "Forzar Re-Análisis" presionado. Enviando datos del draft...');
-            sendChampSelectUpdate(draftData, true); // Forzar re-análisis
+            sendChampSelectUpdate(draftData); // No necesitamos 'true', la función ya envía los datos
         } else {
             console.log('[ChampSelectCoach] Botón "Forzar Re-Análisis" presionado, pero no hay draftData.');
         }
     };
-
-    const localPlayer = useMemo(() => {
-        console.log('[ChampSelectCoach] useMemo [draftData] -> Calculando localPlayer.');
-        return draftData?.myTeam?.find(p => p.isLocalPlayer);
-    }, [draftData]);
-
-    console.log('[ChampSelectCoach] Renderizando la UI. Estado de la IA:', wsStatus);
 
     return (
         <div
@@ -96,22 +95,23 @@ export default function ChampSelectCoach({ draftData, LCU_STATUS }) {
             {/* Contenido Principal */}
             {aiAdvice ? (
                 <div className="space-y-3">
-                    {console.log('[ChampSelectCoach] RENDER: Mostrando contenido CON consejo de IA.')}
                     <div className="text-center p-2 bg-lol-blue-medium rounded-t-lg">
                         <h3 className="text-lg font-bold text-lol-gold">Recomendación para: <span className="text-lol-blue-accent">{aiAdvice.champion}</span></h3>
                     </div>
 
                     {/* Botón para Inyectar Runas */}
-                    {isInteractive && <RuneInjector runeData={aiAdvice.runes} />}
+                    {isInteractive && aiAdvice.runes && <RuneInjector runeData={aiAdvice.runes} />}
 
                     {/* Detalles de Runas */}
-                    <div className="p-3 bg-lol-blue-dark rounded border-l-4 border-lol-gold">
-                        <h3 className="text-lol-gold font-bold mb-1">RUNAS CLAVE ({aiAdvice.runes.name})</h3>
-                        <div className="flex space-x-2 mt-2">
-                            {aiAdvice.runes.selectedPerkIds.slice(0, 3).map(id => <RunePerk key={id} perkId={id} isPrimary={true} />)}
-                            <div className="text-lol-gold-light/50">...</div>
+                    {aiAdvice.runes?.selectedPerkIds && (
+                        <div className="p-3 bg-lol-blue-dark rounded border-l-4 border-lol-gold">
+                            <h3 className="text-lol-gold font-bold mb-1">RUNAS CLAVE ({aiAdvice.runes.name})</h3>
+                            <div className="flex space-x-2 mt-2">
+                                {/* Aseguramos que el array exista antes de hacer slice */}
+                                {(aiAdvice.runes.selectedPerkIds || []).slice(0, 4).map(id => <RunePerk key={id} perkId={id} isPrimary={id === aiAdvice.runes.primaryStyleId} />)}
+                            </div>
                         </div>
-                    </div>
+                    )}
 
                     {/* Consejo de Early Game */}
                     <div className="p-3 bg-lol-blue-dark rounded border-l-4 border-lol-gold">
@@ -122,9 +122,8 @@ export default function ChampSelectCoach({ draftData, LCU_STATUS }) {
                 </div>
             ) : (
                 <div className="text-center p-6 bg-lol-blue-dark rounded">
-                    {console.log('[ChampSelectCoach] RENDER: Mostrando pantalla de carga (esperando consejo de IA).')}
                     <FaSync className="animate-spin text-lol-gold mx-auto text-3xl mb-3" />
-                    <p className="text-lol-gold-light">Analizando Draft. Esperando respuesta de IA ({wsStatus})...</p>
+                    <p className="text-lol-gold-light">Analizando Draft... Esperando respuesta de la IA ({wsStatus}).</p>
                 </div>
             )}
         </div>

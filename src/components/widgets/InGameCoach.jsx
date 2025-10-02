@@ -1,22 +1,26 @@
+// src/components/widgets/InGameCoach.jsx - VERSIÓN CORREGIDA
 import React, { useEffect, useState } from 'react';
 import { FaEye, FaVolumeUp, FaSync, FaExclamationTriangle } from 'react-icons/fa';
 import { useTTS } from '@/hooks/useTTS';
 import { useInteractiveWidget } from '@/hooks/useInteractiveWidget';
 import { useWebSocketCoach } from '@/hooks/useWebSocketCoach';
-import { useAppState } from '@/context/AppStateContext';
+// 🚨 'useAppState' ya no es necesario aquí.
+// import { useAppState } from '@/context/AppStateContext';
 
 /**
  * Widget de Coaching en Partida (Fase InProgress).
- * Este HUD está activo y escuchando consejos tácticos periódicos del backend.
  */
-export default function InGameCoach({ LCU_STATUS }) {
+// 🚨 1. ACEPTAMOS 'userData' COMO PROP
+export default function InGameCoach({ LCU_STATUS, userData }) {
     console.log('[InGameCoach] --- RENDERIZANDO ---');
     console.log('[InGameCoach] Props recibidas -> LCU_STATUS:', LCU_STATUS);
+    console.log('[InGameCoach] Props recibidas -> userData:', userData);
 
-    const { userData } = useAppState();
+    // 🚨 2. ELIMINAMOS LA LLAMADA A 'useAppState'
+    // const { userData } = useAppState();
     
-    // Este hook WS pide el evento 'IN_GAME_ADVICE' (que el backend envia cada ~30s)
-    const { aiAdvice, wsStatus, sendMessage } = useWebSocketCoach({
+    // El hook 'useWebSocketCoach' ahora recibe el 'userData' de las props.
+    const { aiAdvice, wsStatus } = useWebSocketCoach({
         userData,
         targetEvent: 'IN_GAME_ADVICE'
     });
@@ -28,41 +32,29 @@ export default function InGameCoach({ LCU_STATUS }) {
 
     console.log('[InGameCoach] Estado actual del WebSocket:', wsStatus);
     
-    // 🚨 Polling de envío de datos de juego a la IA (Lo hará tu LCU Core)
+    // 🚨 NOTA IMPORTANTE: Este useEffect es un placeholder.
+    // La lógica real de envío de datos en partida ya está en tu 'lol-client-api.js'.
+    // Este bloque de React no necesita hacer nada, ya que el backend de Electron
+    // es el que proactivamente envía los datos a tu servidor de IA en cada ciclo de sondeo.
+    // Podemos eliminar la simulación.
     useEffect(() => {
-        console.log('[InGameCoach] useEffect [LCU_STATUS, wsStatus, userData] -> Verificando condiciones para el polling.');
-        if (LCU_STATUS === 'ONLINE' && wsStatus === 'CONNECTED' && userData) {
-            console.log('[InGameCoach] Condiciones cumplidas. Iniciando intervalo de polling (simulado).');
-            const interval = setInterval(() => {
-                console.log("[InGameCoach] Simulando envío de datos de partida al backend...");
-                // 🚨 CRÍTICO: Aquí debes usar TU lol-client-api.js para obtener el estado
-                // y pasarlo al backend para que la IA lo analice.
-                // Ejemplo: const gameState = await getGameData(); sendMessage({ type: 'inGameUpdate', payload: gameState });
-            }, 30000); // Cada 30 segundos, como ejemplo
+        console.log('[InGameCoach] Este widget está en modo de escucha pasiva. El sondeo lo realiza el Core de Electron.');
+    }, []);
 
-            return () => {
-                console.log('[InGameCoach] Limpiando intervalo de polling.');
-                clearInterval(interval);
-            };
-        } else {
-            console.log('[InGameCoach] Condiciones para el polling no cumplidas.');
-        }
-    }, [LCU_STATUS, wsStatus, userData, sendMessage]);
-
-    // Actualizar y hablar cuando llega un nuevo consejo
+    // Actualizar y hablar cuando llega un nuevo consejo desde el WebSocket.
     useEffect(() => {
         console.log('[InGameCoach] useEffect [aiAdvice] -> Verificando si hay nuevo consejo de la IA.');
-        if (aiAdvice && aiAdvice.realtimeAdvice) {
+        // Añadimos una comprobación para no repetir el mismo consejo hablado
+        if (aiAdvice?.realtimeAdvice && aiAdvice.realtimeAdvice !== lastAdvice?.realtimeAdvice) {
             console.log('[InGameCoach] ¡Nuevo consejo de IA recibido!', aiAdvice);
             setLastAdvice(aiAdvice);
             setLastAdviceTime(Date.now());
             console.log('[InGameCoach] Texto para hablar:', aiAdvice.realtimeAdvice);
             speak(aiAdvice.realtimeAdvice);
         } else {
-            console.log('[InGameCoach] No hay un nuevo consejo de IA válido para hablar.');
-            console.log('[InGameCoach] aiAdvice actual:', aiAdvice);
+             // El consejo es el mismo que el anterior o es nulo.
         }
-    }, [aiAdvice, speak]);
+    }, [aiAdvice, speak, lastAdvice]); // Añadimos lastAdvice a las dependencias
 
     return (
         <div 
@@ -77,7 +69,6 @@ export default function InGameCoach({ LCU_STATUS }) {
 
             {wsStatus !== 'CONNECTED' ? (
                 <div className="text-center p-3 text-red-400">
-                    {console.log('[InGameCoach] RENDER: Mostrando estado de WS Desconectado.')}
                     <FaExclamationTriangle className="mx-auto text-2xl mb-1" />
                     <p className="text-sm">WS Desconectado ({wsStatus})</p>
                 </div>
@@ -85,24 +76,21 @@ export default function InGameCoach({ LCU_STATUS }) {
                 <div className="space-y-2">
                     {lastAdvice ? (
                         <div className="p-3 bg-lol-blue-dark rounded border-l-4 border-red-500">
-                            {console.log('[InGameCoach] RENDER: Mostrando el último consejo recibido.')}
-                            <p className="text-lol-gold-light text-sm italic">{lastAdvice.realtimeAdvice}</p>
+                            <p className="text-lol-gold-light text-sm italic">"{lastAdvice.realtimeAdvice}"</p>
                             <p className={`text-center font-bold mt-1 text-lg ${lastAdvice.priorityAction === 'RETREAT' ? 'text-red-500' : 'text-lol-blue-accent'}`}>
                                 {lastAdvice.priorityAction} ({new Date(lastAdviceTime).toLocaleTimeString()})
                             </p>
                         </div>
                     ) : (
                         <div className="text-center p-3 text-lol-gold-light">
-                            {console.log('[InGameCoach] RENDER: Mostrando pantalla de carga (esperando consejo).')}
                             <FaSync className="animate-spin text-lol-gold mx-auto text-2xl mb-1" />
-                            <p className="text-sm">Escuchando la Grieta... (Próximo análisis en 30s)</p>
+                            <p className="text-sm">Escuchando la Grieta...</p>
                         </div>
                     )}
                     
                     <button 
                         onClick={() => {
                             const text = lastAdvice?.realtimeAdvice || "Esperando consejo táctico.";
-                            console.log('[InGameCoach] Botón "REPETIR" presionado. Hablando:', text);
                             speak(text);
                         }} 
                         className="w-full py-1 bg-lol-blue-accent hover:bg-lol-blue-medium font-bold rounded text-lol-blue-dark text-sm transition-colors"
