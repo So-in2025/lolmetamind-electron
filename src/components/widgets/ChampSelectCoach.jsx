@@ -7,6 +7,7 @@ import { FaMicrophoneAlt, FaSync, FaRedo, FaHandPointer, FaStar, FaCircle } from
 import { useAppState } from '@/context/AppStateContext';
 
 const RunePerk = ({ perkId, isPrimary }) => {
+    // Este componente es simple, no necesita logs por ahora.
     const iconClass = isPrimary ? 'text-lol-gold' : 'text-lol-blue-accent';
     const Icon = isPrimary ? FaStar : FaCircle;
     return (
@@ -17,8 +18,12 @@ const RunePerk = ({ perkId, isPrimary }) => {
 };
 
 export default function ChampSelectCoach({ draftData, LCU_STATUS }) {
-    const { userData } = useAppState();
+    console.log('[ChampSelectCoach] --- RENDERIZANDO ---');
+    console.log('[ChampSelectCoach] Props recibidas -> LCU_STATUS:', LCU_STATUS);
+    console.log('[ChampSelectCoach] Props recibidas -> draftData:', draftData);
 
+    const { userData } = useAppState();
+    
     const { aiAdvice, wsStatus, sendChampSelectUpdate } = useWebSocketCoach({
         userData,
         targetEvent: 'CHAMP_SELECT_ADVICE'
@@ -29,31 +34,46 @@ export default function ChampSelectCoach({ draftData, LCU_STATUS }) {
 
     // CRÍTICO: Enviar actualización de Draft cuando cambian los picks/bans
     useEffect(() => {
+        console.log('[ChampSelectCoach] useEffect [draftData] -> Verificando si el draft cambió.');
         const draftStateChanged = JSON.stringify(draftData) !== JSON.stringify(lastDraftData);
+        
         if (draftData && draftStateChanged) {
+            console.log('[ChampSelectCoach] ¡El draft cambió! Enviando actualización al WebSocket.');
             sendChampSelectUpdate(draftData);
             setLastDraftData(draftData);
+        } else {
+            console.log('[ChampSelectCoach] El draft no ha cambiado o no hay datos.');
         }
     }, [draftData, lastDraftData, sendChampSelectUpdate]);
 
     // Lógica para TTS cuando llega un nuevo consejo
     useEffect(() => {
+        console.log('[ChampSelectCoach] useEffect [aiAdvice] -> Verificando si hay nuevo consejo de la IA.');
         if (aiAdvice?.champion && aiAdvice?.runes?.name) {
             const ttsText = `Recomendación para ${aiAdvice.champion}. Runas: ${aiAdvice.runes.name}. Prioridad: ${aiAdvice.earlyGame.split('.')[0]}.`;
+            console.log('[ChampSelectCoach] Nuevo consejo recibido. Texto para hablar:', ttsText);
             speak(ttsText);
+        } else {
+            console.log('[ChampSelectCoach] No hay un nuevo consejo de IA válido para hablar.');
+            console.log('[ChampSelectCoach] aiAdvice actual:', aiAdvice);
         }
     }, [aiAdvice, speak]);
 
     const handleReanalyze = () => {
         if (draftData) {
+            console.log('[ChampSelectCoach] Botón "Forzar Re-Análisis" presionado. Enviando datos del draft...');
             sendChampSelectUpdate(draftData, true); // Forzar re-análisis
+        } else {
+            console.log('[ChampSelectCoach] Botón "Forzar Re-Análisis" presionado, pero no hay draftData.');
         }
     };
 
-    const localPlayer = useMemo(() =>
-        draftData?.myTeam?.find(p => p.isLocalPlayer),
-        [draftData]
-    );
+    const localPlayer = useMemo(() => {
+        console.log('[ChampSelectCoach] useMemo [draftData] -> Calculando localPlayer.');
+        return draftData?.myTeam?.find(p => p.isLocalPlayer);
+    }, [draftData]);
+
+    console.log('[ChampSelectCoach] Renderizando la UI. Estado de la IA:', wsStatus);
 
     return (
         <div
@@ -76,6 +96,7 @@ export default function ChampSelectCoach({ draftData, LCU_STATUS }) {
             {/* Contenido Principal */}
             {aiAdvice ? (
                 <div className="space-y-3">
+                    {console.log('[ChampSelectCoach] RENDER: Mostrando contenido CON consejo de IA.')}
                     <div className="text-center p-2 bg-lol-blue-medium rounded-t-lg">
                         <h3 className="text-lg font-bold text-lol-gold">Recomendación para: <span className="text-lol-blue-accent">{aiAdvice.champion}</span></h3>
                     </div>
@@ -101,6 +122,7 @@ export default function ChampSelectCoach({ draftData, LCU_STATUS }) {
                 </div>
             ) : (
                 <div className="text-center p-6 bg-lol-blue-dark rounded">
+                    {console.log('[ChampSelectCoach] RENDER: Mostrando pantalla de carga (esperando consejo de IA).')}
                     <FaSync className="animate-spin text-lol-gold mx-auto text-3xl mb-3" />
                     <p className="text-lol-gold-light">Analizando Draft. Esperando respuesta de IA ({wsStatus})...</p>
                 </div>

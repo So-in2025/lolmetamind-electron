@@ -282,14 +282,14 @@ async function fetchLiveGameData() {
 }
 
 
-    async function pollLcuDataAndSend(initialRiotApiData, BACKEND_BASE_URL, LIVE_GAME_UPDATE_ENDPOINT, ipcSender, overlaySender) { 
-
+  async function pollLcuDataAndSend(initialRiotApiData, BACKEND_BASE_URL, LIVE_GAME_UPDATE_ENDPOINT, ipcSender, overlaySender) { 
+    console.log('\n--- INICIO DE CICLO DE POLLING ---');
     let consolidatedData = { ...initialRiotApiData };
     let lcuModeActive = false;
 
     const creds = await readLoLCreds();
     if (creds?.port && creds?.password) {
-        console.log(`[LCU POLLING] ✅ Conectando a LCU en puerto ${creds.port}...`);
+        console.log(`[POLLING] Credenciales encontradas. Intentando conectar a LCU en puerto ${creds.port}...`);
         try {
             const token = Buffer.from(`riot:${creds.password}`).toString('base64');
             const LCU_BASE_URL = `https://127.0.0.1:${creds.port}`;
@@ -303,10 +303,11 @@ async function fetchLiveGameData() {
             
             if (gameflowResponse.status === 200 && gameflowResponse.data?.phase) {
                 const phase = gameflowResponse.data.phase;
-                console.log(`[LCU POLLING] Fase del juego detectada: ${phase}`);
+                console.log(`[POLLING] Fase detectada: ${phase}`);
                 
                 if (['ChampSelect', 'InProgress'].includes(phase)) {
                     lcuModeActive = true;
+                    console.log(`[POLLING] Fase activa detectada (${phase}). Entrando en modo Realtime.`);
                     const liveClientData = phase === 'InProgress' ? await fetchLiveGameData() : null;
                     
                     consolidatedData = {
@@ -315,57 +316,60 @@ async function fetchLiveGameData() {
                         gameflow: gameflowResponse.data,
                         liveData: liveClientData || { status: 'NotAvailable', reason: 'Live client data no disponible (Vanguard activado o no en partida)' },
                     };
-                    console.log(`[LCU POLLING] 🟢 LCU en fase activa (${phase}). Datos actualizados a modo Realtime.`);
-                    // >>>>> LOG DE DATOS EN TIEMPO REAL AÑADIDO AQUÍ <<<<<<
-                        if (phase === 'InProgress' && liveClientData?.activePlayer) {
+                    
+                    if (phase === 'InProgress' && liveClientData?.activePlayer) {
                         const active = liveClientData.activePlayer;
-                            
-                            // 🔑 CORRECCIÓN: Usar acceso defensivo para CS.
-                            const currentCS = active.cs ?? active.scores?.creepScore;
-                            
-                            console.log('--- LIVE CLIENT DATA ---');
-                            console.log(`  Tiempo de Juego: ${liveClientData.gameData.gameTime} segundos`);
-                            console.log(`  Jugador Activo: ${active.summonerName}`);
-                            console.log(`  Stats: Oro=${Math.round(active.currentGold)}, CS=${currentCS}`);
-                            console.log('--------------------------');
-                        }
-                        // >>>>> FIN LOG DE DATOS <<<<<<
+                        const currentCS = active.cs ?? active.scores?.creepScore;
+                        
+                        console.log('--- DETALLES LIVE GAME ---');
+                        console.log(`  -> Tiempo: ${liveClientData.gameData.gameTime}s`);
+                        console.log(`  -> Jugador: ${active.summonerName}`);
+                        console.log(`  -> Oro=${Math.round(active.currentGold)}, CS=${currentCS}`);
+                        console.log('--------------------------');
+                    }
                 }
             }
         } catch (error) {
-            // Un error aquí es normal si el cliente está abierto pero no en partida.
-             if (error.response?.status !== 404) {
-                 console.warn(`[LCU POLLING] ⚠️ No se pudo obtener la sesión de LCU. Error: ${error.message}`);
-             } else {
-                 console.log(`[LCU POLLING] ℹ️ No hay sesión de juego activa (404 esperado).`);
-             }
+            if (error.response?.status !== 404) {
+                console.warn(`[POLLING] ⚠️  No se pudo obtener sesión de LCU. Error: ${error.message}`);
+            } else {
+                // Este log es normal si estás en el cliente pero no en partida, lo comento para no ensuciar la terminal.
+                // console.log(`[POLLING] ℹ️ No hay sesión de juego activa (404 esperado).`);
+            }
         }
     } else {
-        console.log('[LCU POLLING] ℹ️ Cliente de LoL no detectado. Saltando sondeo de LCU en este ciclo.');
+        console.log('[POLLING] ℹ️ Cliente de LoL no detectado en este ciclo.');
     }
 
     if (!lcuModeActive) {
         consolidatedData.mode = 'Strategic_API_Profile';
     }
+    console.log(`[POLLING] Modo final determinado: ${consolidatedData.mode}`);
 
+    // --- Envío de datos a las ventanas ---
     if (ipcSender && ipcSender.webContents) {
-    ipcSender.webContents.send('lcu-state-update', consolidatedData);
-}
+        console.log('[POLLING] Enviando datos al DASHBOARD...');
+        ipcSender.webContents.send('lcu-state-update', consolidatedData);
+    } else {
+        console.warn('[POLLING] ⚠️  No se pudo enviar datos al Dashboard (ipcSender no válido).');
+    }
 
-    // 🚨 AÑADIR ESTE BLOQUE 🚨
-    // El frontend espera este formato de datos:
     const gameFlowPhase = consolidatedData.gameflow?.phase || 'None';
+    const overlayPayload = {
+        lcuStatus: lcuModeActive || gameFlowPhase !== 'None' ? 'ONLINE' : 'OFFLINE',
+        gamePhase: gameFlowPhase,
+        draftData: gameFlowPhase === 'ChampSelect' ? consolidatedData.gameflow : null,
+    };
 
     if (overlaySender && overlaySender.webContents) {
-        overlaySender.webContents.send('lcu-state-update', {
-            lcuStatus: lcuModeActive || gameFlowPhase !== 'None' ? 'ONLINE' : 'OFFLINE',
-            gamePhase: gameFlowPhase,
-            draftData: gameFlowPhase === 'ChampSelect' ? consolidatedData.gameflow : null,
-        });
+        console.log('[POLLING] Enviando datos al OVERLAY:', overlayPayload);
+        overlaySender.webContents.send('lcu-state-update', overlayPayload);
+    } else {
+        console.warn('[POLLING] ⚠️  No se pudo enviar datos al Overlay (overlaySender no válido).');
     }
-    // -------------------------
     
-    const userToken = store.get('userToken');
+    // --- Envío de datos al Backend ---
+    const userToken = store.get('authToken'); // Asegurándonos de usar 'authToken'
     if (userToken) {
         try {
             await axios.post(
@@ -373,13 +377,13 @@ async function fetchLiveGameData() {
                 consolidatedData,
                 { headers: { 'Authorization': `Bearer ${userToken}` }, httpsAgent: lcuAgent, timeout: 5000 }
             );
-            console.log(`[POLLING] [BACKEND SEND OK] Datos enviados al backend en modo: ${consolidatedData.mode}.`);
+            // console.log(`[POLLING] ✅ Datos enviados al backend.`);
         } catch (backendError) {
-            console.error(`[POLLING] [BACKEND SEND FAIL] Error al enviar datos al backend: ${backendError.message}`);
+            console.error(`[POLLING] ❌ ERROR al enviar datos al backend: ${backendError.message}`);
         }
     }
+    console.log('--- FIN DE CICLO DE POLLING ---\n');
 }
-
 /**
  * Función genérica para enviar comandos (POST/PUT) al LCU.
  * Esta función es llamada desde main.js (via IPC handle).

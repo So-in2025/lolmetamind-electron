@@ -1,6 +1,8 @@
 // main.js - VERSIÓN COMPLETA Y DEFINITIVA (FIX DE FOCO, Z-ORDER Y LÓGICA DE APP.ON('READY'))
 
 const { app, BrowserWindow, globalShortcut, screen, ipcMain, session } = require('electron');
+const { powerSaveBlocker } = require('electron');
+
 const path = require('path');
 const axios = require('axios');
 const Store = require('electron-store');
@@ -465,18 +467,18 @@ app.on('ready', () => {
         // 2. ✅ ¡LE DAMOS ARRANQUE AL MOTOR DEL LCU! ✅
         // Justo después de crear la ventana, iniciamos el monitoreo.
         // Usamos 'setTimeout' para darle 2 segundos a la ventana para que se dibuje tranquila.
-        setTimeout(() => {
-            if (mainWindow) { // Verificamos que la ventana principal exista
-                console.log('[MAIN] Iniciando LCU polling...');
-                // ✅ ¡LA CORRECCIÓN! ✅
-                // Ahora le pasamos todos los parámetros que la función espera.
-                pollingInterval = pollLcuDataAndSend(
-                    latestRiotApiData,          // Datos iniciales (puede ser null)
-                    BACKEND_BASE_URL,           // La URL de tu backend
-                    LIVE_GAME_UPDATE_ENDPOINT,  // El endpoint específico
-                    mainWindow,                 // La ventana del dashboard
-                    overlayWindow               // La ventana del overlay
-                ); 
+            setTimeout(() => {
+                if (mainWindow || overlayWindow) {
+                pollLcuDataAndSend(
+                    latestRiotApiData,
+                    BACKEND_BASE_URL,
+                    LIVE_GAME_UPDATE_ENDPOINT,
+                    mainWindow,
+                    overlayWindow
+                ).catch(err => {
+                    // Añadimos un catch aquí por si algo explota dentro de la función
+                    console.error('[MAIN POLLING CATCH] Error en un ciclo de sondeo:', err.message);
+                });
             }
         }, 2000); 
     });

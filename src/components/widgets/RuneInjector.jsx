@@ -8,35 +8,58 @@ import { FaBolt, FaCheckCircle, FaExclamationTriangle } from 'react-icons/fa';
  * a tu LCU Core en el proceso principal.
  */
 export default function RuneInjector({ runepageData }) {
+    console.log('[RuneInjector] --- RENDERIZANDO ---');
+    console.log('[RuneInjector] Props recibidas -> runepageData:', runepageData);
+    
     const [status, setStatus] = useState('READY'); // READY, INJECTING, SUCCESS, ERROR
-
+    
     const CREATE_RUNE_ENDPOINT = '/lol-perks/v1/pages';
 
     const injectRunes = useCallback(async () => {
-        if (status === 'INJECTING' || !window.electronAPI || !runepageData) return;
-
+        console.log('[RuneInjector] Se ha hecho clic en el botón de inyectar runas.');
+        
+        if (status === 'INJECTING') {
+            console.log('[RuneInjector] Bloqueado: ya hay una inyección en progreso.');
+            return;
+        }
+        if (!window.electronAPI) {
+            console.error('[RuneInjector] CRÍTICO: window.electronAPI no está disponible.');
+            setStatus('ERROR');
+            return;
+        }
+        if (!runepageData) {
+            console.error('[RuneInjector] CRÍTICO: No se recibieron datos de runas (runepageData es nulo).');
+            setStatus('ERROR');
+            return;
+        }
+        
         const runePayload = {
             name: runepageData.name,
-            current: true,
+            current: true, 
             primaryStyleId: runepageData.primaryStyleId,
             subStyleId: runepageData.subStyleId,
             selectedPerkIds: runepageData.selectedPerkIds
         };
-
+        
+        console.log('[RuneInjector] Payload de runas preparado para enviar:', runePayload);
         setStatus('INJECTING');
 
         try {
+            console.log('[RuneInjector] Enviando comando "lcuCommand" al proceso principal de Electron...');
             // 🚨 Llama a tu sistema LCU CORE a través de IPC para ejecutar el POST/PUT
             const result = await window.electronAPI.lcuCommand('POST', CREATE_RUNE_ENDPOINT, runePayload);
+            
+            console.log('[RuneInjector] Respuesta recibida del proceso principal:', result);
 
-            if (result.error) {
-                throw new Error(result.error);
+            if (result && result.error) {
+                 throw new Error(result.error);
             }
 
+            console.log('[RuneInjector] ¡ÉXITO! La inyección de runas fue exitosa.');
             setStatus('SUCCESS');
-            setTimeout(() => setStatus('READY'), 5000);
+            setTimeout(() => setStatus('READY'), 5000); 
         } catch (error) {
-            console.error("[INJECTOR] Error al inyectar runas:", error);
+            console.error("[RuneInjector] FALLO: Error al inyectar runas:", error);
             setStatus('ERROR');
             setTimeout(() => setStatus('READY'), 8000);
         }
