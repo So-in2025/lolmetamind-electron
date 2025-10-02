@@ -468,8 +468,15 @@ app.on('ready', () => {
         setTimeout(() => {
             if (mainWindow) { // Verificamos que la ventana principal exista
                 console.log('[MAIN] Iniciando LCU polling...');
-                // La función pollLcuDataAndSend es de tu archivo lol-client-api.js
-                pollingInterval = pollLcuDataAndSend(mainWindow); 
+                // ✅ ¡LA CORRECCIÓN! ✅
+                // Ahora le pasamos todos los parámetros que la función espera.
+                pollingInterval = pollLcuDataAndSend(
+                    latestRiotApiData,          // Datos iniciales (puede ser null)
+                    BACKEND_BASE_URL,           // La URL de tu backend
+                    LIVE_GAME_UPDATE_ENDPOINT,  // El endpoint específico
+                    mainWindow,                 // La ventana del dashboard
+                    overlayWindow               // La ventana del overlay
+                ); 
             }
         }, 2000); 
     });

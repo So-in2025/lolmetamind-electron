@@ -348,17 +348,21 @@ async function fetchLiveGameData() {
         consolidatedData.mode = 'Strategic_API_Profile';
     }
 
-    ipcSender(consolidatedData);
+    if (ipcSender && ipcSender.webContents) {
+    ipcSender.webContents.send('lcu-state-update', consolidatedData);
+}
 
     // 🚨 AÑADIR ESTE BLOQUE 🚨
     // El frontend espera este formato de datos:
     const gameFlowPhase = consolidatedData.gameflow?.phase || 'None';
 
-     overlaySender({
-        lcuStatus: lcuModeActive || gameFlowPhase !== 'None' ? 'ONLINE' : 'OFFLINE',
-        gamePhase: gameFlowPhase,
-        draftData: gameFlowPhase === 'ChampSelect' ? consolidatedData.gameflow.session : null, // Asumo que el draft está en gameflow.session
-    });
+    if (overlaySender && overlaySender.webContents) {
+        overlaySender.webContents.send('lcu-state-update', {
+            lcuStatus: lcuModeActive || gameFlowPhase !== 'None' ? 'ONLINE' : 'OFFLINE',
+            gamePhase: gameFlowPhase,
+            draftData: gameFlowPhase === 'ChampSelect' ? consolidatedData.gameflow : null,
+        });
+    }
     // -------------------------
     
     const userToken = store.get('userToken');
