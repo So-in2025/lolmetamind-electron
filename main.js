@@ -46,6 +46,7 @@ function sendDataToRenderer(channel, data) {
     }
 }
 
+
 // --- FUNCIÓN PARA CREAR LA VENTANA DEL OVERLAY ---
 function createOverlayWindow() {
     if (overlayWindow) return;
@@ -348,6 +349,16 @@ app.on('ready', () => {
     createSplashWindow();
     createLoginWindow(); 
 
+    // =================================================================
+    //  क्षेत्र MANEJADORES DE IPC GLOBALES (LOGIN, CIERRE, ETC.)
+    // =================================================================
+
+    // 1. Escucha la orden de cerrar la aplicación desde el LoginScreen
+    ipcMain.on('close-app', () => {
+        console.log('[MAIN] Recibida orden para cerrar la aplicación.');
+        app.quit();
+    });
+
     ipcMain.on('closeWindow', () => app.quit());
     ipcMain.on('minimizeWindow', () => {
         if (mainWindow) mainWindow.minimize();
@@ -385,7 +396,26 @@ app.on('ready', () => {
         }
     });
 
-    ipcMain.handle('get-user-data', async () => store.get('userData'));
+    ipcMain.handle('get-user-data', async () => {
+        console.log('[MAIN] El Dashboard está pidiendo los datos del usuario.');
+        const token = store.get('authToken');
+        if (!token) {
+            console.error('[MAIN] No se encontró token para get-user-data');
+            return null;
+        }
+        try {
+            // NOTA: Asegúrate de que tu backend tenga una ruta como '/api/user/me' o '/api/user/profile'
+            // que devuelva los datos del usuario usando el token.
+            const response = await axios.get(`${BACKEND_BASE_URL}/api/user/profile`, {
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
+            console.log('[MAIN] Datos de usuario obtenidos con éxito.');
+            return response.data;
+        } catch (error) {
+            console.error('[MAIN] Error al obtener datos del usuario desde el backend:', error.message);
+            return null;
+        }
+    });
 
     ipcMain.on('set-riot-api-key', async (event, apiKey) => {
         store.set('riotApiKey', apiKey);
@@ -415,6 +445,16 @@ app.on('ready', () => {
         }
     };
     
+
+    // 2. Escucha el token cuando el login/registro es exitoso
+    ipcMain.on('save-token', (event, token) => {
+        console.log('[MAIN] Token recibido del login/registro:', token);
+        store.set('authToken', token); // Guarda el token de forma persistente
+        
+        // Llama a la función para crear la ventana principal
+        createMainWindow(token); 
+    });
+
     // 🚨 NUEVO HANDLER: Comando LCU genérico para inyección de runas 🚨
     ipcMain.handle('lcu-command', async (event, method, endpoint, payload) => {
         try {

@@ -23,7 +23,7 @@ const DashboardPage = () => {
             try {
                 if (!window.electronAPI) throw new Error("API de Electron no disponible.");
                 
-                const user = await window.electronAPI.invoke('get-user-data');
+                const user = await window.electronAPI.getUserData();
                 if (!user) {
                     throw new Error("No se pudo cargar el perfil de usuario. Verifique la conexión a la DB.");
                 }
@@ -40,9 +40,9 @@ const DashboardPage = () => {
                 };
 
                 Promise.all([
-                    window.electronAPI.invoke('get-meta-analysis', basePayload),
-                    window.electronAPI.invoke('get-weekly-challenges', basePayload),
-                    window.electronAPI.invoke('get-recommendations', basePayload)
+                    window.electronAPI.getMetaAnalysis(basePayload),
+                    window.electronAPI.getWeeklyChallenges(basePayload),
+                    window.electronAPI.getRecommendations(basePayload)
                 ]).then(([meta, challenges, recs]) => {
                     if (!meta?.error) setMetaData(meta);
                     if (!challenges?.error) setWeeklyChallenges(challenges);
@@ -74,14 +74,14 @@ const DashboardPage = () => {
         try {
             switch (type) {
                 case 'performance':
-                    result = await window.electronAPI.invoke('analyze-matches', basePayload);
+                    result = await window.electronAPI.analyzeMatches(basePayload);
                     break;
                 case 'tips':
-                    result = await window.electronAPI.invoke('get-recommendations', basePayload);
+                    result = await window.electronAPI.getRecommendations(basePayload);
                     setRecommendations(result);
                     break;
                 case 'challenges':
-                    result = await window.electronAPI.invoke('get-weekly-challenges', basePayload);
+                    result = await window.electronAPI.getWeeklyChallenges(basePayload);
                     setWeeklyChallenges(result);
                     break;
                 default: result = { error: 'Tipo de análisis no reconocido.' };

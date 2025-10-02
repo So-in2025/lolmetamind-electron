@@ -1,1 +1,8 @@
-{}
+{
+  "app\\page.jsx -> @/components/LoginScreen": {
+    "id": "app\\page.jsx -> @/components/LoginScreen",
+    "files": [
+      "static/chunks/_app-pages-browser_src_components_LoginScreen_jsx.js"
+    ]
+  }
+}

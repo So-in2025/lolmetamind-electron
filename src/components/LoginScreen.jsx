@@ -55,8 +55,8 @@ export default function LoginScreen() {
     const ROLES = ['TOP', 'JUNGLE', 'MID', 'ADC', 'SUPPORT'];
     const ZODIACS = ['Aries', 'Tauro', 'Géminis', 'Cáncer', 'Leo', 'Virgo', 'Libra', 'Escorpio', 'Sagitario', 'Capricornio', 'Acuario', 'Piscis'];
 
-    // LÓGICA DE VALIDACIÓN COMPLETA (Misma)
     const validateRegistrationFields = useCallback(() => {
+        // Tu código de validación existente (ya está correcto)
         if (tagline.length < 3 || tagline.length > 5 || !/^[A-Za-z0-9]+$/.test(tagline)) {
             setError('Tagline inválido. Debe tener 3 a 5 caracteres alfanuméricos.');
             return false;
@@ -66,21 +66,22 @@ export default function LoginScreen() {
             return false;
         }
         if (!region || !zodiacSign || !ROLES.includes(favRole1) || !favChamp1) {
-             setError('Faltan campos obligatorios para el perfil.');
-             return false;
+            setError('Faltan campos obligatorios para el perfil.');
+            return false;
         }
         if (!/^[A-Za-z\s]+$/.test(favChamp1)) {
-             setError('Campeón Favorito 1 debe contener solo letras.');
-             return false;
+            setError('Campeón Favorito 1 debe contener solo letras.');
+            return false;
         }
         if (favChamp2 && !/^[A-Za-z\s]+$/.test(favChamp2)) {
-             setError('Campeón Favorito 2 debe contener solo letras.');
-             return false;
+            setError('Campeón Favorito 2 debe contener solo letras.');
+            return false;
         }
 
         setError('');
         return true;
-    }, [tagline, summonerName, region, zodiacSign, favChamp1, favRole1, favChamp2, ROLES]);
+        // ▼▼▼ 2. ASEGÚRATE DE QUE 'setError' ESTÉ EN LAS DEPENDENCIAS ▼▼▼
+    }, [tagline, summonerName, region, zodiacSign, favChamp1, favRole1, favChamp2, setError]);
   
 
     // 🚨 handleSuccess: Dispara el IPC a Electron (CORREGIDO).
@@ -112,63 +113,73 @@ export default function LoginScreen() {
         };
 
     const handleAuth = async (e) => {
-        e.preventDefault();
-        
-        if (isRegister && !validateRegistrationFields()) {
-            return;
-        }
+        e.preventDefault();
 
-        setError('');
-        setSuccessMessage(''); 
-        setIsLoading(true);
+        if (isRegister && !validateRegistrationFields()) {
+            return;
+        }
 
-        const url = isRegister ? API_ENDPOINTS.REGISTER : API_ENDPOINTS.LOGIN;
-        
-        let body = isRegister ? { username, password, summonerName, tagline, region, zodiacSign, favChamp1, favChamp2: favChamp2 || null, favRole1, favRole2: favRole2 || null,} : { username, password };
+        setError('');
+        setSuccessMessage('');
+        setIsLoading(true);
 
-        try {
-            console.log(`[FRONTEND] Enviando petición a ${url} con el usuario: ${username}`);
-            const response = await fetch(url, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(body),
-            });
-            
-            const data = await response.json();
+        const url = isRegister ? API_ENDPOINTS.REGISTER : API_ENDPOINTS.LOGIN;
+        const body = isRegister 
+            ? { username, password, summonerName, tagline, region, zodiacSign, favChamp1, favChamp2: favChamp2 || null, favRole1, favRole2: favRole2 || null } 
+            : { username, password };
 
-            if (!response.ok) {
-                console.error('[FRONTEND] Error de la API:', data.message);
-                const apiErrorMsg = data.message || `Error ${response.status}: Revisa tus credenciales.`;
-                setError(apiErrorMsg);
-                return;
-            }
+        try {
+            console.log(`[FRONTEND] Enviando petición a ${url}`);
+            const response = await fetch(url, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(body),
+            });
 
-            if (isRegister) {
-                console.log('[FRONTEND] Registro exitoso.');
-                setSuccessMessage('¡Cuenta creada! Por favor, inicia sesión.');
-                setIsRegister(false);
-            } else if (data.token) {
-                handleSuccess(data.token);
+            const data = await response.json();
+
+            if (!response.ok) {
+                // Si la respuesta no es exitosa, lanza el mensaje de error del backend.
+                throw new Error(data.message || `Error del servidor: ${response.status}`);
             }
 
-        } catch (networkError) {
-            console.error('[FRONTEND] Error de red:', networkError);
-            setError('No se pudo conectar al servidor. Verifica el Backend.');
-        } finally {
-            setIsLoading(false);
-        }
-    };
+            // Si la respuesta es exitosa PERO no viene con un token, es un error inesperado.
+            if (!data.token) {
+                throw new Error("Autenticación exitosa pero no se recibió un token.");
+            }
 
-    // LÓGICA DEL BOTÓN SALIR
-    const handleExit = () => {
-        if (window.electronAPI && window.electronAPI.closeWindow) {
-            window.electronAPI.closeWindow();
-        } else {
-            alert('Función de cierre no detectada. Cerrando...');
+            // --- LÓGICA DE ÉXITO UNIFICADA ---
+            // Si llegamos aquí, significa que tenemos un token (tanto para login como para registro).
+
+            // 1. Guardamos el token de forma segura en Electron.
+            await window.electronAPI.saveToken(data.token);
+
+            // 2. Actualizamos el estado de la aplicación para mostrar el dashboard. ¡Esta es la clave!
+            setAppState(prevState => ({
+                ...prevState,
+                isAuthenticated: true,
+                isLoadingUser: false,
+            }));
+
+        } catch (error) {
+            // Ahora cualquier error (de red o de lógica) mostrará el mensaje correcto.
+            console.error('[FRONTEND] Error en handleAuth:', error);
+            setError(error.message || 'Ocurrió un error inesperado.');
+        } finally {
+            setIsLoading(false);
         }
     };
     // --------------------------------------------------------
     
+    const handleExit = () => {
+        // Llama a la función 'closeApp' que expusiste en preload.js
+        if (window.electronAPI && typeof window.electronAPI.closeApp === 'function') {
+            window.electronAPI.closeApp();
+        } else {
+            // Un fallback por si la API no carga, aunque no debería pasar.
+            alert('Error: La función para cerrar no está disponible.');
+        }
+    };
 
     const baseClasses = "flex-grow p-4 border-b-2 transition-colors duration-300 flex items-center justify-center cursor-pointer";
     const activeClasses = "border-lol-accent-gold text-lol-accent-gold font-bold";

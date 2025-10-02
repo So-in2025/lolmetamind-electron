@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { useWebSocketCoach } from '@/hooks/useWebSocketCoach';
 import { useTTS } from '@/hooks/useTTS';
 import { useInteractiveWidget } from '@/hooks/useInteractiveWidget';
-import RuneInjector from './RuneInjector'; 
+import RuneInjector from './RuneInjector';
 import { FaMicrophoneAlt, FaSync, FaRedo, FaHandPointer, FaStar, FaCircle } from 'react-icons/fa';
 import { useAppState } from '@/context/AppStateContext';
 
@@ -10,7 +10,7 @@ const RunePerk = ({ perkId, isPrimary }) => {
     const iconClass = isPrimary ? 'text-lol-gold' : 'text-lol-blue-accent';
     const Icon = isPrimary ? FaStar : FaCircle;
     return (
-        <div className={\`w-6 h-6 rounded-full \${iconClass} flex items-center justify-center border border-lol-gold-dark\`} title={\`Rune ID: \${perkId}\`}>
+        <div className={`w-6 h-6 rounded-full ${iconClass} flex items-center justify-center border border-lol-gold-dark`} title={`Rune ID: ${perkId}`}>
             <Icon size={12} />
         </div>
     );
@@ -18,7 +18,7 @@ const RunePerk = ({ perkId, isPrimary }) => {
 
 export default function ChampSelectCoach({ draftData, LCU_STATUS }) {
     const { userData } = useAppState();
-    
+
     const { aiAdvice, wsStatus, sendChampSelectUpdate } = useWebSocketCoach({
         userData,
         targetEvent: 'CHAMP_SELECT_ADVICE'
@@ -29,65 +29,60 @@ export default function ChampSelectCoach({ draftData, LCU_STATUS }) {
 
     // CRÍTICO: Enviar actualización de Draft cuando cambian los picks/bans
     useEffect(() => {
-        const currentDraftStr = JSON.stringify(draftData);
-        if (draftData && LCU_STATUS === 'ONLINE' && wsStatus === 'CONNECTED' && currentDraftStr !== JSON.stringify(lastDraftData)) {
-            const timer = setTimeout(() => {
-                sendChampSelectUpdate(draftData);
-                setLastDraftData(draftData);
-            }, 1500); 
-            return () => clearTimeout(timer);
+        const draftStateChanged = JSON.stringify(draftData) !== JSON.stringify(lastDraftData);
+        if (draftData && draftStateChanged) {
+            sendChampSelectUpdate(draftData);
+            setLastDraftData(draftData);
         }
-    }, [draftData, LCU_STATUS, wsStatus, sendChampSelectUpdate, lastDraftData]);
+    }, [draftData, lastDraftData, sendChampSelectUpdate]);
 
-    // Gestión de TTS al recibir un nuevo consejo
+    // Lógica para TTS cuando llega un nuevo consejo
     useEffect(() => {
-        if (aiAdvice) {
-            const ttsText = \`MetaMind. Consejo: \${aiAdvice.strategy}. Enfócate en el juego temprano: \${aiAdvice.earlyGame}.\`;
+        if (aiAdvice?.champion && aiAdvice?.runes?.name) {
+            const ttsText = `Recomendación para ${aiAdvice.champion}. Runas: ${aiAdvice.runes.name}. Prioridad: ${aiAdvice.earlyGame.split('.')[0]}.`;
             speak(ttsText);
         }
     }, [aiAdvice, speak]);
-    
-    const statusColor = useMemo(() => {
-        if (LCU_STATUS === 'OFFLINE' || wsStatus !== 'CONNECTED') return 'bg-red-700';
-        if (aiAdvice) return 'bg-lol-blue-accent animate-pulse';
-        return 'bg-lol-gold';
-    }, [aiAdvice, wsStatus, LCU_STATUS]);
+
+    const handleReanalyze = () => {
+        if (draftData) {
+            sendChampSelectUpdate(draftData, true); // Forzar re-análisis
+        }
+    };
+
+    const localPlayer = useMemo(() =>
+        draftData?.myTeam?.find(p => p.isLocalPlayer),
+        [draftData]
+    );
 
     return (
-        <div 
-            className={\`transition-all duration-300 max-w-lg mx-auto p-4 rounded-xl shadow-lol-lg \${isInteractive ? 'bg-lol-blue-medium/95 border-2 border-lol-blue-accent' : 'bg-lol-blue-medium/80 border border-lol-gold-dark'}\`}
+        <div
+            className={`w-full max-w-lg p-4 bg-lol-blue-dark/95 rounded-xl shadow-2xl border-2 border-lol-gold-dark transition-all duration-300 font-sans ${isInteractive ? 'pointer-events-auto' : 'pointer-events-none'}`}
             onMouseEnter={() => setInteractive(true)}
             onMouseLeave={() => setInteractive(false)}
         >
+            {/* Encabezado */}
             <div className="flex justify-between items-center mb-3">
-                <h2 className="font-display text-2xl font-bold text-lol-gold flex items-center">
-                    <span className={\`w-3 h-3 rounded-full mr-2 \${statusColor}\`}></span>
-                    MetaMind Draft: {userData?.summonerName || 'Buscando Draft...'}
-                </h2>
-                <div className="text-lol-gold-light">
-                    <button onClick={() => sendChampSelectUpdate(draftData)} className="p-2 hover:text-lol-blue-accent transition-colors disabled:opacity-50" disabled={wsStatus !== 'CONNECTED'}>
-                        <FaRedo title="Solicitar nuevo consejo" />
-                    </button>
-                    <button onClick={() => { speak(aiAdvice?.strategy || 'No hay consejos disponibles.'); }} className="p-2 hover:text-lol-blue-accent transition-colors">
-                        <FaMicrophoneAlt title="Repetir TTS" />
-                    </button>
-                    <button onClick={() => setInteractive(false)} className="p-2 hover:text-red-500 transition-colors">
-                        <FaHandPointer title="Desactivar interacción" />
-                    </button>
-                </div>
+                <h2 className="text-xl font-bold text-lol-gold font-cinzel">Asistente de Draft</h2>
+                {isInteractive && (
+                    <div className="flex items-center gap-3">
+                        <FaMicrophoneAlt title="Activar/Desactivar TTS" className="cursor-pointer text-lol-gold-light hover:text-lol-accent" />
+                        <FaRedo title="Forzar Re-Análisis" onClick={handleReanalyze} className="cursor-pointer text-lol-gold-light hover:text-lol-accent" />
+                        <FaHandPointer title="Modo Interactivo" className="text-lol-accent" />
+                    </div>
+                )}
             </div>
-            
+
+            {/* Contenido Principal */}
             {aiAdvice ? (
-                <div className="space-y-4">
-                    {/* Sección de Estrategia */}
-                    <div className="p-3 bg-lol-blue-dark rounded border-l-4 border-lol-blue-accent">
-                        <h3 className="text-lol-blue-accent font-bold mb-1">ESTRATEGIA ({userData?.zodiacSign})</h3>
-                        <p className="text-lol-gold-light text-sm">{aiAdvice.strategy}</p>
+                <div className="space-y-3">
+                    <div className="text-center p-2 bg-lol-blue-medium rounded-t-lg">
+                        <h3 className="text-lg font-bold text-lol-gold">Recomendación para: <span className="text-lol-blue-accent">{aiAdvice.champion}</span></h3>
                     </div>
 
-                    {/* Contenedor de Inyección y Runas */}
-                    {aiAdvice.runes && <RuneInjector runepageData={aiAdvice.runes} />}
-                    
+                    {/* Botón para Inyectar Runas */}
+                    {isInteractive && <RuneInjector runeData={aiAdvice.runes} />}
+
                     {/* Detalles de Runas */}
                     <div className="p-3 bg-lol-blue-dark rounded border-l-4 border-lol-gold">
                         <h3 className="text-lol-gold font-bold mb-1">RUNAS CLAVE ({aiAdvice.runes.name})</h3>

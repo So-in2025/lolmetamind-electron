@@ -1,3 +1,4 @@
+'use client';
 import React, { useEffect, useState } from 'react';
 import { FaSync, FaBrain, FaMicrophoneAlt } from 'react-icons/fa';
 import { useWebSocketCoach } from '@/hooks/useWebSocketCoach';
@@ -6,8 +7,8 @@ import { useInteractiveWidget } from '@/hooks/useInteractiveWidget';
 import { useAppState } from '@/context/AppStateContext';
 
 export default function PreGameCoach({ LCU_STATUS }) {
-    const { userData, isFirstTimeUser, isLoadingUser } = useAppState(); 
-    
+    const { userData, isFirstTimeUser, isLoadingUser } = useAppState();
+
     const { aiAdvice, wsStatus, sendQueueUpdate } = useWebSocketCoach({
         userData,
         targetEvent: 'QUEUE_ADVICE'
@@ -24,17 +25,17 @@ export default function PreGameCoach({ LCU_STATUS }) {
             setAdviceSpoken(true);
         }
     }, [wsStatus, adviceSpoken, sendQueueUpdate, userData, isLoadingUser]);
-    
+
     useEffect(() => {
         if (aiAdvice && isLoadingAdvice) {
             const playstyle = aiAdvice?.playstyleAnalysis;
             const synergy = aiAdvice?.newChampionRecommendations?.synergy?.champion;
-            
+
             if (playstyle && synergy) {
-                const ttsText = \`MetaMind. Tu diagnóstico: \${playstyle.style}. \${playstyle.description.split('.')[0]}. Tu campeón de sinergia es \${synergy}.\`;
+                const ttsText = `MetaMind. Tu diagnóstico: ${playstyle.style}. ${playstyle.description.split('.')[0]}. Tu campeón de sinergia es ${synergy}.`;
                 speak(ttsText);
             } else {
-                speak(\`Bienvenido \${userData?.summonerName || 'Invocador'}. Tu asistente está listo para el draft.\`);
+                speak(`Bienvenido ${userData?.summonerName || 'Invocador'}. Tu asistente está listo para el draft.`);
             }
             setIsLoadingAdvice(false);
         }
@@ -43,8 +44,8 @@ export default function PreGameCoach({ LCU_STATUS }) {
     const isReady = aiAdvice && LCU_STATUS === 'ONLINE';
 
     return (
-        <div 
-            className={\`transition-all duration-300 max-w-xl mx-auto p-5 rounded-xl shadow-lol-lg \${isInteractive ? 'bg-lol-blue-medium/95 border-2 border-lol-blue-accent' : 'bg-lol-blue-medium/80 border border-lol-gold-dark'}\`}
+        <div
+            className={`transition-all duration-300 max-w-xl mx-auto p-5 rounded-xl shadow-lol-lg ${isInteractive ? 'bg-lol-blue-medium/95 border-2 border-lol-blue-accent' : 'bg-lol-blue-medium/80 border border-lol-gold-dark'}`}
             onMouseEnter={() => setInteractive(true)}
             onMouseLeave={() => setInteractive(false)}
         >
@@ -68,7 +69,7 @@ export default function PreGameCoach({ LCU_STATUS }) {
                         <p className="text-lol-gold-light text-sm mt-1">{aiAdvice.playstyleAnalysis.description}</p>
                     </div>
 
-                    <button onClick={() => speak(\`Tu diagnóstico es \${aiAdvice.playstyleAnalysis.style}.\`)} className="w-full py-2 bg-lol-blue-accent hover:bg-lol-blue-medium font-bold rounded text-lol-blue-dark transition-colors">
+                    <button onClick={() => speak(`Tu diagnóstico es ${aiAdvice.playstyleAnalysis.style}.`)} className="w-full py-2 bg-lol-blue-accent hover:bg-lol-blue-medium font-bold rounded text-lol-blue-dark transition-colors">
                         <FaMicrophoneAlt className="inline mr-2" /> REPETIR CONSEJOS
                     </button>
                 </div>
