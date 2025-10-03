@@ -181,13 +181,11 @@ function createLoginWindow() {
     });
 }
 
-// --- FUNCIÓN PARA CREAR LA VENTANA DEL OVERLAY ---
+// --- FUNCIÓN PARA CREAR LA VENTANA DEL OVERLAY (MODIFICADA) ---
 function createOverlayWindow() {
     if (overlayWindow) return;
 
-    // Obtener las dimensiones de la pantalla principal
     const primaryDisplay = screen.getPrimaryDisplay();
-
     overlayWindow = new BrowserWindow({
         title: 'MetaMind Coach Overlay',
         width: primaryDisplay.workAreaSize.width,
@@ -196,13 +194,7 @@ function createOverlayWindow() {
         frame: false,
         hasShadow: false,
         alwaysOnTop: true,
-
-        // 🚨 LA LÍNEA MÁGICA QUE SOLUCIONA EL PROBLEMA VISUAL 🚨
-        // 'screen-saver' es un nivel de apilamiento especial que se asegura
-        // de que esta ventana se renderice por encima de las ventanas de aplicaciones normales.
         level: 'floating',
-
-        fullscreen: true,
         skipTaskbar: true,
         resizable: false,
         show: false,
@@ -213,19 +205,15 @@ function createOverlayWindow() {
         },
     });
 
-    // 🚨 2. SOLUCIÓN DE RUTA: Apunta al puerto correcto (3001) para el modo desarrollo
     const OVERLAY_PATH = isDevMode ? `${FRONTEND_BASE_URL}/overlay` : path.join(app.getAppPath(), 'out', 'overlay.html');
-
+    
     if (isDevMode) {
         overlayWindow.loadURL(OVERLAY_PATH);
-         // 🚨 ESTE ES EL CÓDIGO MÁS IMPORTANTE AHORA 🚨
-        // Abre las herramientas de desarrollador para la ventana del overlay en una ventana separada.
-        overlayWindow.webContents.openDevTools({ mode: 'detach' });
     } else {
         overlayWindow.loadFile(OVERLAY_PATH);
     }
 
-    // Por defecto, la ventana ignora los clics del ratón (click-through)
+    // MODO POR DEFECTO: Los clics atraviesan la ventana (para jugar)
     overlayWindow.setIgnoreMouseEvents(true, { forward: true });
 
     overlayWindow.once('ready-to-show', () => {
@@ -397,6 +385,39 @@ app.on('ready', () => {
     //  क्षेत्र MANEJADORES DE IPC GLOBALES (LOGIN, CIERRE, ETC.)
     // =================================================================
 
+      // ▼▼▼ INICIO DE LA NUEVA LÓGICA DE ATAJOS DE TECLADO ▼▼▼
+
+    // Atajo 1: CTRL+F1 - Modo Interactivo (Arrastrable y Clicable)
+    globalShortcut.register('CommandOrControl+F1', () => {
+        if (overlayWindow) {
+            console.log('[Shortcut] Activando Modo Interactivo (CTRL+F1)');
+            overlayWindow.setIgnoreMouseEvents(false); // La ventana ahora captura todos los clics
+        }
+    });
+
+    // Atajo 2: CTRL+F2 - Modo Click-Through (Para Jugar)
+    globalShortcut.register('CommandOrControl+F2', () => {
+        if (overlayWindow) {
+            console.log('[Shortcut] Activando Modo Click-Through (CTRL+F2)');
+            overlayWindow.setIgnoreMouseEvents(true, { forward: true }); // Los clics vuelven a atravesar la ventana
+        }
+    });
+
+    // Atajo 3: CTRL+F3 - Ocultar/Mostrar Overlay (Modo Fantasma)
+    globalShortcut.register('CommandOrControl+F3', () => {
+        if (overlayWindow) {
+            if (overlayWindow.isVisible()) {
+                console.log('[Shortcut] Ocultando Overlay (CTRL+F3)');
+                overlayWindow.hide();
+            } else {
+                console.log('[Shortcut] Mostrando Overlay (CTRL+F3)');
+                overlayWindow.show();
+            }
+        }
+    });
+
+    // ▲▲▲ FIN DE LA NUEVA LÓGICA DE ATAJOS DE TECLADO ▲▲▲
+    
     // 1. Escucha la orden de cerrar la aplicación desde el LoginScreen
     ipcMain.on('close-app', () => {
         console.log('[MAIN] Recibida orden para cerrar la aplicación.');

@@ -53,7 +53,7 @@ export default function PreGameCoach({ LCU_STATUS, userData }) {
             const synergy = aiAdvice?.newChampionRecommendations?.synergy?.champion;
 
             if (playstyle && synergy) {
-                const ttsText = `MetaMind. Tu diagnóstico: ${playstyle.style}. ${playstyle.description.split('.')[0]}. Tu campeón de sinergia es ${synergy}.`;
+            const ttsText = `MetaMind. Tu diagnóstico: ${playstyle.style}. ${playstyle.description}. Tu campeón de sinergia es ${synergy}.`; // Elimina .split('.')[0]
                 console.log('[PreGameCoach] Texto para hablar (diagnóstico completo):', ttsText);
                 speak(ttsText);
             } else {
@@ -96,14 +96,20 @@ export default function PreGameCoach({ LCU_STATUS, userData }) {
                         <p className="text-lol-gold-light text-sm mt-1">{aiAdvice.playstyleAnalysis.description}</p>
                     </div>
 
-                    <button 
+                     <button 
                         onClick={() => {
-                            const text = `Tu diagnóstico es ${aiAdvice.playstyleAnalysis.style}.`;
-                            speak(text);
+                            // ▼▼▼ CORRECCIÓN TAMBIÉN AQUÍ (en el botón de repetir) ▼▼▼
+                            const fullAdviceText = `
+                            Tu diagnóstico: ${aiAdvice.playstyleAnalysis.style}. 
+                            ${aiAdvice.playstyleAnalysis.description}. 
+                            Tu campeón de sinergia recomendado es ${aiAdvice.newChampionRecommendations.synergy.champion}.
+                            `; // Asegúrate de que aquí tampoco esté el .split('.')[0]
+                            // ▲▲▲ FIN DE LA CORRECCIÓN ▲▲▲
+                            speak(fullAdviceText);
                         }} 
-                        className="w-full py-2 bg-lol-blue-accent hover:bg-lol-blue-medium font-bold rounded text-lol-blue-dark transition-colors"
+                        className="clickable w-full ..."
                     >
-                        <FaMicrophoneAlt className="inline mr-2" /> REPETIR CONSEJOS
+                        <FaMicrophoneAlt className="inline mr-2" /> REPETIR CONSEJO
                     </button>
                 </div>
             )}
