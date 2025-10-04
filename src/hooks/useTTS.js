@@ -1,70 +1,113 @@
-// src/hooks/useTTS.js
-// Hook React para Text-To-Speech avanzado usando Electron preload.js
+// ===========================================
+// 🧠 useTTS Hook (Versión PRO-DEV, Coqui TTS)
+// ===========================================
+// Este hook centraliza el control de Text-To-Speech en el front React
+// - Usa exclusivamente Coqui TTS vía Electron IPC
+// - Implementa cola de reproducción y evita superposición de audios
+// - Permite personalización de velocidad y pitch
+// - Todos los logs detallados para desarrollo
+// ===========================================
+
 import { useCallback, useRef } from 'react';
 
-/**
- * useTTS
- * - Centraliza todo el TTS en el preload.
- * - Maneja cola de reproducción.
- * - Logs detallados para debug.
- */
 export const useTTS = () => {
-  // Cola interna de textos por reproducir
-  const queueRef = useRef([]);
-  const isPlayingRef = useRef(false);
+  // -----------------------------
+  // ESTADOS INTERNOS Y REFERENCIAS
+  // -----------------------------
 
-  /**
-   * playNext
-   * Reproduce el siguiente texto en la cola si hay alguno
-   */
+  // Cola de mensajes pendientes
+  const queueRef = useRef([]);
+  // Bandera: ¿hay un audio reproduciéndose?
+  const isPlayingRef = useRef(false);
+  // Audio actual (archivo generado por Coqui TTS)
+  const currentAudioRef = useRef(null);
+
+  // =====================================================
+  // ▶️ FUNCIÓN PRINCIPAL: Reproducir siguiente texto en la cola
+  // =====================================================
   const playNext = useCallback(async () => {
-    if (isPlayingRef.current) return; // Ya se está reproduciendo algo
+    if (isPlayingRef.current) return; // Ya hay un audio activo
     const next = queueRef.current.shift();
+
     if (!next) {
-      console.log('[useTTS] Cola vacía, nada que reproducir');
+      console.log('[TTS HOOK] 🔕 Cola vacía. Nada por reproducir.');
       isPlayingRef.current = false;
       return;
     }
 
-    console.log('[useTTS] Reproduciendo desde cola:', next.text);
+    console.log(`[TTS HOOK] ▶ Reproduciendo: "${next.text}"`);
     isPlayingRef.current = true;
 
     try {
-      await window.electronAPI.ttsSpeak(next.text, next.voice, next.rate);
-      console.log('[useTTS] Reproducción terminada:', next.text);
+      // Intentamos usar Coqui TTS vía Electron IPC
+      if (!window.electronAPI?.coquiTtsSpeak) {
+        throw new Error('Coqui TTS no disponible en preload.js');
+      }
+
+      const result = await window.electronAPI.coquiTtsSpeak(next.text, next.rate, next.pitch);
+
+      if (result?.filePath) {
+        console.log('[TTS HOOK] 🔊 Audio Coqui recibido:', result.filePath);
+        const audio = new Audio(result.filePath);
+        currentAudioRef.current = audio;
+
+        await new Promise((resolve, reject) => {
+          audio.onended = resolve;
+          audio.onerror = reject;
+          audio.play().catch(reject);
+        });
+      } else {
+        console.warn('[TTS HOOK] ⚠ No se generó archivo de audio Coqui TTS. Reproducción cancelada.');
+      }
     } catch (error) {
-      console.error('[useTTS] Error reproduciendo TTS:', error);
+      console.error('[TTS HOOK] ❌ Error al usar Coqui TTS:', error);
     } finally {
       isPlayingRef.current = false;
-      playNext(); // Reproducir siguiente en cola
+      currentAudioRef.current = null;
+      // Continuar con siguiente mensaje en la cola
+      playNext();
     }
   }, []);
 
-  /**
-   * speak
-   * Añade texto a la cola y lo reproduce si no hay nada en curso
-   */
-  const speak = useCallback((text, voice = 'alloy', rate = 1.0) => {
+  // =====================================================
+  // 🗣️ FUNCIÓN PÚBLICA: speak()
+  // =====================================================
+  const speak = useCallback((text, rate = 1.0, pitch = 1.0) => {
     if (!text || typeof text !== 'string') {
-      console.warn('[useTTS] Texto inválido para speak:', text);
+      console.warn('[TTS HOOK] Texto inválido recibido para speak():', text);
       return;
     }
 
-    console.log('[useTTS] Añadiendo texto a la cola:', text);
-    queueRef.current.push({ text, voice, rate });
+    // Agregar a la cola
+    queueRef.current.push({ text, rate, pitch });
+    console.log(`[TTS HOOK] ➕ Añadido a la cola (${queueRef.current.length} items):`, text);
+
+    // Si nada se está reproduciendo, iniciar reproducción
     playNext();
   }, [playNext]);
 
-  /**
-   * stop
-   * Vacía la cola y detiene cualquier reproducción
-   */
+  // =====================================================
+  // ⏹ FUNCIÓN PÚBLICA: stop()
+  // =====================================================
   const stop = useCallback(() => {
-    console.log('[useTTS] Stop llamado, vaciando cola y cancelando reproducción...');
+    console.log('[TTS HOOK] ⏹ Deteniendo TTS y limpiando cola.');
+
+    // Vaciar cola
     queueRef.current = [];
     isPlayingRef.current = false;
-    window.electronAPI.ttsStop();
+
+    // Si hay audio reproduciéndose
+    if (currentAudioRef.current) {
+      currentAudioRef.current.pause();
+      currentAudioRef.current = null;
+    }
+
+    // Avisar al preload/main para detener cualquier generación en curso
+    if (window.electronAPI?.coquiTtsStop) window.electronAPI.coquiTtsStop();
   }, []);
 
+  // =====================================================
+  // Retornamos API pública del hook
+  // =====================================================
   return { speak, stop };
 };

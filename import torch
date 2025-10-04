@@ -1,0 +1,84 @@
+import torch
+import os
+import sys
+from TTS.api import TTS
+
+# ===================================================
+# 🗣️ CONFIGURACIÓN DEL COACH MASCULINO ESPAÑOL
+# ===================================================
+
+# Modelo VITS multilocutor en español (más estable, ~1GB).
+MODELO_TTS = "tts_models/es/mai/vits" 
+
+# ID del hablante (ajustar si el modelo tiene más de uno). 'p335' es un buen punto de inicio.
+SPEAKER_ID = "p335" 
+
+# Texto que quieres que el Coach diga.
+TEXTO_PRUEBA = "¡El entorno por fin está estable! Tu Coach Meta Mind está preparado para ofrecerte un análisis estratégico y crucial para la victoria."
+
+# Parámetros de ajuste de voz:
+# 1.0 = Normal. 0.8 = 20% más rápido.
+SPEED_RATE = 0.8 
+# 1.0 = Tono normal. 1.05 = Ligeramente más agudo/energético.
+PITCH_RATE = 1.05  
+
+IDIOMA = "es"
+OUTPUT_FILE = "coach_audio_final.wav"
+
+# ===================================================
+# LÓGICA DE GENERACIÓN
+# ===================================================
+
+device = "cuda" if torch.cuda.is_available() else "cpu"
+print(f"[INFO] Usando dispositivo: {device.upper()}")
+
+# --- Carga del modelo ---
+try:
+    print(f"[INFO] Cargando modelo VITS: {MODELO_TTS}")
+    
+    # SOLUCIÓN FINAL AL KEYERROR: Pasamos el nombre del modelo como argumento
+    # posicional directo, que es la sintaxis más básica y robusta para catálogos.
+    tts = TTS(MODELO_TTS).to(device)
+    
+    # 1. Listar y seleccionar el speaker
+    if tts.is_multi_speaker and tts.speakers:
+        # Nota: El modelo VITS MAI es multilocutor. La lista de speakers debe estar disponible.
+        # Si p335 no existe, usamos el primero para garantizar la funcionalidad.
+        if SPEAKER_ID not in tts.speakers:
+             print(f"[INFO] Speaker ID '{SPEAKER_ID}' no encontrado. Usando el primer speaker disponible.")
+             SPEAKER_ID = tts.speakers[0]
+        else:
+             print(f"[INFO] Speaker ID '{SPEAKER_ID}' verificado como disponible.")
+    
+    print("✅ Modelo VITS cargado con éxito.")
+
+    # 2. Generación de voz con ajuste de velocidad y tono.
+    print(f"[INFO] Generando voz (Speaker: {SPEAKER_ID}). Velocidad: {SPEED_RATE}")
+    
+    tts.tts_to_file(
+        text=TEXTO_PRUEBA,
+        speaker=SPEAKER_ID,
+        language=IDIOMA,
+        file_path=OUTPUT_FILE,
+        speed=SPEED_RATE,  
+        pitch=PITCH_RATE
+    )
+    
+    print("-" * 50)
+    print(f"🎉 ÉXITO: Archivo generado en: {os.path.abspath(OUTPUT_FILE)}")
+    print(f"Ahora puedes integrar la lectura de '{OUTPUT_FILE}' en tu app Electron.")
+    print("-" * 50)
+
+except Exception as e:
+    print("-" * 50)
+    print(f"❌ ERROR CRÍTICO durante la generación de voz.")
+    print(f"Detalle del error: {e}")
+    print("-" * 50)
+    
+    # Consejos de depuración final:
+    if str(e) == "'vits'":
+         print("CONSEJO FINAL: El KeyError 'vits' indica un problema con la caché o la base de datos de modelos de TTS.")
+         print("Intenta limpiar manualmente la caché de modelos de Coqui TTS (fuera del proyecto) y vuelve a intentarlo.")
+         print("Ruta de caché (ejemplo): C:\\Users\\TU_USUARIO\\.local\\share\\tts")
+    
+    sys.exit(1)

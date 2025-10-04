@@ -55,7 +55,8 @@
       "out/**/*",
       "node_modules/**/*",
       "lol-client-api.js",
-      "lol-strategic-data-fallback.js"
+      "lol-strategic-data-fallback.js",
+      ".coqui-venv/**/*" 
     ],
     "directories": {
       "buildResources": "assets",
@@ -64,6 +65,9 @@
     "win": {
       "target": "nsis",
       "icon": "assets/icon.ico"
+    },
+    "extraMetadata": {
+      "description": "Incluye Coqui TTS embebido para TTS offline sin instalación extra"
     }
   }
 }

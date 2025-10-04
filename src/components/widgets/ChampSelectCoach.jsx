@@ -5,20 +5,24 @@ import { FaSync, FaRedo, FaBrain, FaExclamationTriangle, FaCheckCircle } from 'r
 import RuneInjector from './RuneInjector';
 import { useWebSocketCoach } from '@/hooks/useWebSocketCoach';
 import { useInteractiveWidget } from '@/hooks/useInteractiveWidget';
+import { useTTS } from '@/hooks/useTTS';
 
 /**
  * ChampSelectCoach
- * Widget para la fase de selección de campeones.
+ * ============================
+ * Widget para la fase de selección de campeones (Champ Select)
  * - Recibe draftData y userData desde useLcuData
  * - Solicita análisis de draft a WebSocket/IA
  * - Permite inyectar runas automáticamente
- * - Maneja estados de timeout y reintento
+ * - Maneja estados de timeout, reintentos y logs
+ * - Reproduce consejos con Coqui TTS únicamente
+ * ============================
  */
 export default function ChampSelectCoach({ draftData, LCU_STATUS, userData }) {
-  console.log('[ChampSelectCoach] --- RENDERIZANDO ---');
-  console.log('[ChampSelectCoach] Props recibidas:', { draftData, LCU_STATUS, userData });
+  console.log('[ChampSelectCoach] --- RENDERIZANDO --- Props:', { draftData, LCU_STATUS, userData });
 
   const { isInteractive, setInteractive } = useInteractiveWidget(false);
+  const { speak } = useTTS(); // ✅ Hook Coqui TTS
 
   // ------------------------------
   // Estados internos
@@ -54,28 +58,40 @@ export default function ChampSelectCoach({ draftData, LCU_STATUS, userData }) {
     if (!draftData || !userData) return;
 
     const currentHash = computeDraftHash(draftData);
-    if (currentHash === lastDraftHash) return;
+    if (currentHash === lastDraftHash) {
+      console.log('[ChampSelectCoach] ⚡ Draft sin cambios. No se envía al WS.');
+      return;
+    }
 
-    console.log('[ChampSelectCoach] Nuevo draft detectado. Enviando a WS para análisis...', draftData);
+    console.log('[ChampSelectCoach] 🛰️ Nuevo draft detectado. Enviando a WS para análisis...', draftData);
 
     setIsLoadingAdvice(true);
     setIsTimedOut(false);
 
     sendDraftUpdate(draftData)
       .then((advice) => {
-        console.log('[ChampSelectCoach] Consejos recibidos del WS:', advice);
+        console.log('[ChampSelectCoach] ✅ Consejos recibidos del WS:', advice);
         setAiAdvice(advice);
         setIsLoadingAdvice(false);
+
+        // ------------------------------
+        // Reproducir TTS automáticamente
+        // ------------------------------
+        if (advice?.tips?.length) {
+          const adviceText = advice.tips.join('. ');
+          console.log('[ChampSelectCoach] 🎤 Reproduciendo TTS automático Coqui:', adviceText);
+          speak(adviceText);
+        }
       })
       .catch((err) => {
-        console.error('[ChampSelectCoach] Error al solicitar consejos:', err);
+        console.error('[ChampSelectCoach] ❌ Error al solicitar consejos:', err);
         setIsTimedOut(true);
         setIsLoadingAdvice(false);
       });
 
     setLastDraftHash(currentHash);
     setAdviceSpoken(true);
-  }, [draftData, userData, lastDraftHash, computeDraftHash, sendDraftUpdate]);
+  }, [draftData, userData, lastDraftHash, computeDraftHash, sendDraftUpdate, speak]);
 
   // ------------------------------
   // Timeout por si WS no responde
@@ -93,7 +109,7 @@ export default function ChampSelectCoach({ draftData, LCU_STATUS, userData }) {
   }, [adviceSpoken, aiAdvice]);
 
   // ------------------------------
-  // Renderizado
+  // Renderizado del widget
   // ------------------------------
   return (
     <div
@@ -135,7 +151,7 @@ export default function ChampSelectCoach({ draftData, LCU_STATUS, userData }) {
           </p>
           <button
             onClick={() => {
-              console.log('[ChampSelectCoach] Reintento manual solicitado.');
+              console.log('[ChampSelectCoach] 🔄 Reintento manual solicitado.');
               setAdviceSpoken(false);
               setIsLoadingAdvice(true);
               setIsTimedOut(false);
@@ -161,11 +177,4 @@ export default function ChampSelectCoach({ draftData, LCU_STATUS, userData }) {
           {/* Tips de IA */}
           <div className="text-lol-gold-light text-xs break-words">
             {aiAdvice?.tips?.map((tip, idx) => (
-              <p key={idx} className="mb-1">• {tip}</p>
-            ))}
-          </div>
-        </div>
-      )}
-    </div>
-  );
-}
+              <p key={idx} className="mb-1

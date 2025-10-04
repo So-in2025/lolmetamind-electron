@@ -1,106 +1,60 @@
-// preload.js - VERSIÓN FINAL CON TTS AVANZADO
+// preload.js - VERSIÓN FINAL CON Coqui TTS (PRO-DEV)
+// Todos logs detallados, compatible 100% con useTTS.js
 const { contextBridge, ipcRenderer } = require('electron');
 
 contextBridge.exposeInMainWorld('electronAPI', {
     // --- Funciones de usuario ---
-    notifyLoginSuccess: (userData) => ipcRenderer.send('user-logged-in', userData),
-    closeApp: () => ipcRenderer.send('close-app'),
+    notifyLoginSuccess: (userData) => console.log('[preload] notifyLoginSuccess', userData) || ipcRenderer.send('user-logged-in', userData),
+    closeApp: () => console.log('[preload] closeApp') || ipcRenderer.send('close-app'),
 
     // --- Overlay y LCU ---
-    setIgnoreMouseEvents: (ignore, forward) => ipcRenderer.send('set-ignore-mouse-events', ignore, forward),
+    setIgnoreMouseEvents: (ignore, forward) => console.log('[preload] setIgnoreMouseEvents', ignore, forward) || ipcRenderer.send('set-ignore-mouse-events', ignore, forward),
     onLcuStateUpdate: (callback) => {
+        console.log('[preload] onLcuStateUpdate registrado');
         ipcRenderer.removeAllListeners('lcu-state-update'); 
-        ipcRenderer.on('lcu-state-update', (event, value) => callback(value));
+        ipcRenderer.on('lcu-state-update', (event, value) => {
+            console.log('[preload] lcu-state-update recibido', value);
+            callback(value);
+        });
     },
 
-    getUserData: () => ipcRenderer.invoke('get-user-data'),
-    lcuCommand: (method, endpoint, payload) => ipcRenderer.invoke('lcu-command', method, endpoint, payload),
-    getMetaAnalysis: (payload) => ipcRenderer.invoke('get-meta-analysis', payload),
-    getRecommendations: (payload) => ipcRenderer.invoke('get-recommendations', payload),
-    getWeeklyChallenges: (payload) => ipcRenderer.invoke('get-weekly-challenges', payload),
-    analyzeMatches: (payload) => ipcRenderer.invoke('analyze-matches', payload),
-    getStrategicAdvice: (payload) => ipcRenderer.invoke('get-strategic-advice', payload),
-    getLiveCoaching: (payload) => ipcRenderer.invoke('get-live-coaching', payload),
+    getUserData: () => console.log('[preload] getUserData invocado') || ipcRenderer.invoke('get-user-data'),
+    lcuCommand: (method, endpoint, payload) => console.log('[preload] lcuCommand', method, endpoint, payload) || ipcRenderer.invoke('lcu-command', method, endpoint, payload),
 
-    // --- 🚀 TTS AVANZADO ---
-    ttsSpeak: async (text, voice = 'alloy', rate = 1.0) => {
+    // --- IA ---
+    getMetaAnalysis: (payload) => console.log('[preload] getMetaAnalysis', payload) || ipcRenderer.invoke('get-meta-analysis', payload),
+    getRecommendations: (payload) => console.log('[preload] getRecommendations', payload) || ipcRenderer.invoke('get-recommendations', payload),
+    getWeeklyChallenges: (payload) => console.log('[preload] getWeeklyChallenges', payload) || ipcRenderer.invoke('get-weekly-challenges', payload),
+    analyzeMatches: (payload) => console.log('[preload] analyzeMatches', payload) || ipcRenderer.invoke('analyze-matches', payload),
+    getStrategicAdvice: (payload) => console.log('[preload] getStrategicAdvice', payload) || ipcRenderer.invoke('get-strategic-advice', payload),
+    getLiveCoaching: (payload) => console.log('[preload] getLiveCoaching', payload) || ipcRenderer.invoke('get-live-coaching', payload),
+
+    // --- 🚀 Coqui TTS ---
+    coquiTtsSpeak: async (text, rate = 1.0, pitch = 1.0) => {
+        console.log('[preload Coqui TTS] Invocado con texto:', text, 'rate:', rate, 'pitch:', pitch);
         if (!text) {
-            console.warn('[preload TTS] Texto vacío, no se reproducirá nada.');
-            return;
+            console.warn('[preload Coqui TTS] Texto vacío, no se reproducirá nada');
+            return {};
         }
 
-        console.log('[preload TTS] Reproduciendo texto:', text);
-
-        // --- 1️⃣ Intento principal: Google Cloud TTS ---
         try {
-            console.log('[preload TTS] Intentando Google Cloud TTS...');
-            const result = await ipcRenderer.invoke('google-tts', { text, voice, rate });
-            if (result?.audioContent) {
-                const audio = new Audio(`data:audio/mp3;base64,${result.audioContent}`);
-                audio.play();
-                console.log('[preload TTS] Google Cloud TTS reproducido ✅');
-                return;
+            const result = await ipcRenderer.invoke('coqui-tts', { text, rate, pitch });
+            if (result?.filePath) {
+                console.log('[preload Coqui TTS] Archivo generado:', result.filePath);
             } else {
-                throw new Error('Respuesta vacía de Google TTS');
+                console.warn('[preload Coqui TTS] ⚠ No se generó archivo de audio');
             }
-        } catch (error) {
-            console.error('[preload TTS] Falló Google Cloud TTS, pasando a fallback 1', error);
+            return result;
+        } catch (err) {
+            console.error('[preload Coqui TTS] ❌ Error en IPC:', err);
+            return {};
         }
-
-        // --- 2️⃣ Fallback: Voces de Google Chrome ---
-        if (typeof window !== 'undefined' && window.speechSynthesis) {
-            try {
-                console.log('[preload TTS] Intentando voces de Google Chrome...');
-                const voices = window.speechSynthesis.getVoices();
-                const googleVoice = voices.find(v => v.name.includes('Google')) || voices[0];
-
-                if (!googleVoice) throw new Error('No se encontró voz de Google Chrome');
-
-                const utterance = new SpeechSynthesisUtterance(text);
-                utterance.voice = googleVoice;
-                utterance.rate = rate;
-                utterance.onstart = () => console.log('[preload TTS] Chrome Google Voice iniciado');
-                utterance.onend = () => console.log('[preload TTS] Chrome Google Voice terminado');
-                utterance.onerror = (err) => console.error('[preload TTS] Error Chrome Google Voice:', err);
-
-                window.speechSynthesis.cancel();
-                window.speechSynthesis.speak(utterance);
-                return;
-            } catch (error) {
-                console.error('[preload TTS] Falló voz de Google Chrome, pasando a fallback 2', error);
-            }
-        }
-
-        // --- 3️⃣ Fallback final: Voces Microsoft ---
-        if (typeof window !== 'undefined' && window.speechSynthesis) {
-            try {
-                console.log('[preload TTS] Intentando voces Microsoft...');
-                const voices = window.speechSynthesis.getVoices();
-                const msVoice = voices.find(v => v.name.includes('Microsoft')) || voices[0];
-
-                if (!msVoice) throw new Error('No se encontró voz Microsoft');
-
-                const utterance = new SpeechSynthesisUtterance(text);
-                utterance.voice = msVoice;
-                utterance.rate = rate;
-                utterance.onstart = () => console.log('[preload TTS] Microsoft Voice iniciado');
-                utterance.onend = () => console.log('[preload TTS] Microsoft Voice terminado');
-                utterance.onerror = (err) => console.error('[preload TTS] Error Microsoft Voice:', err);
-
-                window.speechSynthesis.cancel();
-                window.speechSynthesis.speak(utterance);
-                return;
-            } catch (error) {
-                console.error('[preload TTS] Falló voz de Microsoft, TTS cancelado', error);
-            }
-        }
-
-        console.warn('[preload TTS] Ningún TTS disponible, no se reproducirá nada');
     },
 
-    ttsStop: () => {
+    coquiTtsStop: () => {
+        console.log('[preload Coqui TTS] Stop invocado');
         if (typeof window !== 'undefined' && window.speechSynthesis) {
-            console.log('[preload TTS] Deteniendo cualquier TTS en curso...');
+            console.log('[preload Coqui TTS] Cancelando cualquier TTS en curso');
             window.speechSynthesis.cancel();
         }
     }

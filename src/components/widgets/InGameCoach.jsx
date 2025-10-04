@@ -2,23 +2,27 @@
 'use client';
 
 import React, { useEffect, useState, useCallback } from 'react';
-import { FaSync, FaExclamationTriangle, FaCheckCircle, FaBolt } from 'react-icons/fa';
+import { FaSync, FaExclamationTriangle, FaCheckCircle, FaBolt, FaRedo } from 'react-icons/fa';
 import { useInteractiveWidget } from '@/hooks/useInteractiveWidget';
 import { useWebSocketCoach } from '@/hooks/useWebSocketCoach';
+import { useTTS } from '@/hooks/useTTS';
 
 /**
  * InGameCoach
+ * ============================
  * Widget para fase InProgress (partida en vivo)
  * - Recibe liveData y userData desde useLcuData
  * - Analiza estado de partida y genera consejos en tiempo real
- * - Soporta múltiples APIs de IA y fallback automático
+ * - Soporta Coqui TTS únicamente para lectura de consejos
  * - Maneja timeout, reintentos, logs y renderizado interactivo
+ * - Evita reprocesar datos repetidos usando hash de liveData
+ * ============================
  */
 export default function InGameCoach({ liveData, userData, LCU_STATUS }) {
-  console.log('[InGameCoach] --- RENDERIZANDO ---');
-  console.log('[InGameCoach] Props recibidas:', { liveData, userData, LCU_STATUS });
+  console.log('[InGameCoach] --- RENDERIZANDO --- Props:', { liveData, userData, LCU_STATUS });
 
   const { isInteractive, setInteractive } = useInteractiveWidget(false);
+  const { speak } = useTTS(); // ✅ Hook Coqui TTS
 
   // ------------------------------
   // Estados internos
@@ -56,20 +60,23 @@ export default function InGameCoach({ liveData, userData, LCU_STATUS }) {
     if (!liveData || !userData) return;
 
     const currentHash = computeLiveHash(liveData);
-    if (currentHash === lastGameHash) return; // No enviar si no cambió
+    if (currentHash === lastGameHash) {
+      console.log('[InGameCoach] ⚡ liveData sin cambios. No se envía al WS.');
+      return;
+    }
 
-    console.log('[InGameCoach] Nueva actualización de liveData. Enviando a WS...', liveData);
+    console.log('[InGameCoach] 🛰️ Nueva actualización de liveData. Enviando a WS...', liveData);
     setIsLoadingAdvice(true);
     setIsTimedOut(false);
 
     sendInGameUpdate(liveData)
       .then((advice) => {
-        console.log('[InGameCoach] Consejos recibidos del WS:', advice);
+        console.log('[InGameCoach] ✅ Consejos recibidos del WS:', advice);
         setAiAdvice(advice);
         setIsLoadingAdvice(false);
       })
       .catch((err) => {
-        console.error('[InGameCoach] Error al solicitar consejos:', err);
+        console.error('[InGameCoach] ❌ Error al solicitar consejos:', err);
         setIsTimedOut(true);
         setIsLoadingAdvice(false);
       });
@@ -91,6 +98,18 @@ export default function InGameCoach({ liveData, userData, LCU_STATUS }) {
 
     return () => clearTimeout(timer);
   }, [isLoadingAdvice, aiAdvice]);
+
+  // ------------------------------
+  // Reproducir TTS automáticamente cuando llegan nuevos consejos
+  // ------------------------------
+  useEffect(() => {
+    if (!aiAdvice?.tips?.length) return;
+
+    const adviceText = aiAdvice.tips.join('. ');
+    console.log('[InGameCoach] 🎤 Reproduciendo TTS automático con Coqui:', adviceText);
+
+    speak(adviceText); // Solo Coqui TTS
+  }, [aiAdvice, speak]);
 
   // ------------------------------
   // Renderizado del widget
@@ -135,14 +154,14 @@ export default function InGameCoach({ liveData, userData, LCU_STATUS }) {
           </p>
           <button
             onClick={() => {
-              console.log('[InGameCoach] Reintento manual solicitado.');
+              console.log('[InGameCoach] 🔄 Reintento manual solicitado.');
               setIsLoadingAdvice(true);
               setIsTimedOut(false);
             }}
             className="w-full mt-2 py-1 bg-lol-blue-accent hover:bg-lol-blue-medium text-lol-blue-dark font-bold text-xs rounded transition-colors"
             style={{ WebkitAppRegion: 'no-drag' }}
           >
-            Reintentar
+            <FaRedo className="inline mr-1" size={10} /> Reintentar
           </button>
         </div>
       ) : (
@@ -152,11 +171,26 @@ export default function InGameCoach({ liveData, userData, LCU_STATUS }) {
             <FaCheckCircle className="text-lol-gold animate-pulse" />
           </div>
 
+          {/* Mostrar tips */}
           <div className="text-lol-gold-light text-xs break-words">
             {aiAdvice?.tips?.map((tip, idx) => (
               <p key={idx} className="mb-1">• {tip}</p>
             ))}
           </div>
+
+          {/* Botón para repetir audio */}
+          <button
+            onClick={() => {
+              if (aiAdvice?.tips?.length) {
+                const adviceText = aiAdvice.tips.join('. ');
+                console.log('[InGameCoach] 🎤 Reproduciendo TTS manual:', adviceText);
+                speak(adviceText);
+              }
+            }}
+            className="w-full py-1 bg-lol-gold-dark hover:bg-lol-gold/80 text-lol-blue-dark font-bold text-xs rounded transition-colors"
+          >
+            <FaRedo className="inline mr-1" size={10} /> Repetir Audio
+          </button>
         </div>
       )}
     </div>
