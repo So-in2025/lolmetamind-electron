@@ -1,22 +1,17 @@
-// src/components/widgets/PreGameCoach.jsx - VERSIÓN CORREGIDA
+// src/components/widgets/PreGameCoach.jsx - VERSIÓN CORREGIDA FINAL ASTRO-TÉCNICA
 'use client';
 import React, { useEffect, useState } from 'react';
 import { FaSync, FaBrain, FaMicrophoneAlt } from 'react-icons/fa';
 import { useWebSocketCoach } from '@/hooks/useWebSocketCoach';
 import { useTTS } from '@/hooks/useTTS';
 import { useInteractiveWidget } from '@/hooks/useInteractiveWidget';
-// 🚨 'useAppState' ya no es necesario aquí.
-// import { useAppState } from '@/context/AppStateContext';
+// import { useAppState } from '@/context/AppStateContext'; // Eliminado
 
-// 🚨 1. ACEPTAMOS 'userData' COMO PROP
-//    Ahora el componente recibe los datos del usuario directamente de su padre (CoachContainer).
+// ACEPTAMOS 'userData' COMO PROP
 export default function PreGameCoach({ LCU_STATUS, userData }) {
     console.log('[PreGameCoach] --- RENDERIZANDO ---');
     console.log('[PreGameCoach] Props recibidas -> LCU_STATUS:', LCU_STATUS);
     console.log('[PreGameCoach] Props recibidas -> userData:', userData);
-
-    // 🚨 2. ELIMINAMOS LA LLAMADA A 'useAppState'
-    // const { userData, isFirstTimeUser, isLoadingUser } = useAppState();
 
     // 'useWebSocketCoach' ahora usa el 'userData' que viene de las props.
     const { aiAdvice, wsStatus, sendQueueUpdate } = useWebSocketCoach({
@@ -32,7 +27,6 @@ export default function PreGameCoach({ LCU_STATUS, userData }) {
 
     useEffect(() => {
         console.log('[PreGameCoach] useEffect [wsStatus, userData] -> Verificando condiciones para enviar actualización de cola.');
-        // 🚨 La condición se simplifica: ya no necesitamos 'isLoadingUser'.
         if (wsStatus === 'CONNECTED' && !adviceSpoken && userData) {
             console.log('[PreGameCoach] Condiciones cumplidas. Enviando "QueueUpdate" al WebSocket.');
             sendQueueUpdate();
@@ -45,28 +39,33 @@ export default function PreGameCoach({ LCU_STATUS, userData }) {
 
     useEffect(() => {
         console.log('[PreGameCoach] useEffect [aiAdvice] -> Verificando si hay nuevo consejo de la IA.');
-        if (aiAdvice && isLoadingAdvice) {
+        // CORRECCIÓN CLAVE: Usamos 'preGameAnalysis' y verificamos si existe.
+        const preGameAnalysis = aiAdvice?.preGameAnalysis;
+        
+        if (preGameAnalysis && isLoadingAdvice) {
             console.log('[PreGameCoach] ¡Nuevo consejo de IA recibido!', aiAdvice);
             setIsLoadingAdvice(false);
 
-            const playstyle = aiAdvice?.playstyleAnalysis;
-            const synergy = aiAdvice?.newChampionRecommendations?.synergy?.champion;
-
-            if (playstyle && synergy) {
-            const ttsText = `MetaMind. Tu diagnóstico: ${playstyle.style}. ${playstyle.description}. Tu campeón de sinergia es ${synergy}.`; // Elimina .split('.')[0]
-                console.log('[PreGameCoach] Texto para hablar (diagnóstico completo):', ttsText);
-                speak(ttsText);
-            } else {
-                const welcomeText = `Bienvenido ${userData?.summonerName || 'Invocador'}. Tu asistente está listo para el draft.`;
-                console.log('[PreGameCoach] Texto para hablar (bienvenida simple):', welcomeText);
-                speak(welcomeText);
-            }
+            // LOGICA TTS CORREGIDA: Hablar el Mantra Astral y el Foco Técnico
+            // Esto reemplaza la lógica fallida de playstyle y synergy.
+            const ttsText = `${preGameAnalysis.title}. ${preGameAnalysis.astralMantra}. Foco técnico: ${preGameAnalysis.technicalFocus}.`; 
+            
+            console.log('[PreGameCoach] Texto para hablar (consejo pre-partida):', ttsText);
+            speak(ttsText);
+            
+        } else if (!preGameAnalysis && aiAdvice) {
+            // Manejo de un caso de respuesta de IA inesperada (no tiene preGameAnalysis)
+            setIsLoadingAdvice(false);
+            console.log('[PreGameCoach] Advertencia: aiAdvice recibido, pero sin estructura preGameAnalysis.');
+            
         } else {
             // No hay consejo nuevo o ya no estamos en la fase de carga de consejo.
         }
     }, [aiAdvice, speak, isLoadingAdvice, userData]);
 
     const isReady = aiAdvice && LCU_STATUS === 'ONLINE';
+    // Se extrae la data para que el JSX sea más limpio y se evite el error de undefined
+    const preGameAnalysis = aiAdvice?.preGameAnalysis;
     
     return (
         <div
@@ -74,14 +73,13 @@ export default function PreGameCoach({ LCU_STATUS, userData }) {
             onMouseEnter={() => setInteractive(true)}
             onMouseLeave={() => setInteractive(false)}
         >
-            {/* El JSX ahora usará el 'userData' de las props, mostrando el nombre y signo correctos. */}
             <h2 className="font-display text-2xl font-bold text-lol-gold flex items-center mb-3">
                 <FaBrain className="mr-2 text-lol-blue-accent" />
                 COACH EN COLA: {userData?.summonerName || 'Invocador'} ({userData?.zodiacSign || 'N/A'})
             </h2>
 
-            {/* La lógica de renderizado condicional se mantiene, pero ahora se resolverá correctamente. */}
-            {!isReady || isLoadingAdvice ? (
+            {/* Renderizado condicional: Ahora verifica si existe el objeto de análisis para evitar el TypeError */}
+            {!isReady || isLoadingAdvice || !preGameAnalysis ? ( 
                 <div className="text-center p-4 bg-lol-blue-dark rounded">
                     <FaSync className="animate-spin text-lol-gold mx-auto text-3xl mb-3" />
                     <p className="text-lol-gold-light">
@@ -91,23 +89,25 @@ export default function PreGameCoach({ LCU_STATUS, userData }) {
             ) : (
                 <div className="space-y-4">
                     <div className="p-3 bg-lol-blue-dark rounded border-l-4 border-lol-gold">
-                        <h3 className="text-lol-gold font-bold mb-1">{aiAdvice.playstyleAnalysis.title}</h3>
-                        <p className="text-lol-gold-light text-sm italic">Estilo: {aiAdvice.playstyleAnalysis.style}</p>
-                        <p className="text-lol-gold-light text-sm mt-1">{aiAdvice.playstyleAnalysis.description}</p>
+                        {/* LÍNEA 94 CORREGIDA: Accede a preGameAnalysis.title */}
+                        <h3 className="text-lol-gold font-bold mb-1">{preGameAnalysis.title}</h3>
+                        {/* LÍNEA 95 CORREGIDA: Accede a astralMantra */}
+                        <p className="text-lol-gold-light text-sm italic">Mantra Astral: {preGameAnalysis.astralMantra}</p>
+                        {/* LÍNEA 96 CORREGIDA: Accede a technicalFocus */}
+                        <p className="text-lol-gold-light text-sm mt-1">Foco Técnico: {preGameAnalysis.technicalFocus}</p>
                     </div>
 
                      <button 
                         onClick={() => {
-                            // ▼▼▼ CORRECCIÓN TAMBIÉN AQUÍ (en el botón de repetir) ▼▼▼
+                            // CORRECCIÓN EN TTS DEL BOTÓN: Usa la estructura Astro-Técnica
                             const fullAdviceText = `
-                            Tu diagnóstico: ${aiAdvice.playstyleAnalysis.style}. 
-                            ${aiAdvice.playstyleAnalysis.description}. 
-                            Tu campeón de sinergia recomendado es ${aiAdvice.newChampionRecommendations.synergy.champion}.
-                            `; // Asegúrate de que aquí tampoco esté el .split('.')[0]
-                            // ▲▲▲ FIN DE LA CORRECCIÓN ▲▲▲
+                            ${preGameAnalysis.title}. 
+                            ${preGameAnalysis.astralMantra}. 
+                            Foco técnico: ${preGameAnalysis.technicalFocus}.
+                            `;
                             speak(fullAdviceText);
                         }} 
-                        className="clickable w-full ..."
+                        className="clickable w-full flex items-center justify-center p-2 rounded bg-lol-gold hover:bg-lol-gold-light transition duration-200 text-lol-blue-dark text-sm font-bold"
                     >
                         <FaMicrophoneAlt className="inline mr-2" /> REPETIR CONSEJO
                     </button>

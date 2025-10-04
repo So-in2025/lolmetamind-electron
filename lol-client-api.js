@@ -190,7 +190,7 @@ async function fetchLiveGameData() {
 }
 
 
- async function pollLcuDataAndSend(initialRiotApiData, BACKEND_BASE_URL, LIVE_GAME_UPDATE_ENDPOINT, ipcSender, overlaySender) {
+  async function pollLcuDataAndSend(initialRiotApiData, BACKEND_BASE_URL, LIVE_GAME_UPDATE_ENDPOINT, ipcSender, overlaySender) {
     console.log('\n--- INICIO DE CICLO DE POLLING ---');
     let consolidatedData = { ...initialRiotApiData };
     let lcuModeActive = false;
@@ -213,26 +213,26 @@ async function fetchLiveGameData() {
                 const phase = gameflowResponse.data.phase;
                 console.log(`[POLLING] Fase detectada: ${phase}`);
 
-                // 🚨 MEJORA: Se amplía la lista de fases consideradas "activas" para el coach.
                 const activePhases = ['Lobby', 'Matchmaking', 'ReadyCheck', 'ChampSelect', 'InProgress'];
 
                 if (activePhases.includes(phase)) {
                     lcuModeActive = true;
                     console.log(`[POLLING] Fase activa detectada (${phase}). Entrando en modo Realtime.`);
                     
-                    // Esta lógica se mantiene: solo busca datos de partida si la fase es 'InProgress'.
+                    // LÓGICA CLAVE: Obtener datos de partida en vivo si está en InProgress
                     const liveClientData = phase === 'InProgress' ? await fetchLiveGameData() : null;
 
                     consolidatedData = {
                         ...consolidatedData,
                         mode: 'Realtime',
-                        gameflow: gameflowResponse.data, // Crucial para tener siempre la fase actual.
-                        liveData: liveClientData || { status: 'NotAvailable', reason: 'Live client data no disponible (Vanguard activado o no en partida)' },
+                        gameflow: gameflowResponse.data, 
+                        liveData: liveClientData || { status: 'NotAvailable', reason: 'Live client data no disponible' },
                     };
 
                     if (phase === 'InProgress' && liveClientData?.activePlayer) {
                         const active = liveClientData.activePlayer;
-                        const currentCS = active.cs ?? active.scores?.creepScore;
+                        // Corrección: Usar liveClientData.activePlayer.scores.creepScore si .cs no existe
+                        const currentCS = active.scores?.creepScore ?? active.cs; 
 
                         console.log('--- DETALLES LIVE GAME ---');
                         console.log(`  -> Tiempo: ${liveClientData.gameData.gameTime}s`);
@@ -264,12 +264,14 @@ async function fetchLiveGameData() {
         console.warn('[POLLING] ⚠️  No se pudo enviar datos al Dashboard (ipcSender no válido).');
     }
 
-    // 🚨 MEJORA: Se asegura de que la fase y el estado se envíen correctamente al overlay.
+    // 🚨 CORRECCIÓN CLAVE: INCLUIR LIVE DATA EN EL PAYLOAD DEL OVERLAY
     const gameFlowPhase = consolidatedData.gameflow?.phase || 'None';
     const overlayPayload = {
         lcuStatus: lcuModeActive ? 'ONLINE' : 'OFFLINE',
         gamePhase: lcuModeActive ? gameFlowPhase : 'None',
         draftData: gameFlowPhase === 'ChampSelect' ? consolidatedData.gameflow : null,
+        // 💎 INGREDIENTE FALTANTE: liveData (solo si estamos en partida)
+        liveData: gameFlowPhase === 'InProgress' ? consolidatedData.liveData : null, 
     };
 
     if (overlaySender) {
@@ -296,6 +298,7 @@ async function fetchLiveGameData() {
     }
     console.log('--- FIN DE CICLO DE POLLING ---\n');
 }
+
 /**
  * Función genérica para enviar comandos (POST/PUT) al LCU.
  * Esta función es llamada desde main.js (via IPC handle).

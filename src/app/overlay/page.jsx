@@ -12,7 +12,8 @@ import { ScaleProvider } from '@/context/ScaleContext';
 
 function CoachContainer() {
     // 1. Obtenemos todos los datos necesarios, incluyendo 'userData', desde el hook central.
-    const { gamePhase, draftData, LCU_STATUS, userData } = useLcuData();
+    // Asumo que useLcuData ahora expone 'liveData', crucial para InGameCoach.
+    const { gamePhase, draftData, LCU_STATUS, userData, liveData } = useLcuData();
     const { isInteractive, setInteractive } = useInteractiveWidget(false); 
     
     // Ya no se necesita `useAppState` aquí.
@@ -24,33 +25,35 @@ function CoachContainer() {
         console.log(` -> userData:`, userData);
         console.log(` -> gamePhase: ${gamePhase}`);
         
-        // La condición de corte ahora funcionará porque 'userData' llegará con el sondeo.
+        // 1. CONDICIÓN DE CORTE: Si LCU está OFFLINE o no tenemos datos base, no renderizamos widgets.
         if (LCU_STATUS === 'OFFLINE' || !userData) {
-            console.log('[OVERLAY] Condición de corte: LCU offline o no hay datos de usuario. No se muestra ningún widget.');
+            console.log('[OVERLAY] Condición de corte: LCU offline o no hay datos de usuario.');
             return null;
         }
         
-        // 🚨 CAMBIO CLAVE: Pasamos 'userData' como prop a cada widget.
+        // 🚨 FIX FINAL: Montamos el widget incondicionalmente basado en la FASE DETECTADA.
         switch (gamePhase) {
             case 'Lobby':
             case 'Matchmaking':
             case 'ReadyCheck':
                 console.log('[OVERLAY] RENDER: PreGameCoach');
                 return <PreGameCoach LCU_STATUS={LCU_STATUS} userData={userData} />;
+                
             case 'ChampSelect':
-                if (draftData) {
-                    console.log('[OVERLAY] RENDER: ChampSelectCoach');
-                    return <ChampSelectCoach draftData={draftData} LCU_STATUS={LCU_STATUS} userData={userData} />;
-                }
-                return null;
+                // 💎 MONTAJE INCONDICIONAL: El widget se monta y maneja el estado de carga (null draftData)
+                console.log('[OVERLAY] RENDER: ChampSelectCoach (Incondicionalmente montado)');
+                return <ChampSelectCoach draftData={draftData} LCU_STATUS={LCU_STATUS} userData={userData} />;
+                
             case 'InProgress':
-                console.log('[OVERLAY] RENDER: InGameCoach');
-                return <InGameCoach LCU_STATUS={LCU_STATUS} userData={userData} />;
+                // 💎 MONTAJE INCONDICIONAL: El widget se monta y recibe liveData para su activación
+                console.log('[OVERLAY] RENDER: InGameCoach (Incondicionalmente montado)');
+                return <InGameCoach LCU_STATUS={LCU_STATUS} userData={userData} liveData={liveData} />; // CRÍTICO: Pasa liveData
+                
             default:
                 console.log(`[OVERLAY] RENDER: Nulo (gamePhase '${gamePhase}' no reconocido)`);
                 return null;
         }
-    }, [gamePhase, draftData, LCU_STATUS, userData]); // 'userData' está en las dependencias.
+    }, [gamePhase, draftData, LCU_STATUS, userData, liveData]); // 'liveData' debe estar en las dependencias.
 
     const baseClass = "absolute inset-0 transition-all duration-300";
 
@@ -84,6 +87,9 @@ function CoachContainer() {
         </div>
     );
 }
+
+// Nota: Asegúrate de que este CoachContainer está siendo exportado y usado
+// como el componente principal en tu src/app/overlay/page.jsx (o donde corresponda).
 
 export default function OverlayPage() {
     // Aunque CoachContainer ya no usa AppState directamente, los widgets hijos sí lo hacen.

@@ -55,7 +55,7 @@ export const useWebSocketCoach = ({ userData, targetEvent }) => {
     };
   }, [targetEvent, userData]); // <-- La dependencia de 'userData' es la clave
 
-  // 🚨 2. 'sendMessage' AHORA USA EL 'userData' DE LA CLAUSURA CORRECTA 🚨
+ // 🚨 2. 'sendMessage' AHORA USA EL 'userData' DE LA CLAUSURA CORRECTA 🚨
   const sendMessage = useCallback((eventType, data = {}) => {
     if (wsStatus === 'CONNECTED' && userData) {
       // Tu formato original era correcto, lo restauramos.
@@ -72,10 +72,13 @@ export const useWebSocketCoach = ({ userData, targetEvent }) => {
     }
     console.warn(`[useWebSocketCoach] No se pudo enviar mensaje. Status: ${wsStatus}, UserData: ${!!userData}`);
     return false;
-  }, [wsStatus, userData]); // <-- 'userData' aquí también
+  }, [wsStatus, userData]); 
   
   const sendQueueUpdate = useCallback(() => sendMessage('QUEUE_UPDATE'), [sendMessage]);
   const sendChampSelectUpdate = useCallback((draftData) => sendMessage('CHAMP_SELECT_UPDATE', draftData), [sendMessage]);
+  // 💎 CORRECCIÓN CLAVE: Nueva función para el coaching en partida usando el nombre limpio
+  const sendInGameUpdate = useCallback((liveGameData) => sendMessage('LIVE_COACHING_UPDATE', { liveGameData }), [sendMessage]);
 
-  return { aiAdvice, wsStatus, sendQueueUpdate, sendChampSelectUpdate };
+  // 🚨 3. EXPORTAR LAS FUNCIONES (SE AÑADE sendInGameUpdate) 🚨
+  return { aiAdvice, wsStatus, sendQueueUpdate, sendChampSelectUpdate, sendInGameUpdate };
 };
