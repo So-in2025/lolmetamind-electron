@@ -1725,6 +1725,12 @@ video {
   border-color: rgba(11, 198, 227, var(--divide-opacity));
 }
 
+.divide-lol-blue-medium > :not(template) ~ :not(template) {
+  --divide-opacity: 1;
+  border-color: #0A2433;
+  border-color: rgba(10, 36, 51, var(--divide-opacity));
+}
+
 .divide-lol-blue-dark > :not(template) ~ :not(template) {
   --divide-opacity: 1;
   border-color: #031A21;
@@ -2490,6 +2496,12 @@ video {
   background-color: rgba(11, 198, 227, var(--bg-opacity));
 }
 
+.bg-lol-blue-medium {
+  --bg-opacity: 1;
+  background-color: #0A2433;
+  background-color: rgba(10, 36, 51, var(--bg-opacity));
+}
+
 .bg-lol-blue-dark {
   --bg-opacity: 1;
   background-color: #031A21;
@@ -3132,6 +3144,12 @@ video {
   --bg-opacity: 1;
   background-color: #0BC6E3;
   background-color: rgba(11, 198, 227, var(--bg-opacity));
+}
+
+.hover\:bg-lol-blue-medium:hover {
+  --bg-opacity: 1;
+  background-color: #0A2433;
+  background-color: rgba(10, 36, 51, var(--bg-opacity));
 }
 
 .hover\:bg-lol-blue-dark:hover {
@@ -3778,6 +3796,12 @@ video {
   background-color: rgba(11, 198, 227, var(--bg-opacity));
 }
 
+.focus\:bg-lol-blue-medium:focus {
+  --bg-opacity: 1;
+  background-color: #0A2433;
+  background-color: rgba(10, 36, 51, var(--bg-opacity));
+}
+
 .focus\:bg-lol-blue-dark:focus {
   --bg-opacity: 1;
   background-color: #031A21;
@@ -4371,6 +4395,11 @@ video {
   --gradient-color-stops: var(--gradient-from-color), var(--gradient-to-color, rgba(11, 198, 227, 0));
 }
 
+.from-lol-blue-medium {
+  --gradient-from-color: #0A2433;
+  --gradient-color-stops: var(--gradient-from-color), var(--gradient-to-color, rgba(10, 36, 51, 0));
+}
+
 .from-lol-blue-dark {
   --gradient-from-color: #031A21;
   --gradient-color-stops: var(--gradient-from-color), var(--gradient-to-color, rgba(3, 26, 33, 0));
@@ -4911,6 +4940,11 @@ video {
   --gradient-color-stops: var(--gradient-from-color), var(--gradient-via-color), var(--gradient-to-color, rgba(11, 198, 227, 0));
 }
 
+.via-lol-blue-medium {
+  --gradient-via-color: #0A2433;
+  --gradient-color-stops: var(--gradient-from-color), var(--gradient-via-color), var(--gradient-to-color, rgba(10, 36, 51, 0));
+}
+
 .via-lol-blue-dark {
   --gradient-via-color: #031A21;
   --gradient-color-stops: var(--gradient-from-color), var(--gradient-via-color), var(--gradient-to-color, rgba(3, 26, 33, 0));
@@ -5350,6 +5384,10 @@ video {
 
 .to-lol-blue-light {
   --gradient-to-color: #0BC6E3;
+}
+
+.to-lol-blue-medium {
+  --gradient-to-color: #0A2433;
 }
 
 .to-lol-blue-dark {
@@ -5881,6 +5919,11 @@ video {
 .hover\:from-lol-blue-light:hover {
   --gradient-from-color: #0BC6E3;
   --gradient-color-stops: var(--gradient-from-color), var(--gradient-to-color, rgba(11, 198, 227, 0));
+}
+
+.hover\:from-lol-blue-medium:hover {
+  --gradient-from-color: #0A2433;
+  --gradient-color-stops: var(--gradient-from-color), var(--gradient-to-color, rgba(10, 36, 51, 0));
 }
 
 .hover\:from-lol-blue-dark:hover {
@@ -6423,6 +6466,11 @@ video {
   --gradient-color-stops: var(--gradient-from-color), var(--gradient-via-color), var(--gradient-to-color, rgba(11, 198, 227, 0));
 }
 
+.hover\:via-lol-blue-medium:hover {
+  --gradient-via-color: #0A2433;
+  --gradient-color-stops: var(--gradient-from-color), var(--gradient-via-color), var(--gradient-to-color, rgba(10, 36, 51, 0));
+}
+
 .hover\:via-lol-blue-dark:hover {
   --gradient-via-color: #031A21;
   --gradient-color-stops: var(--gradient-from-color), var(--gradient-via-color), var(--gradient-to-color, rgba(3, 26, 33, 0));
@@ -6862,6 +6910,10 @@ video {
 
 .hover\:to-lol-blue-light:hover {
   --gradient-to-color: #0BC6E3;
+}
+
+.hover\:to-lol-blue-medium:hover {
+  --gradient-to-color: #0A2433;
 }
 
 .hover\:to-lol-blue-dark:hover {
@@ -7393,6 +7445,11 @@ video {
 .focus\:from-lol-blue-light:focus {
   --gradient-from-color: #0BC6E3;
   --gradient-color-stops: var(--gradient-from-color), var(--gradient-to-color, rgba(11, 198, 227, 0));
+}
+
+.focus\:from-lol-blue-medium:focus {
+  --gradient-from-color: #0A2433;
+  --gradient-color-stops: var(--gradient-from-color), var(--gradient-to-color, rgba(10, 36, 51, 0));
 }
 
 .focus\:from-lol-blue-dark:focus {
@@ -7935,6 +7992,11 @@ video {
   --gradient-color-stops: var(--gradient-from-color), var(--gradient-via-color), var(--gradient-to-color, rgba(11, 198, 227, 0));
 }
 
+.focus\:via-lol-blue-medium:focus {
+  --gradient-via-color: #0A2433;
+  --gradient-color-stops: var(--gradient-from-color), var(--gradient-via-color), var(--gradient-to-color, rgba(10, 36, 51, 0));
+}
+
 .focus\:via-lol-blue-dark:focus {
   --gradient-via-color: #031A21;
   --gradient-color-stops: var(--gradient-from-color), var(--gradient-via-color), var(--gradient-to-color, rgba(3, 26, 33, 0));
@@ -8374,6 +8436,10 @@ video {
 
 .focus\:to-lol-blue-light:focus {
   --gradient-to-color: #0BC6E3;
+}
+
+.focus\:to-lol-blue-medium:focus {
+  --gradient-to-color: #0A2433;
 }
 
 .focus\:to-lol-blue-dark:focus {
@@ -9142,6 +9208,12 @@ video {
   border-color: rgba(11, 198, 227, var(--border-opacity));
 }
 
+.border-lol-blue-medium {
+  --border-opacity: 1;
+  border-color: #0A2433;
+  border-color: rgba(10, 36, 51, var(--border-opacity));
+}
+
 .border-lol-blue-dark {
   --border-opacity: 1;
   border-color: #031A21;
@@ -9786,6 +9858,12 @@ video {
   border-color: rgba(11, 198, 227, var(--border-opacity));
 }
 
+.hover\:border-lol-blue-medium:hover {
+  --border-opacity: 1;
+  border-color: #0A2433;
+  border-color: rgba(10, 36, 51, var(--border-opacity));
+}
+
 .hover\:border-lol-blue-dark:hover {
   --border-opacity: 1;
   border-color: #031A21;
@@ -10428,6 +10506,12 @@ video {
   --border-opacity: 1;
   border-color: #0BC6E3;
   border-color: rgba(11, 198, 227, var(--border-opacity));
+}
+
+.focus\:border-lol-blue-medium:focus {
+  --border-opacity: 1;
+  border-color: #0A2433;
+  border-color: rgba(10, 36, 51, var(--border-opacity));
 }
 
 .focus\:border-lol-blue-dark:focus {
@@ -15044,6 +15128,18 @@ video {
   color: rgba(11, 198, 227, var(--placeholder-opacity));
 }
 
+.placeholder-lol-blue-medium::-moz-placeholder {
+  --placeholder-opacity: 1;
+  color: #0A2433;
+  color: rgba(10, 36, 51, var(--placeholder-opacity));
+}
+
+.placeholder-lol-blue-medium::placeholder {
+  --placeholder-opacity: 1;
+  color: #0A2433;
+  color: rgba(10, 36, 51, var(--placeholder-opacity));
+}
+
 .placeholder-lol-blue-dark::-moz-placeholder {
   --placeholder-opacity: 1;
   color: #031A21;
@@ -16332,6 +16428,18 @@ video {
   color: rgba(11, 198, 227, var(--placeholder-opacity));
 }
 
+.focus\:placeholder-lol-blue-medium:focus::-moz-placeholder {
+  --placeholder-opacity: 1;
+  color: #0A2433;
+  color: rgba(10, 36, 51, var(--placeholder-opacity));
+}
+
+.focus\:placeholder-lol-blue-medium:focus::placeholder {
+  --placeholder-opacity: 1;
+  color: #0A2433;
+  color: rgba(10, 36, 51, var(--placeholder-opacity));
+}
+
 .focus\:placeholder-lol-blue-dark:focus::-moz-placeholder {
   --placeholder-opacity: 1;
   color: #031A21;
@@ -17384,6 +17492,12 @@ video {
   color: rgba(11, 198, 227, var(--text-opacity));
 }
 
+.text-lol-blue-medium {
+  --text-opacity: 1;
+  color: #0A2433;
+  color: rgba(10, 36, 51, var(--text-opacity));
+}
+
 .text-lol-blue-dark {
   --text-opacity: 1;
   color: #031A21;
@@ -18028,6 +18142,12 @@ video {
   color: rgba(11, 198, 227, var(--text-opacity));
 }
 
+.hover\:text-lol-blue-medium:hover {
+  --text-opacity: 1;
+  color: #0A2433;
+  color: rgba(10, 36, 51, var(--text-opacity));
+}
+
 .hover\:text-lol-blue-dark:hover {
   --text-opacity: 1;
   color: #031A21;
@@ -18670,6 +18790,12 @@ video {
   --text-opacity: 1;
   color: #0BC6E3;
   color: rgba(11, 198, 227, var(--text-opacity));
+}
+
+.focus\:text-lol-blue-medium:focus {
+  --text-opacity: 1;
+  color: #0A2433;
+  color: rgba(10, 36, 51, var(--text-opacity));
 }
 
 .focus\:text-lol-blue-dark:focus {
@@ -23691,6 +23817,12 @@ button, input, a, select, textarea, /* Elementos HTML interactivos */
     border-color: rgba(11, 198, 227, var(--divide-opacity));
   }
 
+  .sm\:divide-lol-blue-medium > :not(template) ~ :not(template) {
+    --divide-opacity: 1;
+    border-color: #0A2433;
+    border-color: rgba(10, 36, 51, var(--divide-opacity));
+  }
+
   .sm\:divide-lol-blue-dark > :not(template) ~ :not(template) {
     --divide-opacity: 1;
     border-color: #031A21;
@@ -24456,6 +24588,12 @@ button, input, a, select, textarea, /* Elementos HTML interactivos */
     background-color: rgba(11, 198, 227, var(--bg-opacity));
   }
 
+  .sm\:bg-lol-blue-medium {
+    --bg-opacity: 1;
+    background-color: #0A2433;
+    background-color: rgba(10, 36, 51, var(--bg-opacity));
+  }
+
   .sm\:bg-lol-blue-dark {
     --bg-opacity: 1;
     background-color: #031A21;
@@ -25098,6 +25236,12 @@ button, input, a, select, textarea, /* Elementos HTML interactivos */
     --bg-opacity: 1;
     background-color: #0BC6E3;
     background-color: rgba(11, 198, 227, var(--bg-opacity));
+  }
+
+  .sm\:hover\:bg-lol-blue-medium:hover {
+    --bg-opacity: 1;
+    background-color: #0A2433;
+    background-color: rgba(10, 36, 51, var(--bg-opacity));
   }
 
   .sm\:hover\:bg-lol-blue-dark:hover {
@@ -25744,6 +25888,12 @@ button, input, a, select, textarea, /* Elementos HTML interactivos */
     background-color: rgba(11, 198, 227, var(--bg-opacity));
   }
 
+  .sm\:focus\:bg-lol-blue-medium:focus {
+    --bg-opacity: 1;
+    background-color: #0A2433;
+    background-color: rgba(10, 36, 51, var(--bg-opacity));
+  }
+
   .sm\:focus\:bg-lol-blue-dark:focus {
     --bg-opacity: 1;
     background-color: #031A21;
@@ -26337,6 +26487,11 @@ button, input, a, select, textarea, /* Elementos HTML interactivos */
     --gradient-color-stops: var(--gradient-from-color), var(--gradient-to-color, rgba(11, 198, 227, 0));
   }
 
+  .sm\:from-lol-blue-medium {
+    --gradient-from-color: #0A2433;
+    --gradient-color-stops: var(--gradient-from-color), var(--gradient-to-color, rgba(10, 36, 51, 0));
+  }
+
   .sm\:from-lol-blue-dark {
     --gradient-from-color: #031A21;
     --gradient-color-stops: var(--gradient-from-color), var(--gradient-to-color, rgba(3, 26, 33, 0));
@@ -26877,6 +27032,11 @@ button, input, a, select, textarea, /* Elementos HTML interactivos */
     --gradient-color-stops: var(--gradient-from-color), var(--gradient-via-color), var(--gradient-to-color, rgba(11, 198, 227, 0));
   }
 
+  .sm\:via-lol-blue-medium {
+    --gradient-via-color: #0A2433;
+    --gradient-color-stops: var(--gradient-from-color), var(--gradient-via-color), var(--gradient-to-color, rgba(10, 36, 51, 0));
+  }
+
   .sm\:via-lol-blue-dark {
     --gradient-via-color: #031A21;
     --gradient-color-stops: var(--gradient-from-color), var(--gradient-via-color), var(--gradient-to-color, rgba(3, 26, 33, 0));
@@ -27316,6 +27476,10 @@ button, input, a, select, textarea, /* Elementos HTML interactivos */
 
   .sm\:to-lol-blue-light {
     --gradient-to-color: #0BC6E3;
+  }
+
+  .sm\:to-lol-blue-medium {
+    --gradient-to-color: #0A2433;
   }
 
   .sm\:to-lol-blue-dark {
@@ -27847,6 +28011,11 @@ button, input, a, select, textarea, /* Elementos HTML interactivos */
   .sm\:hover\:from-lol-blue-light:hover {
     --gradient-from-color: #0BC6E3;
     --gradient-color-stops: var(--gradient-from-color), var(--gradient-to-color, rgba(11, 198, 227, 0));
+  }
+
+  .sm\:hover\:from-lol-blue-medium:hover {
+    --gradient-from-color: #0A2433;
+    --gradient-color-stops: var(--gradient-from-color), var(--gradient-to-color, rgba(10, 36, 51, 0));
   }
 
   .sm\:hover\:from-lol-blue-dark:hover {
@@ -28389,6 +28558,11 @@ button, input, a, select, textarea, /* Elementos HTML interactivos */
     --gradient-color-stops: var(--gradient-from-color), var(--gradient-via-color), var(--gradient-to-color, rgba(11, 198, 227, 0));
   }
 
+  .sm\:hover\:via-lol-blue-medium:hover {
+    --gradient-via-color: #0A2433;
+    --gradient-color-stops: var(--gradient-from-color), var(--gradient-via-color), var(--gradient-to-color, rgba(10, 36, 51, 0));
+  }
+
   .sm\:hover\:via-lol-blue-dark:hover {
     --gradient-via-color: #031A21;
     --gradient-color-stops: var(--gradient-from-color), var(--gradient-via-color), var(--gradient-to-color, rgba(3, 26, 33, 0));
@@ -28828,6 +29002,10 @@ button, input, a, select, textarea, /* Elementos HTML interactivos */
 
   .sm\:hover\:to-lol-blue-light:hover {
     --gradient-to-color: #0BC6E3;
+  }
+
+  .sm\:hover\:to-lol-blue-medium:hover {
+    --gradient-to-color: #0A2433;
   }
 
   .sm\:hover\:to-lol-blue-dark:hover {
@@ -29359,6 +29537,11 @@ button, input, a, select, textarea, /* Elementos HTML interactivos */
   .sm\:focus\:from-lol-blue-light:focus {
     --gradient-from-color: #0BC6E3;
     --gradient-color-stops: var(--gradient-from-color), var(--gradient-to-color, rgba(11, 198, 227, 0));
+  }
+
+  .sm\:focus\:from-lol-blue-medium:focus {
+    --gradient-from-color: #0A2433;
+    --gradient-color-stops: var(--gradient-from-color), var(--gradient-to-color, rgba(10, 36, 51, 0));
   }
 
   .sm\:focus\:from-lol-blue-dark:focus {
@@ -29901,6 +30084,11 @@ button, input, a, select, textarea, /* Elementos HTML interactivos */
     --gradient-color-stops: var(--gradient-from-color), var(--gradient-via-color), var(--gradient-to-color, rgba(11, 198, 227, 0));
   }
 
+  .sm\:focus\:via-lol-blue-medium:focus {
+    --gradient-via-color: #0A2433;
+    --gradient-color-stops: var(--gradient-from-color), var(--gradient-via-color), var(--gradient-to-color, rgba(10, 36, 51, 0));
+  }
+
   .sm\:focus\:via-lol-blue-dark:focus {
     --gradient-via-color: #031A21;
     --gradient-color-stops: var(--gradient-from-color), var(--gradient-via-color), var(--gradient-to-color, rgba(3, 26, 33, 0));
@@ -30340,6 +30528,10 @@ button, input, a, select, textarea, /* Elementos HTML interactivos */
 
   .sm\:focus\:to-lol-blue-light:focus {
     --gradient-to-color: #0BC6E3;
+  }
+
+  .sm\:focus\:to-lol-blue-medium:focus {
+    --gradient-to-color: #0A2433;
   }
 
   .sm\:focus\:to-lol-blue-dark:focus {
@@ -31108,6 +31300,12 @@ button, input, a, select, textarea, /* Elementos HTML interactivos */
     border-color: rgba(11, 198, 227, var(--border-opacity));
   }
 
+  .sm\:border-lol-blue-medium {
+    --border-opacity: 1;
+    border-color: #0A2433;
+    border-color: rgba(10, 36, 51, var(--border-opacity));
+  }
+
   .sm\:border-lol-blue-dark {
     --border-opacity: 1;
     border-color: #031A21;
@@ -31752,6 +31950,12 @@ button, input, a, select, textarea, /* Elementos HTML interactivos */
     border-color: rgba(11, 198, 227, var(--border-opacity));
   }
 
+  .sm\:hover\:border-lol-blue-medium:hover {
+    --border-opacity: 1;
+    border-color: #0A2433;
+    border-color: rgba(10, 36, 51, var(--border-opacity));
+  }
+
   .sm\:hover\:border-lol-blue-dark:hover {
     --border-opacity: 1;
     border-color: #031A21;
@@ -32394,6 +32598,12 @@ button, input, a, select, textarea, /* Elementos HTML interactivos */
     --border-opacity: 1;
     border-color: #0BC6E3;
     border-color: rgba(11, 198, 227, var(--border-opacity));
+  }
+
+  .sm\:focus\:border-lol-blue-medium:focus {
+    --border-opacity: 1;
+    border-color: #0A2433;
+    border-color: rgba(10, 36, 51, var(--border-opacity));
   }
 
   .sm\:focus\:border-lol-blue-dark:focus {
@@ -37010,6 +37220,18 @@ button, input, a, select, textarea, /* Elementos HTML interactivos */
     color: rgba(11, 198, 227, var(--placeholder-opacity));
   }
 
+  .sm\:placeholder-lol-blue-medium::-moz-placeholder {
+    --placeholder-opacity: 1;
+    color: #0A2433;
+    color: rgba(10, 36, 51, var(--placeholder-opacity));
+  }
+
+  .sm\:placeholder-lol-blue-medium::placeholder {
+    --placeholder-opacity: 1;
+    color: #0A2433;
+    color: rgba(10, 36, 51, var(--placeholder-opacity));
+  }
+
   .sm\:placeholder-lol-blue-dark::-moz-placeholder {
     --placeholder-opacity: 1;
     color: #031A21;
@@ -38298,6 +38520,18 @@ button, input, a, select, textarea, /* Elementos HTML interactivos */
     color: rgba(11, 198, 227, var(--placeholder-opacity));
   }
 
+  .sm\:focus\:placeholder-lol-blue-medium:focus::-moz-placeholder {
+    --placeholder-opacity: 1;
+    color: #0A2433;
+    color: rgba(10, 36, 51, var(--placeholder-opacity));
+  }
+
+  .sm\:focus\:placeholder-lol-blue-medium:focus::placeholder {
+    --placeholder-opacity: 1;
+    color: #0A2433;
+    color: rgba(10, 36, 51, var(--placeholder-opacity));
+  }
+
   .sm\:focus\:placeholder-lol-blue-dark:focus::-moz-placeholder {
     --placeholder-opacity: 1;
     color: #031A21;
@@ -39350,6 +39584,12 @@ button, input, a, select, textarea, /* Elementos HTML interactivos */
     color: rgba(11, 198, 227, var(--text-opacity));
   }
 
+  .sm\:text-lol-blue-medium {
+    --text-opacity: 1;
+    color: #0A2433;
+    color: rgba(10, 36, 51, var(--text-opacity));
+  }
+
   .sm\:text-lol-blue-dark {
     --text-opacity: 1;
     color: #031A21;
@@ -39994,6 +40234,12 @@ button, input, a, select, textarea, /* Elementos HTML interactivos */
     color: rgba(11, 198, 227, var(--text-opacity));
   }
 
+  .sm\:hover\:text-lol-blue-medium:hover {
+    --text-opacity: 1;
+    color: #0A2433;
+    color: rgba(10, 36, 51, var(--text-opacity));
+  }
+
   .sm\:hover\:text-lol-blue-dark:hover {
     --text-opacity: 1;
     color: #031A21;
@@ -40636,6 +40882,12 @@ button, input, a, select, textarea, /* Elementos HTML interactivos */
     --text-opacity: 1;
     color: #0BC6E3;
     color: rgba(11, 198, 227, var(--text-opacity));
+  }
+
+  .sm\:focus\:text-lol-blue-medium:focus {
+    --text-opacity: 1;
+    color: #0A2433;
+    color: rgba(10, 36, 51, var(--text-opacity));
   }
 
   .sm\:focus\:text-lol-blue-dark:focus {
@@ -45346,6 +45598,12 @@ button, input, a, select, textarea, /* Elementos HTML interactivos */
     border-color: rgba(11, 198, 227, var(--divide-opacity));
   }
 
+  .md\:divide-lol-blue-medium > :not(template) ~ :not(template) {
+    --divide-opacity: 1;
+    border-color: #0A2433;
+    border-color: rgba(10, 36, 51, var(--divide-opacity));
+  }
+
   .md\:divide-lol-blue-dark > :not(template) ~ :not(template) {
     --divide-opacity: 1;
     border-color: #031A21;
@@ -46111,6 +46369,12 @@ button, input, a, select, textarea, /* Elementos HTML interactivos */
     background-color: rgba(11, 198, 227, var(--bg-opacity));
   }
 
+  .md\:bg-lol-blue-medium {
+    --bg-opacity: 1;
+    background-color: #0A2433;
+    background-color: rgba(10, 36, 51, var(--bg-opacity));
+  }
+
   .md\:bg-lol-blue-dark {
     --bg-opacity: 1;
     background-color: #031A21;
@@ -46753,6 +47017,12 @@ button, input, a, select, textarea, /* Elementos HTML interactivos */
     --bg-opacity: 1;
     background-color: #0BC6E3;
     background-color: rgba(11, 198, 227, var(--bg-opacity));
+  }
+
+  .md\:hover\:bg-lol-blue-medium:hover {
+    --bg-opacity: 1;
+    background-color: #0A2433;
+    background-color: rgba(10, 36, 51, var(--bg-opacity));
   }
 
   .md\:hover\:bg-lol-blue-dark:hover {
@@ -47399,6 +47669,12 @@ button, input, a, select, textarea, /* Elementos HTML interactivos */
     background-color: rgba(11, 198, 227, var(--bg-opacity));
   }
 
+  .md\:focus\:bg-lol-blue-medium:focus {
+    --bg-opacity: 1;
+    background-color: #0A2433;
+    background-color: rgba(10, 36, 51, var(--bg-opacity));
+  }
+
   .md\:focus\:bg-lol-blue-dark:focus {
     --bg-opacity: 1;
     background-color: #031A21;
@@ -47992,6 +48268,11 @@ button, input, a, select, textarea, /* Elementos HTML interactivos */
     --gradient-color-stops: var(--gradient-from-color), var(--gradient-to-color, rgba(11, 198, 227, 0));
   }
 
+  .md\:from-lol-blue-medium {
+    --gradient-from-color: #0A2433;
+    --gradient-color-stops: var(--gradient-from-color), var(--gradient-to-color, rgba(10, 36, 51, 0));
+  }
+
   .md\:from-lol-blue-dark {
     --gradient-from-color: #031A21;
     --gradient-color-stops: var(--gradient-from-color), var(--gradient-to-color, rgba(3, 26, 33, 0));
@@ -48532,6 +48813,11 @@ button, input, a, select, textarea, /* Elementos HTML interactivos */
     --gradient-color-stops: var(--gradient-from-color), var(--gradient-via-color), var(--gradient-to-color, rgba(11, 198, 227, 0));
   }
 
+  .md\:via-lol-blue-medium {
+    --gradient-via-color: #0A2433;
+    --gradient-color-stops: var(--gradient-from-color), var(--gradient-via-color), var(--gradient-to-color, rgba(10, 36, 51, 0));
+  }
+
   .md\:via-lol-blue-dark {
     --gradient-via-color: #031A21;
     --gradient-color-stops: var(--gradient-from-color), var(--gradient-via-color), var(--gradient-to-color, rgba(3, 26, 33, 0));
@@ -48971,6 +49257,10 @@ button, input, a, select, textarea, /* Elementos HTML interactivos */
 
   .md\:to-lol-blue-light {
     --gradient-to-color: #0BC6E3;
+  }
+
+  .md\:to-lol-blue-medium {
+    --gradient-to-color: #0A2433;
   }
 
   .md\:to-lol-blue-dark {
@@ -49502,6 +49792,11 @@ button, input, a, select, textarea, /* Elementos HTML interactivos */
   .md\:hover\:from-lol-blue-light:hover {
     --gradient-from-color: #0BC6E3;
     --gradient-color-stops: var(--gradient-from-color), var(--gradient-to-color, rgba(11, 198, 227, 0));
+  }
+
+  .md\:hover\:from-lol-blue-medium:hover {
+    --gradient-from-color: #0A2433;
+    --gradient-color-stops: var(--gradient-from-color), var(--gradient-to-color, rgba(10, 36, 51, 0));
   }
 
   .md\:hover\:from-lol-blue-dark:hover {
@@ -50044,6 +50339,11 @@ button, input, a, select, textarea, /* Elementos HTML interactivos */
     --gradient-color-stops: var(--gradient-from-color), var(--gradient-via-color), var(--gradient-to-color, rgba(11, 198, 227, 0));
   }
 
+  .md\:hover\:via-lol-blue-medium:hover {
+    --gradient-via-color: #0A2433;
+    --gradient-color-stops: var(--gradient-from-color), var(--gradient-via-color), var(--gradient-to-color, rgba(10, 36, 51, 0));
+  }
+
   .md\:hover\:via-lol-blue-dark:hover {
     --gradient-via-color: #031A21;
     --gradient-color-stops: var(--gradient-from-color), var(--gradient-via-color), var(--gradient-to-color, rgba(3, 26, 33, 0));
@@ -50483,6 +50783,10 @@ button, input, a, select, textarea, /* Elementos HTML interactivos */
 
   .md\:hover\:to-lol-blue-light:hover {
     --gradient-to-color: #0BC6E3;
+  }
+
+  .md\:hover\:to-lol-blue-medium:hover {
+    --gradient-to-color: #0A2433;
   }
 
   .md\:hover\:to-lol-blue-dark:hover {
@@ -51014,6 +51318,11 @@ button, input, a, select, textarea, /* Elementos HTML interactivos */
   .md\:focus\:from-lol-blue-light:focus {
     --gradient-from-color: #0BC6E3;
     --gradient-color-stops: var(--gradient-from-color), var(--gradient-to-color, rgba(11, 198, 227, 0));
+  }
+
+  .md\:focus\:from-lol-blue-medium:focus {
+    --gradient-from-color: #0A2433;
+    --gradient-color-stops: var(--gradient-from-color), var(--gradient-to-color, rgba(10, 36, 51, 0));
   }
 
   .md\:focus\:from-lol-blue-dark:focus {
@@ -51556,6 +51865,11 @@ button, input, a, select, textarea, /* Elementos HTML interactivos */
     --gradient-color-stops: var(--gradient-from-color), var(--gradient-via-color), var(--gradient-to-color, rgba(11, 198, 227, 0));
   }
 
+  .md\:focus\:via-lol-blue-medium:focus {
+    --gradient-via-color: #0A2433;
+    --gradient-color-stops: var(--gradient-from-color), var(--gradient-via-color), var(--gradient-to-color, rgba(10, 36, 51, 0));
+  }
+
   .md\:focus\:via-lol-blue-dark:focus {
     --gradient-via-color: #031A21;
     --gradient-color-stops: var(--gradient-from-color), var(--gradient-via-color), var(--gradient-to-color, rgba(3, 26, 33, 0));
@@ -51995,6 +52309,10 @@ button, input, a, select, textarea, /* Elementos HTML interactivos */
 
   .md\:focus\:to-lol-blue-light:focus {
     --gradient-to-color: #0BC6E3;
+  }
+
+  .md\:focus\:to-lol-blue-medium:focus {
+    --gradient-to-color: #0A2433;
   }
 
   .md\:focus\:to-lol-blue-dark:focus {
@@ -52763,6 +53081,12 @@ button, input, a, select, textarea, /* Elementos HTML interactivos */
     border-color: rgba(11, 198, 227, var(--border-opacity));
   }
 
+  .md\:border-lol-blue-medium {
+    --border-opacity: 1;
+    border-color: #0A2433;
+    border-color: rgba(10, 36, 51, var(--border-opacity));
+  }
+
   .md\:border-lol-blue-dark {
     --border-opacity: 1;
     border-color: #031A21;
@@ -53407,6 +53731,12 @@ button, input, a, select, textarea, /* Elementos HTML interactivos */
     border-color: rgba(11, 198, 227, var(--border-opacity));
   }
 
+  .md\:hover\:border-lol-blue-medium:hover {
+    --border-opacity: 1;
+    border-color: #0A2433;
+    border-color: rgba(10, 36, 51, var(--border-opacity));
+  }
+
   .md\:hover\:border-lol-blue-dark:hover {
     --border-opacity: 1;
     border-color: #031A21;
@@ -54049,6 +54379,12 @@ button, input, a, select, textarea, /* Elementos HTML interactivos */
     --border-opacity: 1;
     border-color: #0BC6E3;
     border-color: rgba(11, 198, 227, var(--border-opacity));
+  }
+
+  .md\:focus\:border-lol-blue-medium:focus {
+    --border-opacity: 1;
+    border-color: #0A2433;
+    border-color: rgba(10, 36, 51, var(--border-opacity));
   }
 
   .md\:focus\:border-lol-blue-dark:focus {
@@ -58665,6 +59001,18 @@ button, input, a, select, textarea, /* Elementos HTML interactivos */
     color: rgba(11, 198, 227, var(--placeholder-opacity));
   }
 
+  .md\:placeholder-lol-blue-medium::-moz-placeholder {
+    --placeholder-opacity: 1;
+    color: #0A2433;
+    color: rgba(10, 36, 51, var(--placeholder-opacity));
+  }
+
+  .md\:placeholder-lol-blue-medium::placeholder {
+    --placeholder-opacity: 1;
+    color: #0A2433;
+    color: rgba(10, 36, 51, var(--placeholder-opacity));
+  }
+
   .md\:placeholder-lol-blue-dark::-moz-placeholder {
     --placeholder-opacity: 1;
     color: #031A21;
@@ -59953,6 +60301,18 @@ button, input, a, select, textarea, /* Elementos HTML interactivos */
     color: rgba(11, 198, 227, var(--placeholder-opacity));
   }
 
+  .md\:focus\:placeholder-lol-blue-medium:focus::-moz-placeholder {
+    --placeholder-opacity: 1;
+    color: #0A2433;
+    color: rgba(10, 36, 51, var(--placeholder-opacity));
+  }
+
+  .md\:focus\:placeholder-lol-blue-medium:focus::placeholder {
+    --placeholder-opacity: 1;
+    color: #0A2433;
+    color: rgba(10, 36, 51, var(--placeholder-opacity));
+  }
+
   .md\:focus\:placeholder-lol-blue-dark:focus::-moz-placeholder {
     --placeholder-opacity: 1;
     color: #031A21;
@@ -61005,6 +61365,12 @@ button, input, a, select, textarea, /* Elementos HTML interactivos */
     color: rgba(11, 198, 227, var(--text-opacity));
   }
 
+  .md\:text-lol-blue-medium {
+    --text-opacity: 1;
+    color: #0A2433;
+    color: rgba(10, 36, 51, var(--text-opacity));
+  }
+
   .md\:text-lol-blue-dark {
     --text-opacity: 1;
     color: #031A21;
@@ -61649,6 +62015,12 @@ button, input, a, select, textarea, /* Elementos HTML interactivos */
     color: rgba(11, 198, 227, var(--text-opacity));
   }
 
+  .md\:hover\:text-lol-blue-medium:hover {
+    --text-opacity: 1;
+    color: #0A2433;
+    color: rgba(10, 36, 51, var(--text-opacity));
+  }
+
   .md\:hover\:text-lol-blue-dark:hover {
     --text-opacity: 1;
     color: #031A21;
@@ -62291,6 +62663,12 @@ button, input, a, select, textarea, /* Elementos HTML interactivos */
     --text-opacity: 1;
     color: #0BC6E3;
     color: rgba(11, 198, 227, var(--text-opacity));
+  }
+
+  .md\:focus\:text-lol-blue-medium:focus {
+    --text-opacity: 1;
+    color: #0A2433;
+    color: rgba(10, 36, 51, var(--text-opacity));
   }
 
   .md\:focus\:text-lol-blue-dark:focus {
@@ -67001,6 +67379,12 @@ button, input, a, select, textarea, /* Elementos HTML interactivos */
     border-color: rgba(11, 198, 227, var(--divide-opacity));
   }
 
+  .lg\:divide-lol-blue-medium > :not(template) ~ :not(template) {
+    --divide-opacity: 1;
+    border-color: #0A2433;
+    border-color: rgba(10, 36, 51, var(--divide-opacity));
+  }
+
   .lg\:divide-lol-blue-dark > :not(template) ~ :not(template) {
     --divide-opacity: 1;
     border-color: #031A21;
@@ -67766,6 +68150,12 @@ button, input, a, select, textarea, /* Elementos HTML interactivos */
     background-color: rgba(11, 198, 227, var(--bg-opacity));
   }
 
+  .lg\:bg-lol-blue-medium {
+    --bg-opacity: 1;
+    background-color: #0A2433;
+    background-color: rgba(10, 36, 51, var(--bg-opacity));
+  }
+
   .lg\:bg-lol-blue-dark {
     --bg-opacity: 1;
     background-color: #031A21;
@@ -68408,6 +68798,12 @@ button, input, a, select, textarea, /* Elementos HTML interactivos */
     --bg-opacity: 1;
     background-color: #0BC6E3;
     background-color: rgba(11, 198, 227, var(--bg-opacity));
+  }
+
+  .lg\:hover\:bg-lol-blue-medium:hover {
+    --bg-opacity: 1;
+    background-color: #0A2433;
+    background-color: rgba(10, 36, 51, var(--bg-opacity));
   }
 
   .lg\:hover\:bg-lol-blue-dark:hover {
@@ -69054,6 +69450,12 @@ button, input, a, select, textarea, /* Elementos HTML interactivos */
     background-color: rgba(11, 198, 227, var(--bg-opacity));
   }
 
+  .lg\:focus\:bg-lol-blue-medium:focus {
+    --bg-opacity: 1;
+    background-color: #0A2433;
+    background-color: rgba(10, 36, 51, var(--bg-opacity));
+  }
+
   .lg\:focus\:bg-lol-blue-dark:focus {
     --bg-opacity: 1;
     background-color: #031A21;
@@ -69647,6 +70049,11 @@ button, input, a, select, textarea, /* Elementos HTML interactivos */
     --gradient-color-stops: var(--gradient-from-color), var(--gradient-to-color, rgba(11, 198, 227, 0));
   }
 
+  .lg\:from-lol-blue-medium {
+    --gradient-from-color: #0A2433;
+    --gradient-color-stops: var(--gradient-from-color), var(--gradient-to-color, rgba(10, 36, 51, 0));
+  }
+
   .lg\:from-lol-blue-dark {
     --gradient-from-color: #031A21;
     --gradient-color-stops: var(--gradient-from-color), var(--gradient-to-color, rgba(3, 26, 33, 0));
@@ -70187,6 +70594,11 @@ button, input, a, select, textarea, /* Elementos HTML interactivos */
     --gradient-color-stops: var(--gradient-from-color), var(--gradient-via-color), var(--gradient-to-color, rgba(11, 198, 227, 0));
   }
 
+  .lg\:via-lol-blue-medium {
+    --gradient-via-color: #0A2433;
+    --gradient-color-stops: var(--gradient-from-color), var(--gradient-via-color), var(--gradient-to-color, rgba(10, 36, 51, 0));
+  }
+
   .lg\:via-lol-blue-dark {
     --gradient-via-color: #031A21;
     --gradient-color-stops: var(--gradient-from-color), var(--gradient-via-color), var(--gradient-to-color, rgba(3, 26, 33, 0));
@@ -70626,6 +71038,10 @@ button, input, a, select, textarea, /* Elementos HTML interactivos */
 
   .lg\:to-lol-blue-light {
     --gradient-to-color: #0BC6E3;
+  }
+
+  .lg\:to-lol-blue-medium {
+    --gradient-to-color: #0A2433;
   }
 
   .lg\:to-lol-blue-dark {
@@ -71157,6 +71573,11 @@ button, input, a, select, textarea, /* Elementos HTML interactivos */
   .lg\:hover\:from-lol-blue-light:hover {
     --gradient-from-color: #0BC6E3;
     --gradient-color-stops: var(--gradient-from-color), var(--gradient-to-color, rgba(11, 198, 227, 0));
+  }
+
+  .lg\:hover\:from-lol-blue-medium:hover {
+    --gradient-from-color: #0A2433;
+    --gradient-color-stops: var(--gradient-from-color), var(--gradient-to-color, rgba(10, 36, 51, 0));
   }
 
   .lg\:hover\:from-lol-blue-dark:hover {
@@ -71699,6 +72120,11 @@ button, input, a, select, textarea, /* Elementos HTML interactivos */
     --gradient-color-stops: var(--gradient-from-color), var(--gradient-via-color), var(--gradient-to-color, rgba(11, 198, 227, 0));
   }
 
+  .lg\:hover\:via-lol-blue-medium:hover {
+    --gradient-via-color: #0A2433;
+    --gradient-color-stops: var(--gradient-from-color), var(--gradient-via-color), var(--gradient-to-color, rgba(10, 36, 51, 0));
+  }
+
   .lg\:hover\:via-lol-blue-dark:hover {
     --gradient-via-color: #031A21;
     --gradient-color-stops: var(--gradient-from-color), var(--gradient-via-color), var(--gradient-to-color, rgba(3, 26, 33, 0));
@@ -72138,6 +72564,10 @@ button, input, a, select, textarea, /* Elementos HTML interactivos */
 
   .lg\:hover\:to-lol-blue-light:hover {
     --gradient-to-color: #0BC6E3;
+  }
+
+  .lg\:hover\:to-lol-blue-medium:hover {
+    --gradient-to-color: #0A2433;
   }
 
   .lg\:hover\:to-lol-blue-dark:hover {
@@ -72669,6 +73099,11 @@ button, input, a, select, textarea, /* Elementos HTML interactivos */
   .lg\:focus\:from-lol-blue-light:focus {
     --gradient-from-color: #0BC6E3;
     --gradient-color-stops: var(--gradient-from-color), var(--gradient-to-color, rgba(11, 198, 227, 0));
+  }
+
+  .lg\:focus\:from-lol-blue-medium:focus {
+    --gradient-from-color: #0A2433;
+    --gradient-color-stops: var(--gradient-from-color), var(--gradient-to-color, rgba(10, 36, 51, 0));
   }
 
   .lg\:focus\:from-lol-blue-dark:focus {
@@ -73211,6 +73646,11 @@ button, input, a, select, textarea, /* Elementos HTML interactivos */
     --gradient-color-stops: var(--gradient-from-color), var(--gradient-via-color), var(--gradient-to-color, rgba(11, 198, 227, 0));
   }
 
+  .lg\:focus\:via-lol-blue-medium:focus {
+    --gradient-via-color: #0A2433;
+    --gradient-color-stops: var(--gradient-from-color), var(--gradient-via-color), var(--gradient-to-color, rgba(10, 36, 51, 0));
+  }
+
   .lg\:focus\:via-lol-blue-dark:focus {
     --gradient-via-color: #031A21;
     --gradient-color-stops: var(--gradient-from-color), var(--gradient-via-color), var(--gradient-to-color, rgba(3, 26, 33, 0));
@@ -73650,6 +74090,10 @@ button, input, a, select, textarea, /* Elementos HTML interactivos */
 
   .lg\:focus\:to-lol-blue-light:focus {
     --gradient-to-color: #0BC6E3;
+  }
+
+  .lg\:focus\:to-lol-blue-medium:focus {
+    --gradient-to-color: #0A2433;
   }
 
   .lg\:focus\:to-lol-blue-dark:focus {
@@ -74418,6 +74862,12 @@ button, input, a, select, textarea, /* Elementos HTML interactivos */
     border-color: rgba(11, 198, 227, var(--border-opacity));
   }
 
+  .lg\:border-lol-blue-medium {
+    --border-opacity: 1;
+    border-color: #0A2433;
+    border-color: rgba(10, 36, 51, var(--border-opacity));
+  }
+
   .lg\:border-lol-blue-dark {
     --border-opacity: 1;
     border-color: #031A21;
@@ -75062,6 +75512,12 @@ button, input, a, select, textarea, /* Elementos HTML interactivos */
     border-color: rgba(11, 198, 227, var(--border-opacity));
   }
 
+  .lg\:hover\:border-lol-blue-medium:hover {
+    --border-opacity: 1;
+    border-color: #0A2433;
+    border-color: rgba(10, 36, 51, var(--border-opacity));
+  }
+
   .lg\:hover\:border-lol-blue-dark:hover {
     --border-opacity: 1;
     border-color: #031A21;
@@ -75704,6 +76160,12 @@ button, input, a, select, textarea, /* Elementos HTML interactivos */
     --border-opacity: 1;
     border-color: #0BC6E3;
     border-color: rgba(11, 198, 227, var(--border-opacity));
+  }
+
+  .lg\:focus\:border-lol-blue-medium:focus {
+    --border-opacity: 1;
+    border-color: #0A2433;
+    border-color: rgba(10, 36, 51, var(--border-opacity));
   }
 
   .lg\:focus\:border-lol-blue-dark:focus {
@@ -80320,6 +80782,18 @@ button, input, a, select, textarea, /* Elementos HTML interactivos */
     color: rgba(11, 198, 227, var(--placeholder-opacity));
   }
 
+  .lg\:placeholder-lol-blue-medium::-moz-placeholder {
+    --placeholder-opacity: 1;
+    color: #0A2433;
+    color: rgba(10, 36, 51, var(--placeholder-opacity));
+  }
+
+  .lg\:placeholder-lol-blue-medium::placeholder {
+    --placeholder-opacity: 1;
+    color: #0A2433;
+    color: rgba(10, 36, 51, var(--placeholder-opacity));
+  }
+
   .lg\:placeholder-lol-blue-dark::-moz-placeholder {
     --placeholder-opacity: 1;
     color: #031A21;
@@ -81608,6 +82082,18 @@ button, input, a, select, textarea, /* Elementos HTML interactivos */
     color: rgba(11, 198, 227, var(--placeholder-opacity));
   }
 
+  .lg\:focus\:placeholder-lol-blue-medium:focus::-moz-placeholder {
+    --placeholder-opacity: 1;
+    color: #0A2433;
+    color: rgba(10, 36, 51, var(--placeholder-opacity));
+  }
+
+  .lg\:focus\:placeholder-lol-blue-medium:focus::placeholder {
+    --placeholder-opacity: 1;
+    color: #0A2433;
+    color: rgba(10, 36, 51, var(--placeholder-opacity));
+  }
+
   .lg\:focus\:placeholder-lol-blue-dark:focus::-moz-placeholder {
     --placeholder-opacity: 1;
     color: #031A21;
@@ -82660,6 +83146,12 @@ button, input, a, select, textarea, /* Elementos HTML interactivos */
     color: rgba(11, 198, 227, var(--text-opacity));
   }
 
+  .lg\:text-lol-blue-medium {
+    --text-opacity: 1;
+    color: #0A2433;
+    color: rgba(10, 36, 51, var(--text-opacity));
+  }
+
   .lg\:text-lol-blue-dark {
     --text-opacity: 1;
     color: #031A21;
@@ -83304,6 +83796,12 @@ button, input, a, select, textarea, /* Elementos HTML interactivos */
     color: rgba(11, 198, 227, var(--text-opacity));
   }
 
+  .lg\:hover\:text-lol-blue-medium:hover {
+    --text-opacity: 1;
+    color: #0A2433;
+    color: rgba(10, 36, 51, var(--text-opacity));
+  }
+
   .lg\:hover\:text-lol-blue-dark:hover {
     --text-opacity: 1;
     color: #031A21;
@@ -83946,6 +84444,12 @@ button, input, a, select, textarea, /* Elementos HTML interactivos */
     --text-opacity: 1;
     color: #0BC6E3;
     color: rgba(11, 198, 227, var(--text-opacity));
+  }
+
+  .lg\:focus\:text-lol-blue-medium:focus {
+    --text-opacity: 1;
+    color: #0A2433;
+    color: rgba(10, 36, 51, var(--text-opacity));
   }
 
   .lg\:focus\:text-lol-blue-dark:focus {
@@ -88656,6 +89160,12 @@ button, input, a, select, textarea, /* Elementos HTML interactivos */
     border-color: rgba(11, 198, 227, var(--divide-opacity));
   }
 
+  .xl\:divide-lol-blue-medium > :not(template) ~ :not(template) {
+    --divide-opacity: 1;
+    border-color: #0A2433;
+    border-color: rgba(10, 36, 51, var(--divide-opacity));
+  }
+
   .xl\:divide-lol-blue-dark > :not(template) ~ :not(template) {
     --divide-opacity: 1;
     border-color: #031A21;
@@ -89421,6 +89931,12 @@ button, input, a, select, textarea, /* Elementos HTML interactivos */
     background-color: rgba(11, 198, 227, var(--bg-opacity));
   }
 
+  .xl\:bg-lol-blue-medium {
+    --bg-opacity: 1;
+    background-color: #0A2433;
+    background-color: rgba(10, 36, 51, var(--bg-opacity));
+  }
+
   .xl\:bg-lol-blue-dark {
     --bg-opacity: 1;
     background-color: #031A21;
@@ -90063,6 +90579,12 @@ button, input, a, select, textarea, /* Elementos HTML interactivos */
     --bg-opacity: 1;
     background-color: #0BC6E3;
     background-color: rgba(11, 198, 227, var(--bg-opacity));
+  }
+
+  .xl\:hover\:bg-lol-blue-medium:hover {
+    --bg-opacity: 1;
+    background-color: #0A2433;
+    background-color: rgba(10, 36, 51, var(--bg-opacity));
   }
 
   .xl\:hover\:bg-lol-blue-dark:hover {
@@ -90709,6 +91231,12 @@ button, input, a, select, textarea, /* Elementos HTML interactivos */
     background-color: rgba(11, 198, 227, var(--bg-opacity));
   }
 
+  .xl\:focus\:bg-lol-blue-medium:focus {
+    --bg-opacity: 1;
+    background-color: #0A2433;
+    background-color: rgba(10, 36, 51, var(--bg-opacity));
+  }
+
   .xl\:focus\:bg-lol-blue-dark:focus {
     --bg-opacity: 1;
     background-color: #031A21;
@@ -91302,6 +91830,11 @@ button, input, a, select, textarea, /* Elementos HTML interactivos */
     --gradient-color-stops: var(--gradient-from-color), var(--gradient-to-color, rgba(11, 198, 227, 0));
   }
 
+  .xl\:from-lol-blue-medium {
+    --gradient-from-color: #0A2433;
+    --gradient-color-stops: var(--gradient-from-color), var(--gradient-to-color, rgba(10, 36, 51, 0));
+  }
+
   .xl\:from-lol-blue-dark {
     --gradient-from-color: #031A21;
     --gradient-color-stops: var(--gradient-from-color), var(--gradient-to-color, rgba(3, 26, 33, 0));
@@ -91842,6 +92375,11 @@ button, input, a, select, textarea, /* Elementos HTML interactivos */
     --gradient-color-stops: var(--gradient-from-color), var(--gradient-via-color), var(--gradient-to-color, rgba(11, 198, 227, 0));
   }
 
+  .xl\:via-lol-blue-medium {
+    --gradient-via-color: #0A2433;
+    --gradient-color-stops: var(--gradient-from-color), var(--gradient-via-color), var(--gradient-to-color, rgba(10, 36, 51, 0));
+  }
+
   .xl\:via-lol-blue-dark {
     --gradient-via-color: #031A21;
     --gradient-color-stops: var(--gradient-from-color), var(--gradient-via-color), var(--gradient-to-color, rgba(3, 26, 33, 0));
@@ -92281,6 +92819,10 @@ button, input, a, select, textarea, /* Elementos HTML interactivos */
 
   .xl\:to-lol-blue-light {
     --gradient-to-color: #0BC6E3;
+  }
+
+  .xl\:to-lol-blue-medium {
+    --gradient-to-color: #0A2433;
   }
 
   .xl\:to-lol-blue-dark {
@@ -92812,6 +93354,11 @@ button, input, a, select, textarea, /* Elementos HTML interactivos */
   .xl\:hover\:from-lol-blue-light:hover {
     --gradient-from-color: #0BC6E3;
     --gradient-color-stops: var(--gradient-from-color), var(--gradient-to-color, rgba(11, 198, 227, 0));
+  }
+
+  .xl\:hover\:from-lol-blue-medium:hover {
+    --gradient-from-color: #0A2433;
+    --gradient-color-stops: var(--gradient-from-color), var(--gradient-to-color, rgba(10, 36, 51, 0));
   }
 
   .xl\:hover\:from-lol-blue-dark:hover {
@@ -93354,6 +93901,11 @@ button, input, a, select, textarea, /* Elementos HTML interactivos */
     --gradient-color-stops: var(--gradient-from-color), var(--gradient-via-color), var(--gradient-to-color, rgba(11, 198, 227, 0));
   }
 
+  .xl\:hover\:via-lol-blue-medium:hover {
+    --gradient-via-color: #0A2433;
+    --gradient-color-stops: var(--gradient-from-color), var(--gradient-via-color), var(--gradient-to-color, rgba(10, 36, 51, 0));
+  }
+
   .xl\:hover\:via-lol-blue-dark:hover {
     --gradient-via-color: #031A21;
     --gradient-color-stops: var(--gradient-from-color), var(--gradient-via-color), var(--gradient-to-color, rgba(3, 26, 33, 0));
@@ -93793,6 +94345,10 @@ button, input, a, select, textarea, /* Elementos HTML interactivos */
 
   .xl\:hover\:to-lol-blue-light:hover {
     --gradient-to-color: #0BC6E3;
+  }
+
+  .xl\:hover\:to-lol-blue-medium:hover {
+    --gradient-to-color: #0A2433;
   }
 
   .xl\:hover\:to-lol-blue-dark:hover {
@@ -94324,6 +94880,11 @@ button, input, a, select, textarea, /* Elementos HTML interactivos */
   .xl\:focus\:from-lol-blue-light:focus {
     --gradient-from-color: #0BC6E3;
     --gradient-color-stops: var(--gradient-from-color), var(--gradient-to-color, rgba(11, 198, 227, 0));
+  }
+
+  .xl\:focus\:from-lol-blue-medium:focus {
+    --gradient-from-color: #0A2433;
+    --gradient-color-stops: var(--gradient-from-color), var(--gradient-to-color, rgba(10, 36, 51, 0));
   }
 
   .xl\:focus\:from-lol-blue-dark:focus {
@@ -94866,6 +95427,11 @@ button, input, a, select, textarea, /* Elementos HTML interactivos */
     --gradient-color-stops: var(--gradient-from-color), var(--gradient-via-color), var(--gradient-to-color, rgba(11, 198, 227, 0));
   }
 
+  .xl\:focus\:via-lol-blue-medium:focus {
+    --gradient-via-color: #0A2433;
+    --gradient-color-stops: var(--gradient-from-color), var(--gradient-via-color), var(--gradient-to-color, rgba(10, 36, 51, 0));
+  }
+
   .xl\:focus\:via-lol-blue-dark:focus {
     --gradient-via-color: #031A21;
     --gradient-color-stops: var(--gradient-from-color), var(--gradient-via-color), var(--gradient-to-color, rgba(3, 26, 33, 0));
@@ -95305,6 +95871,10 @@ button, input, a, select, textarea, /* Elementos HTML interactivos */
 
   .xl\:focus\:to-lol-blue-light:focus {
     --gradient-to-color: #0BC6E3;
+  }
+
+  .xl\:focus\:to-lol-blue-medium:focus {
+    --gradient-to-color: #0A2433;
   }
 
   .xl\:focus\:to-lol-blue-dark:focus {
@@ -96073,6 +96643,12 @@ button, input, a, select, textarea, /* Elementos HTML interactivos */
     border-color: rgba(11, 198, 227, var(--border-opacity));
   }
 
+  .xl\:border-lol-blue-medium {
+    --border-opacity: 1;
+    border-color: #0A2433;
+    border-color: rgba(10, 36, 51, var(--border-opacity));
+  }
+
   .xl\:border-lol-blue-dark {
     --border-opacity: 1;
     border-color: #031A21;
@@ -96717,6 +97293,12 @@ button, input, a, select, textarea, /* Elementos HTML interactivos */
     border-color: rgba(11, 198, 227, var(--border-opacity));
   }
 
+  .xl\:hover\:border-lol-blue-medium:hover {
+    --border-opacity: 1;
+    border-color: #0A2433;
+    border-color: rgba(10, 36, 51, var(--border-opacity));
+  }
+
   .xl\:hover\:border-lol-blue-dark:hover {
     --border-opacity: 1;
     border-color: #031A21;
@@ -97359,6 +97941,12 @@ button, input, a, select, textarea, /* Elementos HTML interactivos */
     --border-opacity: 1;
     border-color: #0BC6E3;
     border-color: rgba(11, 198, 227, var(--border-opacity));
+  }
+
+  .xl\:focus\:border-lol-blue-medium:focus {
+    --border-opacity: 1;
+    border-color: #0A2433;
+    border-color: rgba(10, 36, 51, var(--border-opacity));
   }
 
   .xl\:focus\:border-lol-blue-dark:focus {
@@ -101975,6 +102563,18 @@ button, input, a, select, textarea, /* Elementos HTML interactivos */
     color: rgba(11, 198, 227, var(--placeholder-opacity));
   }
 
+  .xl\:placeholder-lol-blue-medium::-moz-placeholder {
+    --placeholder-opacity: 1;
+    color: #0A2433;
+    color: rgba(10, 36, 51, var(--placeholder-opacity));
+  }
+
+  .xl\:placeholder-lol-blue-medium::placeholder {
+    --placeholder-opacity: 1;
+    color: #0A2433;
+    color: rgba(10, 36, 51, var(--placeholder-opacity));
+  }
+
   .xl\:placeholder-lol-blue-dark::-moz-placeholder {
     --placeholder-opacity: 1;
     color: #031A21;
@@ -103263,6 +103863,18 @@ button, input, a, select, textarea, /* Elementos HTML interactivos */
     color: rgba(11, 198, 227, var(--placeholder-opacity));
   }
 
+  .xl\:focus\:placeholder-lol-blue-medium:focus::-moz-placeholder {
+    --placeholder-opacity: 1;
+    color: #0A2433;
+    color: rgba(10, 36, 51, var(--placeholder-opacity));
+  }
+
+  .xl\:focus\:placeholder-lol-blue-medium:focus::placeholder {
+    --placeholder-opacity: 1;
+    color: #0A2433;
+    color: rgba(10, 36, 51, var(--placeholder-opacity));
+  }
+
   .xl\:focus\:placeholder-lol-blue-dark:focus::-moz-placeholder {
     --placeholder-opacity: 1;
     color: #031A21;
@@ -104315,6 +104927,12 @@ button, input, a, select, textarea, /* Elementos HTML interactivos */
     color: rgba(11, 198, 227, var(--text-opacity));
   }
 
+  .xl\:text-lol-blue-medium {
+    --text-opacity: 1;
+    color: #0A2433;
+    color: rgba(10, 36, 51, var(--text-opacity));
+  }
+
   .xl\:text-lol-blue-dark {
     --text-opacity: 1;
     color: #031A21;
@@ -104959,6 +105577,12 @@ button, input, a, select, textarea, /* Elementos HTML interactivos */
     color: rgba(11, 198, 227, var(--text-opacity));
   }
 
+  .xl\:hover\:text-lol-blue-medium:hover {
+    --text-opacity: 1;
+    color: #0A2433;
+    color: rgba(10, 36, 51, var(--text-opacity));
+  }
+
   .xl\:hover\:text-lol-blue-dark:hover {
     --text-opacity: 1;
     color: #031A21;
@@ -105601,6 +106225,12 @@ button, input, a, select, textarea, /* Elementos HTML interactivos */
     --text-opacity: 1;
     color: #0BC6E3;
     color: rgba(11, 198, 227, var(--text-opacity));
+  }
+
+  .xl\:focus\:text-lol-blue-medium:focus {
+    --text-opacity: 1;
+    color: #0A2433;
+    color: rgba(10, 36, 51, var(--text-opacity));
   }
 
   .xl\:focus\:text-lol-blue-dark:focus {

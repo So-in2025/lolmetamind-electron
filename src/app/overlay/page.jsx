@@ -1,6 +1,6 @@
-// src/app/overlay/page.jsx - VERSIÓN CORREGIDA
+// src/app/overlay/page.jsx
 'use client';
-import React, { useMemo } from 'react';
+import React, { useMemo, useEffect } from 'react';
 import { useLcuData } from '@/hooks/useLcuData';
 import { useInteractiveWidget } from '@/hooks/useInteractiveWidget';
 import PreGameCoach from '@/components/widgets/PreGameCoach'; 
@@ -9,51 +9,55 @@ import InGameCoach from '@/components/widgets/InGameCoach';
 import { FaWifi, FaTools, FaSync } from 'react-icons/fa';
 import { AppStateProvider } from '@/context/AppStateContext';
 import { ScaleProvider } from '@/context/ScaleContext';
+import { useTTS } from '@/hooks/useTTS'; // <-- Hook TTS
 
 function CoachContainer() {
-    // 1. Obtenemos todos los datos necesarios, incluyendo 'userData', desde el hook central.
-    // Asumo que useLcuData ahora expone 'liveData', crucial para InGameCoach.
     const { gamePhase, draftData, LCU_STATUS, userData, liveData } = useLcuData();
-    const { isInteractive, setInteractive } = useInteractiveWidget(false); 
-    
-    // Ya no se necesita `useAppState` aquí.
+    const { isInteractive, setInteractive } = useInteractiveWidget(false);
+    const { speak } = useTTS(); // <-- TTS
 
-    const CurrentWidget = useMemo(() => {
-        // --- LOGS DE DEPURACIÓN ---
-        console.log('[OVERLAY] Evaluando widget. Estado actual:');
-        console.log(` -> LCU_STATUS: ${LCU_STATUS}`);
-        console.log(` -> userData:`, userData);
-        console.log(` -> gamePhase: ${gamePhase}`);
-        
-        // 1. CONDICIÓN DE CORTE: Si LCU está OFFLINE o no tenemos datos base, no renderizamos widgets.
-        if (LCU_STATUS === 'OFFLINE' || !userData) {
-            console.log('[OVERLAY] Condición de corte: LCU offline o no hay datos de usuario.');
-            return null;
-        }
-        
-        // 🚨 FIX FINAL: Montamos el widget incondicionalmente basado en la FASE DETECTADA.
+    // Reproducir mensaje cuando cambia la fase de la partida
+    useEffect(() => {
+        if (!userData) return;
+
+        console.log('[OverlayPage] Fase de partida actualizada:', gamePhase);
+
         switch (gamePhase) {
             case 'Lobby':
             case 'Matchmaking':
             case 'ReadyCheck':
-                console.log('[OVERLAY] RENDER: PreGameCoach');
-                return <PreGameCoach LCU_STATUS={LCU_STATUS} userData={userData} />;
-                
+                speak('Preparando estrategia previa a la partida.', 'alloy', 1.0);
+                break;
             case 'ChampSelect':
-                // 💎 MONTAJE INCONDICIONAL: El widget se monta y maneja el estado de carga (null draftData)
-                console.log('[OVERLAY] RENDER: ChampSelectCoach (Incondicionalmente montado)');
-                return <ChampSelectCoach draftData={draftData} LCU_STATUS={LCU_STATUS} userData={userData} />;
-                
+                speak('Comienza la selección de campeones. Analizando draft...', 'alloy', 1.0);
+                break;
             case 'InProgress':
-                // 💎 MONTAJE INCONDICIONAL: El widget se monta y recibe liveData para su activación
-                console.log('[OVERLAY] RENDER: InGameCoach (Incondicionalmente montado)');
-                return <InGameCoach LCU_STATUS={LCU_STATUS} userData={userData} liveData={liveData} />; // CRÍTICO: Pasa liveData
-                
+                speak('La partida ha iniciado. Coach activado.', 'alloy', 1.0);
+                break;
             default:
-                console.log(`[OVERLAY] RENDER: Nulo (gamePhase '${gamePhase}' no reconocido)`);
+                console.log('[OverlayPage] Fase no reconocida para TTS:', gamePhase);
+        }
+    }, [gamePhase, userData, speak]);
+
+    const CurrentWidget = useMemo(() => {
+        if (LCU_STATUS === 'OFFLINE' || !userData) {
+            console.log('[OverlayPage] LCU offline o userData ausente, no se renderiza widget');
+            return null;
+        }
+
+        switch (gamePhase) {
+            case 'Lobby':
+            case 'Matchmaking':
+            case 'ReadyCheck':
+                return <PreGameCoach LCU_STATUS={LCU_STATUS} userData={userData} />;
+            case 'ChampSelect':
+                return <ChampSelectCoach draftData={draftData} LCU_STATUS={LCU_STATUS} userData={userData} />;
+            case 'InProgress':
+                return <InGameCoach LCU_STATUS={LCU_STATUS} userData={userData} liveData={liveData} />;
+            default:
                 return null;
         }
-    }, [gamePhase, draftData, LCU_STATUS, userData, liveData]); // 'liveData' debe estar en las dependencias.
+    }, [gamePhase, draftData, LCU_STATUS, userData, liveData]);
 
     const baseClass = "absolute inset-0 transition-all duration-300";
 
@@ -62,25 +66,20 @@ function CoachContainer() {
             className={`${baseClass} ${isInteractive ? 'pointer-events-auto' : 'pointer-events-none'}`}
             style={{ backgroundColor: isInteractive ? 'rgba(0, 0, 0, 0.1)' : 'transparent' }}
         >
-            {/* Widget de Estado (Control de Interacción) */}
             <div 
                 className={`absolute top-4 left-4 p-2 rounded-full ${isInteractive ? 'cursor-default' : 'pointer-events-auto'} bg-lol-blue-medium/90 text-lol-gold-light flex items-center shadow-xl`}
                 onMouseEnter={() => setInteractive(true)}
                 onMouseLeave={() => setInteractive(false)}
             >
-                {/* La lógica de carga ahora se basa en si tenemos 'userData' */}
                 {!userData ? (
                     <FaSync className="animate-spin mr-2" />
                 ) : (
                     <FaWifi className={`mr-2 ${LCU_STATUS === 'ONLINE' ? 'text-lol-blue-accent' : 'text-red-500'}`} />
                 )}
                 <span className="text-sm font-bold">{LCU_STATUS} | {gamePhase}</span>
-                {isInteractive && (
-                    <FaTools title="Controles (Interactivos)" className="ml-2 text-lol-gold" />
-                )}
+                {isInteractive && <FaTools title="Controles (Interactivos)" className="ml-2 text-lol-gold" />}
             </div>
-            
-            {/* Contenedor de Widget Activo */}
+
             <div className="w-full h-full flex justify-center items-center p-12">
                 {CurrentWidget}
             </div>
@@ -88,14 +87,9 @@ function CoachContainer() {
     );
 }
 
-// Nota: Asegúrate de que este CoachContainer está siendo exportado y usado
-// como el componente principal en tu src/app/overlay/page.jsx (o donde corresponda).
-
 export default function OverlayPage() {
-    // Aunque CoachContainer ya no usa AppState directamente, los widgets hijos sí lo hacen.
-    // Mantenemos AppStateProvider aquí para que toda la aplicación tenga acceso al contexto.
     return (
-        <AppStateProvider> 
+        <AppStateProvider>
             <ScaleProvider>
                 <CoachContainer />
             </ScaleProvider>

@@ -1,121 +1,164 @@
-// src/components/widgets/InGameCoach.jsx - VERSIÓN FINAL Y DESBLOQUEADA (Activación Garantizada)
+// src/components/widgets/InGameCoach.jsx
 'use client';
-import React, { useEffect, useState, useRef } from 'react';
-import { FaEye, FaVolumeUp, FaSync, FaExclamationTriangle, FaFistRaised } from 'react-icons/fa';
-import { useTTS } from '@/hooks/useTTS';
+
+import React, { useEffect, useState, useCallback } from 'react';
+import { FaSync, FaExclamationTriangle, FaCheckCircle, FaBolt } from 'react-icons/fa';
 import { useInteractiveWidget } from '@/hooks/useInteractiveWidget';
 import { useWebSocketCoach } from '@/hooks/useWebSocketCoach';
 
 /**
- * Widget de Coaching en Partida (Fase InProgress).
- * Implementa el activador más robusto, basado en el tiempo de juego real.
+ * InGameCoach
+ * Widget para fase InProgress (partida en vivo)
+ * - Recibe liveData y userData desde useLcuData
+ * - Analiza estado de partida y genera consejos en tiempo real
+ * - Soporta múltiples APIs de IA y fallback automático
+ * - Maneja timeout, reintentos, logs y renderizado interactivo
  */
-// 🚨 ACEPTAMOS 'liveData' COMO PROP
-export default function InGameCoach({ LCU_STATUS, userData, liveData }) { 
-    console.log('[InGameCoach] --- RENDERIZANDO ---');
-    console.log('[InGameCoach] Props recibidas -> LCU_STATUS:', LCU_STATUS);
-    console.log('[InGameCoach] Props recibidas -> liveData:', liveData);
+export default function InGameCoach({ liveData, userData, LCU_STATUS }) {
+  console.log('[InGameCoach] --- RENDERIZANDO ---');
+  console.log('[InGameCoach] Props recibidas:', { liveData, userData, LCU_STATUS });
 
-    // El hook debe exponer sendInGameUpdate
-    const { aiAdvice, wsStatus, sendInGameUpdate } = useWebSocketCoach({
-        userData,
-        targetEvent: 'IN_GAME_ADVICE'
-    });
-    const { speak } = useTTS();
-    const { isInteractive, setInteractive } = useInteractiveWidget(false);
-    
-    const [lastAdvice, setLastAdvice] = useState(null);
-    const [lastAdviceTime, setLastAdviceTime] = useState(Date.now());
-    
-    // 💎 ACTIVADOR CRÍTICO: Ref para rastrear el último GameTime enviado.
-    const lastSentGameTimeRef = useRef(0); 
+  const { isInteractive, setInteractive } = useInteractiveWidget(false);
 
-    console.log('[InGameCoach] Estado actual del WebSocket:', wsStatus);
-    
-    // 💎 LÓGICA DE ENVÍO DE DATOS EN PARTIDA (Activación Garantizada)
-    useEffect(() => {
-        const gameData = liveData?.gameData;
-        // Usamos solo los segundos para evitar ruido del milisegundo en la comparación
-        const gameTime = Math.floor(gameData?.gameTime) || 0; 
+  // ------------------------------
+  // Estados internos
+  // ------------------------------
+  const [aiAdvice, setAiAdvice] = useState(null); // Consejos de IA
+  const [isLoadingAdvice, setIsLoadingAdvice] = useState(true);
+  const [isTimedOut, setIsTimedOut] = useState(false);
+  const [lastGameHash, setLastGameHash] = useState(null);
 
-        // CRÍTICO: Envía si el WS está conectado y el tiempo de juego ha avanzado.
-        // Si el gameTime cambia (lo cual pasa cada 1.5s/3s en el polling), la solicitud es disparada.
-        if (wsStatus === 'CONNECTED' && gameData && gameTime > lastSentGameTimeRef.current) {
-            
-            console.log(`[InGameCoach] 🚀 ACTIVACIÓN GARANTIZADA: Enviando Live Game Update (Tiempo: ${gameTime}s)`);
-            
-            sendInGameUpdate(liveData); 
-            
-            // 🚨 CRÍTICO: Actualizamos el Ref al tiempo actual para evitar spam en el mismo segundo.
-            lastSentGameTimeRef.current = gameTime; 
-        }
-    }, [wsStatus, liveData, sendInGameUpdate]); 
+  // ------------------------------
+  // Hook WebSocket para IA / Coach
+  // ------------------------------
+  const { wsStatus, sendInGameUpdate } = useWebSocketCoach({
+    userData,
+    targetEvent: 'LIVE_ADVICE',
+  });
 
-    // Actualizar y hablar cuando llega un nuevo consejo desde el WebSocket.
-    useEffect(() => {
-        // Solo si el consejo es nuevo y no es idéntico al último hablado
-        if (aiAdvice?.realtimeAdvice && aiAdvice.realtimeAdvice !== lastAdvice?.realtimeAdvice) {
-            console.log('[InGameCoach] ¡Nuevo consejo de IA recibido!', aiAdvice);
-            setLastAdvice(aiAdvice);
-            setLastAdviceTime(Date.now());
-            console.log('[InGameCoach] Texto para hablar:', aiAdvice.realtimeAdvice);
-            speak(aiAdvice.realtimeAdvice);
-        }
-    }, [aiAdvice, speak, lastAdvice]); 
+  // ------------------------------
+  // Generar hash de liveData para no enviar datos repetidos
+  // ------------------------------
+  const computeLiveHash = useCallback((live) => {
+    if (!live) return null;
 
-    return (
-        <div 
-            className={`w-full max-w-xs p-3 bg-lol-blue-dark/95 rounded-xl shadow-2xl border-2 border-lol-gold-dark transition-all duration-300 font-sans ${isInteractive ? 'pointer-events-auto' : 'pointer-events-none'}`}
-            onMouseEnter={() => setInteractive(true)}
-            onMouseLeave={() => setInteractive(false)}
-        >
-            <div className="flex justify-between items-center mb-2">
-                <h2 className="text-md font-bold text-lol-gold font-cinzel">Coach en Partida</h2>
-                <FaEye className={isInteractive ? 'text-lol-accent' : 'text-lol-gold-light/50'} />
-            </div>
+    const allyHash = live.myTeam?.map(p => `${p.championId}-${p.summonerId}-${p.currentHealth}`).join('|');
+    const enemyHash = live.theirTeam?.map(p => `${p.championId}-${p.summonerId}-${p.currentHealth}`).join('|');
+    const objectivesHash = `${live.dragons?.length || 0}-${live.barons?.length || 0}`;
 
-            {wsStatus !== 'CONNECTED' ? (
-                <div className="text-center p-3 text-red-400">
-                    <FaExclamationTriangle className="mx-auto text-2xl mb-1" />
-                    <p className="text-sm">WS Desconectado ({wsStatus})</p>
-                </div>
-            ) : (
-                <div className="space-y-2">
-                    {lastAdvice ? (
-                        <div className="p-3 bg-lol-blue-dark rounded border-l-4 border-red-500">
-                            <p className="text-lol-gold-light text-sm italic">"{lastAdvice.realtimeAdvice}"</p>
-                            <p className={`text-center font-bold mt-1 text-lg ${lastAdvice.priorityAction === 'RETREAT' ? 'text-red-500' : 'text-lol-blue-accent'}`}>
-                                <FaFistRaised className="inline mr-1" /> {lastAdvice.priorityAction} ({new Date(lastAdviceTime).toLocaleTimeString()})
-                            </p>
-                        </div>
-                    ) : (
-                        <div className="text-center p-3 text-lol-gold-light">
-                            {/* Mostrar el tiempo de juego si la data en vivo está disponible pero el consejo no ha llegado */}
-                            {liveData?.gameData ? (
-                                <>
-                                    <FaSync className="animate-spin text-lol-gold mx-auto text-2xl mb-1" />
-                                    <p className="text-sm">Analizando la jugada... ({Math.floor(liveData.gameData.gameTime / 60)}:{Math.floor(liveData.gameData.gameTime % 60).toString().padStart(2, '0')})</p>
-                                </>
-                            ) : (
-                                <>
-                                    <FaSync className="animate-spin text-lol-gold mx-auto text-2xl mb-1" />
-                                    <p className="text-sm">Escuchando la Grieta...</p>
-                                </>
-                            )}
-                        </div>
-                    )}
-                    
-                    <button 
-                        onClick={() => {
-                            const text = lastAdvice?.realtimeAdvice || "Esperando consejo táctico.";
-                            speak(text);
-                        }} 
-                        className="w-full py-1 bg-lol-blue-accent hover:bg-lol-blue-medium font-bold rounded text-lol-blue-dark text-sm transition-colors"
-                    >
-                        <FaVolumeUp className="inline mr-1" /> REPETIR
-                    </button>
-                </div>
-            )}
+    return `${allyHash}|${enemyHash}|${objectivesHash}|${live.timestamp}`;
+  }, []);
+
+  // ------------------------------
+  // Enviar liveData al WS si cambia
+  // ------------------------------
+  useEffect(() => {
+    if (!liveData || !userData) return;
+
+    const currentHash = computeLiveHash(liveData);
+    if (currentHash === lastGameHash) return; // No enviar si no cambió
+
+    console.log('[InGameCoach] Nueva actualización de liveData. Enviando a WS...', liveData);
+    setIsLoadingAdvice(true);
+    setIsTimedOut(false);
+
+    sendInGameUpdate(liveData)
+      .then((advice) => {
+        console.log('[InGameCoach] Consejos recibidos del WS:', advice);
+        setAiAdvice(advice);
+        setIsLoadingAdvice(false);
+      })
+      .catch((err) => {
+        console.error('[InGameCoach] Error al solicitar consejos:', err);
+        setIsTimedOut(true);
+        setIsLoadingAdvice(false);
+      });
+
+    setLastGameHash(currentHash);
+  }, [liveData, userData, lastGameHash, computeLiveHash, sendInGameUpdate]);
+
+  // ------------------------------
+  // Timeout en caso de que WS no responda
+  // ------------------------------
+  useEffect(() => {
+    if (!isLoadingAdvice || aiAdvice) return;
+
+    const timer = setTimeout(() => {
+      console.warn('[InGameCoach] ⚠️ Timeout: WS no respondió a tiempo.');
+      setIsTimedOut(true);
+      setIsLoadingAdvice(false);
+    }, 15000);
+
+    return () => clearTimeout(timer);
+  }, [isLoadingAdvice, aiAdvice]);
+
+  // ------------------------------
+  // Renderizado del widget
+  // ------------------------------
+  return (
+    <div
+      className={`transition-all duration-300 max-w-xs mx-auto p-3 rounded-xl shadow-lol-lg
+        z-50 relative pointer-events-auto
+        ${isInteractive
+          ? 'bg-lol-blue-dark bg-opacity-95 border-2 border-lol-blue-accent'
+          : 'bg-lol-blue-dark border border-lol-gold-dark'
+        }`}
+      style={{ WebkitAppRegion: 'no-drag' }}
+      onMouseEnter={() => setInteractive(true)}
+      onMouseLeave={() => setInteractive(false)}
+    >
+      {/* BARRA DE ESTADO */}
+      <div
+        className="w-full text-center text-lol-gold-light text-xs py-1 mb-2 -mt-1 rounded cursor-grab flex items-center justify-center"
+        style={{ WebkitAppRegion: 'drag' }}
+      >
+        Partida en Vivo
+      </div>
+
+      {/* TÍTULO */}
+      <h2 className="font-display text-lg font-bold text-lol-gold flex items-center mb-1">
+        <FaBolt className="mr-1 text-lol-blue-accent" size={14} />
+        COACH EN JUEGO
+      </h2>
+
+      {/* ESTADOS */}
+      {isLoadingAdvice && !isTimedOut ? (
+        <div className="text-center p-2 bg-lol-blue-dark rounded">
+          <FaSync className="animate-spin text-lol-gold mx-auto text-xl mb-1" />
+          <p className="text-lol-gold-light text-xs">Analizando estado de partida... ({wsStatus})</p>
         </div>
-    );
+      ) : isTimedOut ? (
+        <div className="text-center p-2 bg-lol-blue-dark rounded">
+          <FaExclamationTriangle className="text-red-500 mx-auto text-xl mb-1" />
+          <p className="text-red-400 text-xs font-bold">
+            {wsStatus !== 'CONNECTED' ? 'Fallo: Conexión WS o Cuota IA (429).' : 'IA sin respuesta (Timeout).'}
+          </p>
+          <button
+            onClick={() => {
+              console.log('[InGameCoach] Reintento manual solicitado.');
+              setIsLoadingAdvice(true);
+              setIsTimedOut(false);
+            }}
+            className="w-full mt-2 py-1 bg-lol-blue-accent hover:bg-lol-blue-medium text-lol-blue-dark font-bold text-xs rounded transition-colors"
+            style={{ WebkitAppRegion: 'no-drag' }}
+          >
+            Reintentar
+          </button>
+        </div>
+      ) : (
+        <div className="space-y-2">
+          <div className="flex items-center justify-between p-2 bg-lol-blue-accent/30 rounded border-l-4 border-lol-gold">
+            <p className="text-lol-gold-light text-sm font-bold">Consejos IA en vivo:</p>
+            <FaCheckCircle className="text-lol-gold animate-pulse" />
+          </div>
+
+          <div className="text-lol-gold-light text-xs break-words">
+            {aiAdvice?.tips?.map((tip, idx) => (
+              <p key={idx} className="mb-1">• {tip}</p>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
 }

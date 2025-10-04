@@ -1,63 +1,95 @@
-// src/hooks/useLcuData.js - VERSIÓN DE TESTE CRÍTICO: MAXIMA REACTIVIDAD (SIN BLOQUEO)
+// src/hooks/useLcuData.js
+// Hook central para recibir datos de LCU/Electron
 'use client';
-import { useState, useEffect, useRef } from 'react';
-// 🚨 Nota: La librería 'fast-deep-equal' ha sido eliminada para este fix.
 
+import { useState, useEffect, useRef } from 'react';
+
+// -----------------------------------------------
+// ESTADO INICIAL: Define todos los datos necesarios
+// -----------------------------------------------
 const initialState = {
-    LCU_STATUS: 'OFFLINE',
-    gamePhase: 'None',
-    draftData: null,
-    userData: null,
-    liveData: null, 
+  LCU_STATUS: 'OFFLINE', // Estado de conexión del cliente LoL
+  gamePhase: 'None',     // Fase actual de la partida
+  draftData: null,       // Datos de champ select
+  userData: null,        // Datos del jugador
+  liveData: null,        // Datos de partida en vivo
 };
 
 /**
- * Hook que es el único punto de contacto con el sondeo de Electron (IPC).
- * Se fuerza la actualización del estado con cada payload recibido.
+ * useLcuData
+ * Hook central que se suscribe a los eventos de LCU/Electron.
+ * Expone el estado completo y se asegura de actualizarlo de manera reactiva.
  */
 export const useLcuData = () => {
-    const [lcuState, setLcuState] = useState(initialState);
-    const isListenerAttached = useRef(false);
+  const [lcuState, setLcuState] = useState(initialState);
 
-    useEffect(() => {
-        if (typeof window === 'undefined' || !window.electronAPI) {
-            console.warn('[useLcuData] ⚠️ Electron API no disponible.');
-            return;
-        }
+  // Ref para asegurar que solo se adjunta un listener
+  const isListenerAttached = useRef(false);
 
-        if (!isListenerAttached.current) {
-            console.log('[useLcuData] Adjuntando listener de IPC para "lcu-state-update"...');
-            
-            const handleLcuUpdate = (payload) => {
-                if (payload && typeof payload === 'object') {
-                    // 🚨 FIX CRÍTICO: FORZAMOS LA ACTUALIZACIÓN DEL ESTADO SIEMPRE.
-                    // Esto garantiza que el useEffect del widget se dispare, resolviendo el bloqueo por isEqual.
-                    const newState = { 
-                        ...payload, 
-                        // Mantenemos userData si el payload no lo incluye
-                        userData: payload.userData || lcuState.userData 
-                    };
+  useEffect(() => {
+    // ------------------------------------------------------
+    // CHEQUEO: Electron API disponible
+    // ------------------------------------------------------
+    if (!window.electronAPI) {
+      console.warn('[useLcuData] ⚠️ Electron API no disponible.');
+      return;
+    }
 
-                    setLcuState(newState); // 🚨 Simplemente reemplazamos el estado.
+    // ------------------------------------------------------
+    // SUSCRIPCIÓN: Solo una vez
+    // ------------------------------------------------------
+    if (!isListenerAttached.current) {
+      console.log('[useLcuData] Hook montado. Adjuntando listener IPC para "lcu-state-update"...');
 
-                } else {
-                    console.warn('[useLcuData] ⚠️ Payload inválido recibido desde Electron:', payload);
-                }
+      // ------------------------------------------------------
+      // HANDLER: Cada vez que Electron envía un paquete de datos
+      // ------------------------------------------------------
+      const handleLcuUpdate = (payload) => {
+        console.log('[useLcuData] Payload recibido desde Electron:', payload);
+
+        if (payload && typeof payload === 'object') {
+          // ------------------------------------------------------
+          // ACTUALIZACIÓN DE ESTADO: Reemplazamos todo, manteniendo userData si no viene
+          // ------------------------------------------------------
+          setLcuState(prevState => {
+            const newState = {
+              LCU_STATUS: payload.LCU_STATUS || prevState.LCU_STATUS,
+              gamePhase: payload.gamePhase || prevState.gamePhase,
+              draftData: payload.draftData ?? prevState.draftData,
+              userData: payload.userData ?? prevState.userData,
+              liveData: payload.liveData ?? prevState.liveData,
             };
 
-            // Nos suscribimos al evento. Asumimos que onLcuStateUpdate devuelve una función de unsubscribe.
-            const unsubscribe = window.electronAPI.onLcuStateUpdate(handleLcuUpdate);
-            isListenerAttached.current = true;
-            
-            // Función de limpieza
-            return () => {
-                console.log('[useLcuData] Hook desmontado. Limpiando listener de IPC.');
-                if (typeof unsubscribe === 'function') {
-                    unsubscribe();
-                }
-            };
-        }
-    }, [lcuState.userData]); 
+            // Evitamos re-render si no hay cambios
+            if (JSON.stringify(prevState) === JSON.stringify(newState)) {
+              console.log('[useLcuData] No hay cambios en el estado. Skip re-render.');
+              return prevState;
+            }
 
-    return lcuState;
+            console.log('[useLcuData] Estado actualizado:', newState);
+            return newState;
+          });
+        } else {
+          console.warn('[useLcuData] ⚠️ Payload inválido recibido:', payload);
+        }
+      };
+
+      // Suscribirse y guardar función de desuscripción
+      const unsubscribe = window.electronAPI.onLcuStateUpdate(handleLcuUpdate);
+      isListenerAttached.current = true;
+
+      // ------------------------------------------------------
+      // LIMPIEZA: Al desmontar, eliminamos listener
+      // ------------------------------------------------------
+      return () => {
+        console.log('[useLcuData] Hook desmontado. Limpiando listener de IPC.');
+        if (typeof unsubscribe === 'function') unsubscribe();
+      };
+    }
+  }, [lcuState.userData]); // Reactividad si userData cambia
+
+  // ------------------------------------------------------
+  // RETORNO: Todo el estado central, listo para widgets
+  // ------------------------------------------------------
+  return lcuState;
 };

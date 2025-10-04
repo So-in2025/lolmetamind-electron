@@ -190,7 +190,6 @@ function createOverlayWindow() {
         title: 'MetaMind Coach Overlay',
         width: primaryDisplay.workAreaSize.width,
         height: primaryDisplay.workAreaSize.height,
-        transparent: true,
         frame: false,
         hasShadow: false,
         alwaysOnTop: true,
@@ -198,6 +197,7 @@ function createOverlayWindow() {
         skipTaskbar: true,
         resizable: false,
         show: false,
+        transparent: true, 
         webPreferences: {
             preload: path.join(__dirname, 'preload.js'),
             contextIsolation: true,
@@ -238,6 +238,7 @@ function createMainWindow() {
         minHeight: 720, 
         show: false, 
         frame: false,
+        show: false,
         transparent: false, 
         backgroundColor: '#0A141A', // Fondo sólido para el Dashboard
         webPreferences: {

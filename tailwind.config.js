@@ -22,6 +22,7 @@ module.exports = {
         'lol-blue': {
           DEFAULT: '#0099ff', // Azul brillante (para botones/acento)
           light: '#0BC6E3',
+          medium: '#0A2433',   // <-- agrega un tono medio aquí
           dark: '#031A21',
           accent: '#0BC6E3',
         },
