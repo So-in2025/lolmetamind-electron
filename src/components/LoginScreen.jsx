@@ -232,7 +232,7 @@ export default function LoginScreen() {
                         {/* CRÍTICO: max-w-full y truncate para que el mensaje no expanda el ancho */}
                         {error && (<div className="p-1 px-4 text-sm text-red-400 bg-red-900/40 border border-red-400 rounded -webkit-app-region-no-drag max-w-full truncate whitespace-nowrap">{error}</div>)}
                             {successMessage && (<div className="p-1 px-4 text-sm text-green-400 bg-green-900/40 border border-green-400 rounded -webkit-app-region-no-drag max-w-full truncate whitespace-nowrap">{successMessage}</div>)}
-                    </div>
+                    </div>
 
                     {/* CAMPOS DE ENTRADA (Todos deben ser -webkit-app-region-no-drag) */}
                     <div><input type="text" placeholder="Usuario" value={username} onChange={(e) => setUsername(e.target.value)} required className="w-full p-3 bg-lol-input-bg text-white border border-lol-accent-gold/40 focus:border-lol-highlight outline-none rounded-sm -webkit-app-region-no-drag" /></div>

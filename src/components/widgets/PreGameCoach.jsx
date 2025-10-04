@@ -15,8 +15,8 @@ import { useInteractiveWidget } from '@/hooks/useInteractiveWidget';
  * - Controla timeout y reintentos
  */
 export default function PreGameCoach({ LCU_STATUS, userData }) {
-  console.log('[PreGameCoach] --- RENDERIZANDO ---');
-
+ // 🚨 NUEVO LOG CLAVE
+  console.log(`[PreGameCoach] --- RENDERIZANDO --- UserData: ${!!userData}, WS Status: ...`);
   const { aiAdvice, wsStatus, sendQueueUpdate } = useWebSocketCoach({
     userData,
     targetEvent: 'QUEUE_ADVICE', // Evento WS para consejos de cola

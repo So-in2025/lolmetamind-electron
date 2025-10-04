@@ -3,6 +3,11 @@
 const { app, BrowserWindow, globalShortcut, screen, ipcMain, session } = require('electron');
 const { powerSaveBlocker } = require('electron');
 
+// Asegúrate de que tu main.js tenga esta importación
+const { TextToSpeechClient } = require('@google-cloud/text-to-speech');
+const util = require('util'); // Para promesas en util.promisify (si es necesario)
+// Configura dotenv para cargar tu API key de Google, si la usas desde un archivo .json
+
 const path = require('path');
 const axios = require('axios');
 const Store = require('electron-store');
@@ -22,6 +27,7 @@ let latestRiotApiData = null;
 let overlayWindow; // Ventana para el Coach/Overlay (Transparente, sin foco)
 
 const isDevMode = !!process.defaultApp;
+const TTS_KEYFILE_PATH = path.join(__dirname, 'google-service-account.json'); 
 
 app.commandLine.appendSwitch('ignore-certificate-errors');
 app.disableHardwareAcceleration();
@@ -44,6 +50,48 @@ const LOGIN_PATH = isDevMode ? `${FRONTEND_BASE_URL}` : `file://${path.join(__di
 const backendAgent = new https.Agent({ rejectUnauthorized: false });
 const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
 
+// ----------------------------------------------------------------------
+// 🚀 TTS AVANZADO: Manejador para el canal 'google-tts'
+// ----------------------------------------------------------------------
+
+/**
+ * Registra el manejador IPC para generar audio TTS usando Google Cloud.
+ * Esto resuelve el error "No handler registered for 'google-tts'".
+ */
+function registerGoogleTtsHandler() {
+    // 🚨 FIX 2: Inicializa el cliente TTS usando la ruta absoluta de la clave JSON.
+    const ttsClient = new TextToSpeechClient({ 
+        keyFilename: TTS_KEYFILE_PATH // <-- FUERZA LA BÚSQUEDA DE TU CLAVE SECRETA
+    }); 
+    // 🚨 IPC MANEJADOR: Recibe la solicitud del renderer (a través de preload.js)
+    ipcMain.handle('google-tts', async (event, { text, voice, rate }) => {
+        console.log(`[MAIN|TTS] 🎤 Solicitud de TTS recibida. Texto: "${text.substring(0, 50)}..."`);
+        
+        try {
+            const request = {
+                input: { text: text },
+                voice: { languageCode: 'es-ES', name: 'es-ES-Wavenet-D', ssmlGender: 'MALE' },
+                audioConfig: { audioEncoding: 'MP3', speakingRate: rate || 1.0 },
+            };
+
+            const [response] = await ttsClient.synthesizeSpeech(request);
+            
+            console.log('[MAIN|TTS] ✅ Audio sintetizado correctamente.');
+
+            // Devolvemos el contenido de audio en Base64 (Buffer)
+            return {
+                audioContent: response.audioContent.toString('base64')
+            };
+
+        } catch (error) {
+            console.error('[MAIN|TTS] ❌ Falló la síntesis con Google Cloud:', error);
+            // Propagamos el error para que el preload haga el fallback
+            throw new Error(`Google Cloud TTS API Error: ${error.message}`);
+        }
+    });
+
+    console.log('[MAIN|TTS] ✅ Manejador IPC "google-tts" registrado. TTS Avanzado listo.');
+}
 
 function sendDataToRenderer(channel, data) {
     // ✅ MEJORA: Añadida la comprobación !isDestroyed() por consistencia
@@ -52,8 +100,6 @@ function sendDataToRenderer(channel, data) {
         mainWindow.webContents.send(channel, data);
     }
 }
-
-// main.js
 
 async function fetchAndStoreUserProfile(username, token) {
     console.log(`[DB FETCH] 🔍 Iniciando fetchAndStoreUserProfile para: ${username}`);
@@ -182,6 +228,8 @@ function createLoginWindow() {
 }
 
 // --- FUNCIÓN PARA CREAR LA VENTANA DEL OVERLAY (MODIFICADA) ---
+// main.js (REEMPLAZAR LA FUNCIÓN createOverlayWindow COMPLETA)
+
 function createOverlayWindow() {
     if (overlayWindow) return;
 
@@ -200,9 +248,14 @@ function createOverlayWindow() {
         transparent: true, 
         webPreferences: {
             preload: path.join(__dirname, 'preload.js'),
-            contextIsolation: true,
             nodeIntegration: false,
-        },
+            contextIsolation: true,
+            enableRemoteModule: false,
+            
+            // 🚨 FIX CRÍTICO FINAL: ESTABILIZACIÓN WS EN DESARROLLO 🚨
+            // Al eliminar el bloque 'session', usamos el flag más permisivo para localhost.
+            webSecurity: false, 
+        }
     });
 
     const OVERLAY_PATH = isDevMode ? `${FRONTEND_BASE_URL}/overlay` : path.join(app.getAppPath(), 'out', 'overlay.html');
@@ -382,6 +435,9 @@ app.on('ready', () => {
     createSplashWindow();
     createLoginWindow(); 
 
+     // 🚨 FIX CRÍTICO: ACTIVA EL MANEJADOR DE TTS QUE ESTABA DEFINIDO PERO INACTIVO
+    // Esto resuelve el error "No handler registered for 'google-tts'".
+    registerGoogleTtsHandler(); 
     // =================================================================
     //  क्षेत्र MANEJADORES DE IPC GLOBALES (LOGIN, CIERRE, ETC.)
     // =================================================================

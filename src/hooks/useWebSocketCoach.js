@@ -1,132 +1,132 @@
 // src/hooks/useWebSocketCoach.js
+// Hook definitivo para comunicación WS (Soporte Local y Render)
 import { useState, useEffect, useCallback, useRef } from 'react';
+import { useTTS } from './useTTS';
+
+/**
+ * Función para obtener la URL correcta del WebSocket según el entorno.
+ * Para Render, DEBES configurar la variable NEXT_PUBLIC_WS_URL en tu dashboard.
+ */
+const getWsUrl = () => {
+    // 🚨 Lógica para Render: En producción, usa la variable de entorno para la URL WSS.
+    // Usamos el puerto 8080 y protocolo WS no seguro para el desarrollo local.
+    if (process.env.NODE_ENV === 'production' && process.env.NEXT_PUBLIC_WS_URL) {
+         console.log('[useWebSocketCoach] Usando URL de Render:', process.env.NEXT_PUBLIC_WS_URL);
+        return process.env.NEXT_PUBLIC_WS_URL; 
+    }
+    // Desarrollo local (lo que tu servidor WS espera)
+    return 'ws://localhost:8080';
+};
+
+const WS_URL = getWsUrl();
 
 /**
  * useWebSocketCoach
- * Hook para manejar comunicación WS con el backend de consejos IA
- * - Soporta fallback automático entre múltiples endpoints
- * - Maneja reconexión y reintentos
- * - Expone función sendInGameUpdate para enviar liveData
+ * Hook que centraliza la lógica de conexión, envío y recepción de consejos de IA.
  */
-export function useWebSocketCoach({ userData, targetEvent }) {
-  const [wsStatus, setWsStatus] = useState('DISCONNECTED'); // CONNECTED, CONNECTING, DISCONNECTED
+export function useWebSocketCoach({ userData, targetEvent, fallbackTTS = true }) {
+  const [aiAdvice, setAiAdvice] = useState(null);
+  const [wsStatus, setWsStatus] = useState('WAITING_FOR_USER');
   const wsRef = useRef(null);
-  const retryCountRef = useRef(0);
-  const MAX_RETRIES = 3;
+  const { speak } = useTTS();
+  const timeoutRef = useRef(null);
 
-  // Lista de endpoints de fallback (orden de prioridad)
-  const endpoints = [
-    'wss://ai-coach-primary.example.com',
-    'wss://ai-coach-secondary.example.com',
-    'wss://ai-coach-backup.example.com'
-  ];
-
-  const connectWebSocket = useCallback((index = 0) => {
-    if (index >= endpoints.length) {
-      console.error('[useWebSocketCoach] ⚠️ Todos los WS fallaron.');
-      setWsStatus('DISCONNECTED');
+  // -----------------------------
+  // Conexión WebSocket
+  // -----------------------------
+  useEffect(() => {
+    if (!userData) {
+      setWsStatus('WAITING_FOR_USER');
       return;
     }
 
-    const url = endpoints[index];
-    console.log(`[useWebSocketCoach] Conectando a WS: ${url}`);
-    setWsStatus('CONNECTING');
 
-    const ws = new WebSocket(url);
+    // 🚨 NUEVO LOG CLAVE: Confirmar que esta línea se ejecuta
+    console.log(`[useWebSocketCoach] 🔑 Disparando Conexión WS. UserData existe:`, userData);
+
+    // Limpieza de conexión previa
+    if (wsRef.current) wsRef.current.close();
+
+    console.log(`[useWebSocketCoach] 🔌 Intentando conectar a WS: ${WS_URL} para evento ${targetEvent}...`);
+    setWsStatus('CONNECTING');
+    
+    const ws = new WebSocket(WS_URL);
     wsRef.current = ws;
 
     ws.onopen = () => {
-      console.log(`[useWebSocketCoach] WS conectado a: ${url}`);
+      console.log(`[useWebSocketCoach] ✅ WebSocket conectado.`);
       setWsStatus('CONNECTED');
-      retryCountRef.current = 0;
     };
 
-    ws.onmessage = (msg) => {
-      console.log('[useWebSocketCoach] Mensaje recibido:', msg.data);
-    };
+    ws.onmessage = (event) => {
+      try {
+        const message = JSON.parse(event.data);
+        if (message.eventType === targetEvent) {
+          console.log(`[useWebSocketCoach] ✅ Consejo recibido via WS:`, message.data);
+          setAiAdvice(message.data);
 
-    ws.onerror = (err) => {
-      console.error('[useWebSocketCoach] Error WS:', err);
+          // TTS para consejos importantes (si está habilitado)
+          if (fallbackTTS && message.data?.preGameAnalysis) {
+            const { title, astralMantra, technicalFocus } = message.data.preGameAnalysis;
+            const ttsText = `${title}. ${astralMantra}. Foco técnico: ${technicalFocus}.`;
+            speak(ttsText);
+          }
+        }
+      } catch (err) {
+        console.error('[useWebSocketCoach] ❌ Error parseando mensaje WS:', err);
+      }
     };
 
     ws.onclose = () => {
-      console.warn('[useWebSocketCoach] WS cerrado. Intentando fallback...');
+      console.warn('[useWebSocketCoach] ⚠️ WebSocket cerrado.');
       setWsStatus('DISCONNECTED');
-      retryCountRef.current += 1;
-      if (retryCountRef.current <= MAX_RETRIES) {
-        console.log(`[useWebSocketCoach] Reintentando endpoint alternativo (${retryCountRef.current}/${MAX_RETRIES})`);
-        connectWebSocket(index + 1);
-      } else {
-        console.error('[useWebSocketCoach] Máximo reintentos alcanzado. No hay WS disponible.');
-      }
     };
-  }, []);
-
-  // Conexión inicial
-  useEffect(() => {
-    connectWebSocket(0);
-
+    
+    ws.onerror = (err) => {
+      console.error('[useWebSocketCoach] ❌ Error de WebSocket.', err);
+      setWsStatus('ERROR');
+    };
+    
+    // Limpieza de efectos
     return () => {
-      if (wsRef.current) {
-        wsRef.current.close();
-        wsRef.current = null;
-      }
+      if (wsRef.current) wsRef.current.close();
+      if (timeoutRef.current) clearTimeout(timeoutRef.current);
     };
-  }, [connectWebSocket]);
+  }, [targetEvent, userData, speak, fallbackTTS]);
 
-  // Función para enviar liveData y recibir consejos IA
-  const sendInGameUpdate = useCallback((liveData) => {
-    return new Promise((resolve, reject) => {
-      if (!wsRef.current || wsStatus !== 'CONNECTED') {
-        reject(new Error('WS no conectado'));
-        return;
-      }
+  // -----------------------------
+  // Envío de mensajes al servidor
+  // -----------------------------
+  const sendMessage = useCallback((eventType, data = {}) => {
+    if (wsStatus === 'CONNECTED' && userData) {
+      const message = { eventType, data, userData };
+      console.log(`[useWebSocketCoach] 📤 Enviando mensaje WS: ${eventType}`, message);
+      wsRef.current.send(JSON.stringify(message));
+      setAiAdvice(null); // Limpiar consejo al enviar nueva solicitud
+      return true;
+    }
+    console.warn(`[useWebSocketCoach] ⚠️ No se pudo enviar mensaje. Status: ${wsStatus}`);
+    return false;
+  }, [wsStatus, userData]);
 
-      const requestPayload = {
-        event: targetEvent,
-        user: {
-          id: userData.id,
-          summonerName: userData.summonerName,
-          region: userData.region
-        },
-        live: liveData
-      };
+  // Funciones específicas para widgets
+  const sendQueueUpdate = useCallback(() => sendMessage('QUEUE_UPDATE'), [sendMessage]);
+  const sendChampSelectUpdate = useCallback((draftData) => sendMessage('CHAMP_SELECT_UPDATE', draftData), [sendMessage]);
+  const sendInGameUpdate = useCallback((liveGameData) => sendMessage('LIVE_COACHING_UPDATE', { liveGameData }), [sendMessage]);
 
-      console.log('[useWebSocketCoach] Enviando liveData al WS:', requestPayload);
+  // -----------------------------
+  // Timeout de actividad (si no llega respuesta)
+  // -----------------------------
+  useEffect(() => {
+    if (aiAdvice !== null || wsStatus !== 'CONNECTED') return;
 
-      // Listener temporal para la respuesta
-      const handleMessage = (msg) => {
-        try {
-          const data = JSON.parse(msg.data);
-          if (data.event === `${targetEvent}_RESPONSE`) {
-            console.log('[useWebSocketCoach] Respuesta IA recibida:', data);
-            wsRef.current.removeEventListener('message', handleMessage);
-            resolve(data.payload);
-          }
-        } catch (e) {
-          console.error('[useWebSocketCoach] Error parseando respuesta WS:', e);
-          wsRef.current.removeEventListener('message', handleMessage);
-          reject(e);
-        }
-      };
+    timeoutRef.current = setTimeout(() => {
+      console.warn('[useWebSocketCoach] ⏱ Timeout: No se recibió respuesta de consejo en 15s.');
+      // El widget padre debe manejar el estado de timeout y la UI
+    }, 15000);
 
-      wsRef.current.addEventListener('message', handleMessage);
+    return () => clearTimeout(timeoutRef.current);
+  }, [wsStatus, aiAdvice]);
 
-      try {
-        wsRef.current.send(JSON.stringify(requestPayload));
-      } catch (err) {
-        wsRef.current.removeEventListener('message', handleMessage);
-        console.error('[useWebSocketCoach] Error enviando mensaje WS:', err);
-        reject(err);
-      }
-
-      // Timeout de 12s
-      setTimeout(() => {
-        wsRef.current.removeEventListener('message', handleMessage);
-        reject(new Error('Timeout: No se recibió respuesta de IA'));
-      }, 12000);
-    });
-  }, [userData, targetEvent, wsStatus]);
-
-  return { wsStatus, sendInGameUpdate };
+  return { aiAdvice, wsStatus, sendQueueUpdate, sendChampSelectUpdate, sendInGameUpdate };
 }
