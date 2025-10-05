@@ -13,7 +13,7 @@ import { useTTS } from '@/hooks/useTTS';
  * Widget para fase InProgress (partida en vivo)
  * - Recibe liveData y userData desde useLcuData
  * - Analiza estado de partida y genera consejos en tiempo real
- * - Soporta Coqui TTS únicamente para lectura de consejos
+ * - Utiliza TTS API (Hugging Face) para lectura de consejos
  * - Maneja timeout, reintentos, logs y renderizado interactivo
  * - Evita reprocesar datos repetidos usando hash de liveData
  * ============================
@@ -22,7 +22,7 @@ export default function InGameCoach({ liveData, userData, LCU_STATUS }) {
   console.log('[InGameCoach] --- RENDERIZANDO --- Props:', { liveData, userData, LCU_STATUS });
 
   const { isInteractive, setInteractive } = useInteractiveWidget(false);
-  const { speak } = useTTS(); // ✅ Hook Coqui TTS
+  const { speak } = useTTS(); // ✅ Hook TTS (API)
 
   // ------------------------------
   // Estados internos
@@ -106,9 +106,9 @@ export default function InGameCoach({ liveData, userData, LCU_STATUS }) {
     if (!aiAdvice?.tips?.length) return;
 
     const adviceText = aiAdvice.tips.join('. ');
-    console.log('[InGameCoach] 🎤 Reproduciendo TTS automático con Coqui:', adviceText);
+    console.log('[InGameCoach] 🎤 Reproduciendo TTS automático (via API):', adviceText);
 
-    speak(adviceText); // Solo Coqui TTS
+    speak(adviceText); // Llama al hook useTTS que usa la API
   }, [aiAdvice, speak]);
 
   // ------------------------------

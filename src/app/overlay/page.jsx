@@ -18,7 +18,7 @@ import { useTTS } from '@/hooks/useTTS'; // <-- Hook TTS personalizado
 function CoachContainer() {
     const { gamePhase, draftData, LCU_STATUS, userData, liveData } = useLcuData();
     const { isInteractive, setInteractive } = useInteractiveWidget(false);
-    const { speak } = useTTS(); // Hook TTS
+    const { speak } = useTTS(); // Hook TTS (ahora es la API de Hugging Face)
 
     // ---------------------------------------------------
     // 🎙️ Reproducir mensajes TTS según la fase de partida
@@ -28,108 +28,80 @@ function CoachContainer() {
 
         console.log('[OverlayPage] 🔄 Fase de partida actualizada:', gamePhase);
 
+        // Mensaje de inicio de fase (TTS)
+        let ttsMessage = '';
         switch (gamePhase) {
             case 'Lobby':
             case 'Matchmaking':
             case 'ReadyCheck':
-                speak('Preparando estrategia previa a la partida.', 'alloy', 1.0);
+                ttsMessage = 'Analizando tu cola. Preparando consejos de perfil.';
                 break;
-
             case 'ChampSelect':
-                if (userData)
-                    speak('Comienza la selección de campeones. Analizando draft...', 'alloy', 1.0);
+                ttsMessage = 'Atención, fase de selección de campeones. Analizando el draft.';
                 break;
-
             case 'InProgress':
-                if (userData)
-                    speak('La partida ha iniciado. Coach activado.', 'alloy', 1.0);
+                ttsMessage = 'Partida en curso. El coach en vivo está activado.';
                 break;
-
+            case 'WaitingForStats':
+            case 'EndOfGame':
+                ttsMessage = 'Partida terminada. Desactivando coach en vivo.';
+                break;
             default:
-                console.log('[OverlayPage] ⚠️ Fase no reconocida para TTS:', gamePhase);
+                break;
         }
-    }, [gamePhase, userData, speak]);
+
+        if (ttsMessage) {
+            // 🎤 LOG PRO-DEV: Reproducción automática al cambiar de fase
+            console.log(`[OverlayPage] 🔊 Reproduciendo mensaje de fase: ${ttsMessage}`);
+            speak(ttsMessage);
+        }
+
+    }, [gamePhase, speak]);
+
 
     // ---------------------------------------------------
-    // 🧩 Render dinámico del widget según la fase
+    // 🖥️ Determinar qué widget renderizar
     // ---------------------------------------------------
     const CurrentWidget = useMemo(() => {
-        if (LCU_STATUS === 'OFFLINE') {
-            console.log('[OverlayPage] 🚫 LCU OFFLINE: no se renderiza ningún widget');
-            return null;
-        }
-
         switch (gamePhase) {
-            // ===============================
-            // 🔹 Fases previas a la partida
-            // ===============================
+            case 'ChampSelect':
+                return <ChampSelectCoach draftData={draftData} LCU_STATUS={LCU_STATUS} userData={userData} />;
+            case 'InProgress':
+                return <InGameCoach liveData={liveData} LCU_STATUS={LCU_STATUS} userData={userData} />;
             case 'Lobby':
             case 'Matchmaking':
             case 'ReadyCheck':
-                // Permite renderizar PreGameCoach aunque userData sea null
-                console.log('[OverlayPage] 🧭 Renderizando PreGameCoach');
-                return (
-                    <PreGameCoach
-                        LCU_STATUS={LCU_STATUS}
-                        userData={userData || null}
-                        liveData={liveData || null}
-                    />
-                );
-
-            // ===============================
-            // 🔹 Selección de campeones
-            // ===============================
-            case 'ChampSelect':
-                if (!userData) {
-                    console.log('[OverlayPage] ⚠️ Sin userData: no se renderiza ChampSelectCoach');
-                    return null;
+            case 'None': // Si estamos fuera de partida, pero en el cliente
+                // Renderizar el coach de pre-juego si hay datos del cliente, si no, un estado vacío.
+                if (LCU_STATUS === 'ONLINE') {
+                    return <PreGameCoach LCU_STATUS={LCU_STATUS} userData={userData} />;
                 }
-                console.log('[OverlayPage] 🧠 Renderizando ChampSelectCoach');
                 return (
-                    <ChampSelectCoach
-                        draftData={draftData}
-                        LCU_STATUS={LCU_STATUS}
-                        userData={userData}
-                    />
+                    <div className="text-center p-4 rounded-xl bg-lol-blue-dark max-w-xs text-lol-gold-light border border-lol-gold-dark">
+                        <FaSync className="animate-spin mx-auto mb-2" size={24} />
+                        <p className="font-bold">Esperando al cliente de LoL</p>
+                        <p className="text-xs">Abre el cliente para activar el coach.</p>
+                    </div>
                 );
-
-            // ===============================
-            // 🔹 Partida en curso
-            // ===============================
-            case 'InProgress':
-                if (!userData) {
-                    console.log('[OverlayPage] ⚠️ Sin userData: no se renderiza InGameCoach');
-                    return null;
-                }
-                console.log('[OverlayPage] 🕹️ Renderizando InGameCoach');
-                return (
-                    <InGameCoach
-                        LCU_STATUS={LCU_STATUS}
-                        userData={userData}
-                        liveData={liveData}
-                    />
-                );
-
-            // ===============================
-            // 🔹 Cualquier otro estado
-            // ===============================
             default:
-                console.log('[OverlayPage] ℹ️ Ningún widget aplicable para:', gamePhase);
-                return null;
+                return (
+                    <div className="text-center p-4 rounded-xl bg-lol-blue-dark max-w-xs text-lol-gold-light border border-lol-gold-dark">
+                        <FaSync className="animate-spin mx-auto mb-2" size={24} />
+                        <p className="font-bold">Fase {gamePhase} desconocida.</p>
+                        <p className="text-xs">Coach en modo de espera.</p>
+                    </div>
+                );
         }
     }, [gamePhase, draftData, LCU_STATUS, userData, liveData]);
 
-    // ---------------------------------------------------
-    // 🧰 Overlay Base + Botón Interactivo
-    // ---------------------------------------------------
-    const baseClass = "absolute inset-0 transition-all duration-300";
 
+    // ---------------------------------------------------
+    // ⚙️ Renderizado del Overlay
+    // ---------------------------------------------------
     return (
-        <div 
-            className={`${baseClass} ${isInteractive ? 'pointer-events-auto' : 'pointer-events-none'}`}
-            style={{ backgroundColor: isInteractive ? 'rgba(0, 0, 0, 0.1)' : 'transparent' }}
-        >
-            {/* Indicador de estado LCU */}
+        <div className="w-screen h-screen relative overflow-hidden" style={{ WebkitAppRegion: 'drag' }}>
+            
+            {/* Barra de estado y Controles */}
             <div 
                 className={`absolute top-4 left-4 p-2 rounded-full ${isInteractive ? 'cursor-default' : 'pointer-events-auto'} bg-lol-blue-medium/90 text-lol-gold-light flex items-center shadow-xl`}
                 onMouseEnter={() => setInteractive(true)}

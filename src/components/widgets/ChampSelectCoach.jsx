@@ -15,14 +15,14 @@ import { useTTS } from '@/hooks/useTTS';
  * - Solicita análisis de draft a WebSocket/IA
  * - Permite inyectar runas automáticamente
  * - Maneja estados de timeout, reintentos y logs
- * - Reproduce consejos con Coqui TTS únicamente
+ * - Utiliza TTS API (Hugging Face) para reproducción de consejos
  * ============================
  */
 export default function ChampSelectCoach({ draftData, LCU_STATUS, userData }) {
   console.log('[ChampSelectCoach] --- RENDERIZANDO --- Props:', { draftData, LCU_STATUS, userData });
 
   const { isInteractive, setInteractive } = useInteractiveWidget(false);
-  const { speak } = useTTS(); // ✅ Hook Coqui TTS
+  const { speak } = useTTS(); // ✅ Hook TTS (API)
 
   // ------------------------------
   // Estados internos
@@ -79,8 +79,8 @@ export default function ChampSelectCoach({ draftData, LCU_STATUS, userData }) {
         // ------------------------------
         if (advice?.tips?.length) {
           const adviceText = advice.tips.join('. ');
-          console.log('[ChampSelectCoach] 🎤 Reproduciendo TTS automático Coqui:', adviceText);
-          speak(adviceText);
+          console.log('[ChampSelectCoach] 🎤 Reproduciendo TTS automático (via API):', adviceText);
+          speak(adviceText); // Llama al hook useTTS que usa la API
         }
       })
       .catch((err) => {
@@ -177,4 +177,25 @@ export default function ChampSelectCoach({ draftData, LCU_STATUS, userData }) {
           {/* Tips de IA */}
           <div className="text-lol-gold-light text-xs break-words">
             {aiAdvice?.tips?.map((tip, idx) => (
-              <p key={idx} className="mb-1
+              <p key={idx} className="mb-1">• {tip}</p>
+            ))}
+          </div>
+          {/* Botón para repetir audio */}
+          <button
+            onClick={() => {
+              if (aiAdvice?.tips?.length) {
+                const adviceText = aiAdvice.tips.join('. ');
+                console.log('[ChampSelectCoach] 🎤 Reproduciendo TTS manual:', adviceText);
+                speak(adviceText);
+              }
+            }}
+            className="w-full py-1 bg-lol-gold-dark hover:bg-lol-gold/80 text-lol-blue-dark font-bold text-xs rounded transition-colors"
+            style={{ WebkitAppRegion: 'no-drag' }}
+          >
+            <FaRedo className="inline mr-1" size={10} /> Repetir Audio
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}

@@ -1,10 +1,10 @@
 // ===========================================
-// 🧠 useTTS Hook (Versión PRO-DEV, Coqui TTS)
+// 🧠 useTTS Hook (Versión PRO-DEV, TTS API)
 // ===========================================
 // Este hook centraliza el control de Text-To-Speech en el front React
-// - Usa exclusivamente Coqui TTS vía Electron IPC
+// - Usa exclusivamente TTS API vía Electron IPC (Hugging Face)
 // - Implementa cola de reproducción y evita superposición de audios
-// - Permite personalización de velocidad y pitch
+// - Permite personalización de velocidad y pitch (aunque la API lo ignora, se mantiene la estructura)
 // - Todos los logs detallados para desarrollo
 // ===========================================
 
@@ -19,7 +19,7 @@ export const useTTS = () => {
   const queueRef = useRef([]);
   // Bandera: ¿hay un audio reproduciéndose?
   const isPlayingRef = useRef(false);
-  // Audio actual (archivo generado por Coqui TTS)
+  // Audio actual (archivo generado por la TTS API)
   const currentAudioRef = useRef(null);
 
   // =====================================================
@@ -39,15 +39,16 @@ export const useTTS = () => {
     isPlayingRef.current = true;
 
     try {
-      // Intentamos usar Coqui TTS vía Electron IPC
+      // Intentamos usar la TTS API vía Electron IPC
       if (!window.electronAPI?.coquiTtsSpeak) {
-        throw new Error('Coqui TTS no disponible en preload.js');
+        throw new Error('TTS API (coquiTtsSpeak) no disponible en preload.js');
       }
 
+      // La llamada se mantiene para compatibilidad, aunque rate/pitch son ignorados por la API
       const result = await window.electronAPI.coquiTtsSpeak(next.text, next.rate, next.pitch);
 
       if (result?.filePath) {
-        console.log('[TTS HOOK] 🔊 Audio Coqui recibido:', result.filePath);
+        console.log('[TTS HOOK] 🔊 Audio API recibido:', result.filePath);
         const audio = new Audio(result.filePath);
         currentAudioRef.current = audio;
 
@@ -57,10 +58,10 @@ export const useTTS = () => {
           audio.play().catch(reject);
         });
       } else {
-        console.warn('[TTS HOOK] ⚠ No se generó archivo de audio Coqui TTS. Reproducción cancelada.');
+        console.warn('[TTS HOOK] ⚠ No se generó archivo de audio. Reproducción cancelada.');
       }
     } catch (error) {
-      console.error('[TTS HOOK] ❌ Error al usar Coqui TTS:', error);
+      console.error('[TTS HOOK] ❌ Error al usar TTS API:', error);
     } finally {
       isPlayingRef.current = false;
       currentAudioRef.current = null;
@@ -96,14 +97,13 @@ export const useTTS = () => {
     queueRef.current = [];
     isPlayingRef.current = false;
 
-    // Si hay audio reproduciéndose
+    // Si hay audio reproduciéndose, pausar y liberar
     if (currentAudioRef.current) {
       currentAudioRef.current.pause();
       currentAudioRef.current = null;
     }
 
-    // Avisar al preload/main para detener cualquier generación en curso
-    if (window.electronAPI?.coquiTtsStop) window.electronAPI.coquiTtsStop();
+    // Ya no es necesario llamar a un IPC de stop, el Hook maneja la pausa.
   }, []);
 
   // =====================================================

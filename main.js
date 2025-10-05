@@ -11,8 +11,7 @@ const fs = require('fs');                   // Leer/escribir TTS, store, logs
 const util = require('util');               // Promisify y utils de debugging
 const axios = require('axios');             // Llamadas HTTP backend / Riot API
 const https = require('https');             // Custom agent HTTPS que ignora certificados locales
-const { spawn } = require('child_process'); // Para Coqui TTS
-
+const { spawn } = require('child_process'); // 🚨 PRO-DEV: Re-agregamos spawn solo para llamar al script Python de la API
 // -------------------------------
 // Almacenamiento persistente
 // -------------------------------
@@ -71,7 +70,7 @@ const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
 // -------------------------------
 const TTS_TEMP_DIR = path.join(app.getPath('temp'), 'metaMind-tts');
 if (!fs.existsSync(TTS_TEMP_DIR)) fs.mkdirSync(TTS_TEMP_DIR, { recursive: true });
-console.log(`[TTS INIT] Directorio temporal TTS listo: ${TTS_TEMP_DIR}`);
+console.log(`[TTS INIT] Directorio temporal TTS listo para guardar WAV: ${TTS_TEMP_DIR}`);
 
 // ===============================
 // ETAPA 2: VARIABLES GLOBALES Y VENTANAS
@@ -104,9 +103,13 @@ function sendDataToOverlay(channel, data) {
     }
 }
 
+// ===============================
+// fetchAndStoreUserProfile - versión raíz
+// ===============================
 async function fetchAndStoreUserProfile(username, token) {
     console.log(`[DB FETCH] Iniciando fetchAndStoreUserProfile para: ${username}`);
-    
+
+    // Validación básica del token
     if (!token || typeof token !== 'string' || token.length < 10) {
         console.error('[DB FETCH] ❌ Token inválido o no recibido.');
         return false;
@@ -119,31 +122,48 @@ async function fetchAndStoreUserProfile(username, token) {
             timeout: 15000
         });
 
-        if (response.status === 200 && response.data) {
-            const data = response.data;
-
-            const { summonerName, tagline, region, riotApiKey } = data;
-            if (!summonerName || !tagline || !region || !data.zodiacSign) {
-                console.error('[DB FETCH] ❌ Datos incompletos en la respuesta del backend.');
-                store.set('userData', data);
-                return false;
-            }
-
-            store.set('userData', data);
-            store.set('userSummonerName', summonerName);
-            store.set('userRegion', region);
-            store.set('userTagline', tagline);
-            if (riotApiKey) {
-                store.set('riotApiKey', riotApiKey);
-                console.log('[DB FETCH] ✅ Riot API Key guardada en Store.');
-            }
-
-            console.log(`[DB FETCH] ✅ Perfil guardado para: ${summonerName}`);
-            return true;
-        } else {
-            console.warn('[DB FETCH] ⚠️ Perfil no encontrado o incompleto.');
+        if (response.status !== 200 || !response.data) {
+            console.warn('[DB FETCH] ⚠️ Perfil no encontrado o respuesta vacía.');
             return false;
         }
+
+        const data = response.data;
+        store.set('userData', data); // Guardamos todo siempre
+
+        // Extraer campos
+        const { summonerName, tagline, region, zodiacSign, riotApiKey, hfApiToken } = data;
+
+        // Guardar campos individuales
+        if (summonerName) store.set('userSummonerName', summonerName);
+        if (region) store.set('userRegion', region);
+        if (tagline) store.set('userTagline', tagline);
+        if (riotApiKey) {
+            store.set('riotApiKey', riotApiKey);
+            console.log('[DB FETCH] ✅ Riot API Key guardada en Store.');
+        }
+        if (hfApiToken) {
+            store.set('hfApiToken', hfApiToken);
+            console.log('[DB FETCH] ✅ Hugging Face API Key guardada en Store.');
+        }
+
+        // Chequeo de campos críticos
+        const missingCriticalFields = [];
+        if (!summonerName) missingCriticalFields.push('summonerName');
+        if (!tagline) missingCriticalFields.push('tagline');
+        if (!region) missingCriticalFields.push('region');
+        if (!zodiacSign) missingCriticalFields.push('zodiacSign');
+        if (!hfApiToken) missingCriticalFields.push('hfApiToken');
+
+        if (missingCriticalFields.length > 0) {
+            console.error(`[DB FETCH] ❌ Faltan campos críticos: ${missingCriticalFields.join(', ')}`);
+            // Retornamos false para indicar que el perfil no está completo,
+            // pero **no bloqueamos la creación de ventanas**
+            return false;
+        }
+
+        console.log(`[DB FETCH] ✅ Perfil completo guardado para: ${summonerName}`);
+        return true;
+
     } catch (error) {
         console.error(`[DB FETCH] ❌ Error al obtener perfil: ${error.message}`);
         if (error.response) {
@@ -152,6 +172,7 @@ async function fetchAndStoreUserProfile(username, token) {
         return false;
     }
 }
+
 
 // ===============================
 // ETAPA 2A: CREACIÓN DE VENTANAS
@@ -182,7 +203,12 @@ function createSplashWindow() {
 }
 
 function createLoginWindow() {
-    if (loginWindow) return loginWindow.focus();
+    console.log('[WINDOW INIT] createLoginWindow invocado');
+
+    if (loginWindow) {
+        console.log('[WINDOW] Login window ya existe, haciendo focus');
+        return loginWindow.focus();
+    }
 
     loginWindow = new BrowserWindow({
         width: 600,
@@ -193,30 +219,60 @@ function createLoginWindow() {
         frame: false,
         transparent: true,
         webPreferences: {
-            preload: path.join(__dirname, 'preload.js'),
+            preload: path.join(__dirname, 'preload.js'), // 🔹 asegúrate que ruta sea correcta
             nodeIntegration: false,
             contextIsolation: true,
         },
     });
 
-    loginWindow.loadURL(LOGIN_PATH);
-    console.log('[WINDOW] Login window cargada');
+    // Intento de carga con fallback
+    loginWindow.loadURL(LOGIN_PATH)
+        .then(() => console.log('[WINDOW] Login window cargada URL:', LOGIN_PATH))
+        .catch(err => console.error('[WINDOW ERROR] No se pudo cargar LOGIN_PATH:', err));
+
+    // Detectar cuando la ventana termina de cargar contenido
+    loginWindow.webContents.once('did-finish-load', () => {
+        console.log('[WINDOW] webContents did-finish-load fired');
+    });
 
     loginWindow.once('ready-to-show', () => {
+        console.log('[WINDOW] ready-to-show disparado');
         const splashDuration = 3000;
+
         setTimeout(() => {
-            if (splashWindow) splashWindow.close();
+            if (splashWindow) {
+                console.log('[WINDOW] Cerrando splash window');
+                splashWindow.close();
+            }
+
             loginWindow.show();
             loginWindow.center();
-            console.log('[WINDOW] Login window mostrada');
+            console.log('[WINDOW] Login window mostrada y centrada');
         }, splashDuration);
     });
 
     loginWindow.on('closed', () => {
-        if (!mainWindow) app.quit();
-        loginWindow = null;
         console.log('[WINDOW] Login window cerrada');
+        if (!mainWindow) {
+            console.log('[APP] No hay mainWindow, cerrando app');
+            app.quit();
+        }
+        loginWindow = null;
     });
+
+    loginWindow.on('unresponsive', () => {
+        console.warn('[WINDOW WARNING] Login window no responde');
+    });
+
+    loginWindow.webContents.on('crashed', () => {
+        console.error('[WINDOW CRASH] Login window webContents crashed');
+    });
+
+    loginWindow.webContents.on('did-fail-load', (event, errorCode, errorDescription, validatedURL) => {
+        console.error('[WINDOW ERROR] did-fail-load', { errorCode, errorDescription, validatedURL });
+    });
+
+    return loginWindow;
 }
 
 function createMainWindow() {
@@ -286,6 +342,18 @@ function createOverlayWindow() {
 
     overlayWindow.setIgnoreMouseEvents(true, { forward: true });
 
+    overlayWindow.webContents.once('did-finish-load', () => {
+    overlayReady = true;
+    console.log('[WINDOW] Overlay did-finish-load. overlayReady = true');
+    
+    // Enviar payload inicial si ya hay datos de LCU
+    if (latestRiotApiData) {
+        const storedUserData = store.get('userData');
+        overlayWindow.webContents.send('lcu-state-update', { ...latestRiotApiData, userData: storedUserData });
+        console.log('[IPC SEND] Payload inicial enviado al Overlay tras did-finish-load');
+    }
+});
+
     overlayWindow.once('ready-to-show', () => {
         overlayWindow.show();
         console.log('[WINDOW] Overlay window creada y lista');
@@ -312,6 +380,7 @@ app.on('ready', () => {
 // ETAPA 3: POLLING DE RIOT API Y LCU
 // ===============================
 
+
     async function executeInitialRiotApiFetchAndStartPolling() {
         console.log('[MAIN-FLOW] -> Iniciando flujo inicial de Riot API y LCU');
 
@@ -333,8 +402,9 @@ app.on('ready', () => {
 
         try {
             // Fetch inicial de datos de Riot API
-            latestRiotApiData = await fetchRiotApiData();
+            latestRiotApiData = await fetchRiotApiData();    
             if (!latestRiotApiData) throw new Error('No se recibieron datos de Riot API');
+            console.log('[DEBUG] latestRiotApiData:', latestRiotApiData);
 
             console.log('[MAIN-FLOW] ✅ Datos iniciales de Riot API obtenidos');
             sendDataToRenderer('riot-profile-data', latestRiotApiData);
@@ -371,11 +441,25 @@ app.on('ready', () => {
         if (pollingInterval) clearInterval(pollingInterval);
 
         const overlayIpcSender = (data) => {
-            if (overlayWindow && !overlayWindow.isDestroyed()) {
-                const storedUserData = store.get('userData');
-                const payloadCompleto = { ...data, userData: storedUserData };
-                console.log('[IPC SEND] Enviando payload completo al Overlay...');
-                overlayWindow.webContents.send('lcu-state-update', payloadCompleto);
+            if (!overlayWindow || overlayWindow.isDestroyed()) return;
+
+            const storedUserData = store.get('userData');
+            const payloadCompleto = { ...data, userData: storedUserData };
+
+            const sendNow = () => {
+                try {
+                    overlayWindow.webContents.send('lcu-state-update', payloadCompleto);
+                    console.log('[IPC SEND] Enviado payload al Overlay (webContents.send).');
+                } catch (err) {
+                    console.error('[IPC SEND] Error enviando al Overlay:', err.message);
+                }
+            };
+
+            if (overlayWindow.webContents && overlayWindow.webContents.isLoading && overlayWindow.webContents.isLoading()) {
+                overlayWindow.webContents.once('did-finish-load', sendNow);
+                console.log('[IPC SEND] Overlay aún cargando. Envío en did-finish-load.');
+            } else {
+                sendNow();
             }
         };
 
@@ -419,6 +503,11 @@ app.on('ready', () => {
     // -------------------------------
     // Integración con evento login
     // -------------------------------
+    // Logs generales desde el renderer
+    ipcMain.on('overlay-log', (event, msg) => {
+        console.log('[IPC LOG desde renderer]:', msg);
+    });
+
     ipcMain.on('user-logged-in', async (event, userData) => {
         console.log(`[IPC] 'user-logged-in' recibido para: ${userData.username}`);
 
@@ -427,26 +516,26 @@ app.on('ready', () => {
             return;
         }
 
-        // Guardar token en Store
-        store.set('userToken', userData.token);
+    // Guardar token siempre
+    store.set('userToken', userData.token);
 
-        // Fetch de perfil y guardado en Store
-        const profileFetchSuccess = await fetchAndStoreUserProfile(userData.username, userData.token);
+    const profileFetchSuccess = await fetchAndStoreUserProfile(userData.username, userData.token);
 
-        if (profileFetchSuccess || store.get('userData')) {
-            hasRunInitialLogin = true;
-            console.log('[MAIN-FLOW] ✅ Perfil cargado, cerrando Login y abriendo Dashboard');
+    // Creamos ventanas **siempre**, aunque falten datos críticos
+    hasRunInitialLogin = true;
+    console.log('[MAIN-FLOW] ✅ Abriendo Dashboard y Overlay');
+    createMainWindow();
+    createOverlayWindow();
 
-            createMainWindow();
-            createOverlayWindow();
+    if (profileFetchSuccess) {
+        console.log('[MAIN-FLOW] ✅ Perfil completo cargado, iniciando flujo Riot/LCU');
+    } else {
+        console.warn('[MAIN-FLOW] ⚠️ Perfil incompleto, algunas funcionalidades pueden no estar disponibles');
+    }
 
-            // Iniciar flujo Riot API + LCU
-            console.log('[MAIN-FLOW] Iniciando flujo Riot/LCU tras login exitoso');
-            executeInitialRiotApiFetchAndStartPolling();
-        } else {
-            console.error('[MAIN-FLOW] ❌ Fallo al obtener perfil. Permaneciendo en Login');
-        }
-    });
+    executeInitialRiotApiFetchAndStartPolling();
+});
+
 
     // Obtener datos de usuario
     ipcMain.handle('get-user-data', async () => {
@@ -467,7 +556,7 @@ app.on('ready', () => {
     });
 
 // ===============================
-// ETAPA 4: IPC IA, Coqui TTS y Shortcuts
+// ETAPA 4: IPC IA, HUGGING FACE TTS y Shortcuts
 // ===============================
 
 // -------------------------------
@@ -519,43 +608,78 @@ app.on('ready', () => {
     });
 
     // -------------------------------
-    // IPC COQUI TTS (Text-to-Speech avanzado)
+    // IPC HUGGING FACE TTS (Text-to-Speech vía API - Plug and Play)
     // -------------------------------
     ipcMain.handle('coqui-tts', async (event, { text, rate = 1.0, pitch = 1.0 }) => {
-        console.log('[TTS] IPC coqui-tts recibido:', text);
+        // Mantenemos el nombre del canal 'coqui-tts' por compatibilidad con useTTS.js
+        console.log('[TTS API] IPC coqui-tts recibido, usando Hugging Face API.');
 
         if (!text) {
-            console.warn('[TTS] Texto vacío recibido. Abortando generación');
+            console.warn('[TTS API] Texto vacío recibido. Abortando generación');
             return null;
         }
+        
+        // 1. Definir la ruta del script Python (debe estar en la raíz del proyecto)
+        const pythonScriptPath = path.join(__dirname, 'hf_tts_api_generator.py');
+        const filePath = path.join(TTS_TEMP_DIR, `tts-hf-${Date.now()}.wav`);
+
+        // La variable isDevMode (Línea 51) determina si estamos en desarrollo
+        const pythonExecutable = isDevMode 
+            ? 'python' // <--- Usa 'python' del PATH durante el desarrollo (tu entorno requests)
+            : path.join(
+                process.resourcesPath, // Ruta interna del .exe compilado
+                'python',
+                'python.exe'
+            ); 
+
+        // 3. 🚨 CLAVE PLUG AND PLAY: Configurar el Token de Hugging Face en el entorno del proceso Python
+        // Esto mantiene el secreto fuera del código y lo pasa al script hf_tts_api_generator.py
+        const token = store.get('hfApiToken') || 'TU_TOKEN_DE_HUGGING_FACE_AQUÍ'; // Usar Store o un fallback
+        
+        const env = { 
+            ...process.env, 
+            HUGGING_FACE_TOKEN: token
+        };
+
+        console.log(`[TTS API] Usando Python: ${pythonExecutable}`);
+        console.log(`[TTS API] Archivo de salida: ${filePath}`);
+        if (token === 'TU_TOKEN_DE_HUGGING_FACE_AQUÍ') console.error('[TTS API] ❌ ADVERTENCIA: Usando token de prueba/vacío. Revisa la Store.');
 
         try {
-            const filePath = path.join(TTS_TEMP_DIR, `tts-${Date.now()}.wav`);
-            console.log('[TTS] Archivo de salida:', filePath);
+            // 4. Ejecutar el script Python que llama a la API (solo pasamos texto y ruta de salida)
+            const pythonProcess = spawn(pythonExecutable, [
+                pythonScriptPath,
+                text,
+                filePath
+            ], { env: env }); // Pasa el token de forma segura en el entorno
 
-            const pythonProcess = spawn('python', [
-                '-m', 'coqui_ai.cli',
-                '--voice', 'alloy',
-                '--text', text,
-                '--rate', rate.toString(),
-                '--pitch', pitch.toString(),
-                '--output', filePath
-            ]);
-
-            pythonProcess.stdout.on('data', (data) => console.log('[TTS][stdout]', data.toString()));
-            pythonProcess.stderr.on('data', (data) => console.log('[TTS][stderr]', data.toString()));
+            // Logs detallados para PRO-DEV
+            pythonProcess.stdout.on('data', (data) => console.log('[TTS API][stdout]', data.toString().trim()));
+            pythonProcess.stderr.on('data', (data) => console.error('[TTS API][stderr]', data.toString().trim()));
 
             await new Promise((resolve, reject) => {
                 pythonProcess.on('close', (code) => {
-                    if (code === 0) resolve();
-                    else reject(new Error(`Coqui TTS exited with code ${code}`));
+                    if (code === 0) {
+                        console.log('[TTS API] Audio generado correctamente ✅');
+                        resolve();
+                    }
+                    else {
+                        reject(new Error(`Hugging Face TTS (Python) exited with code ${code}`));
+                    }
+                });
+                pythonProcess.on('error', (err) => {
+                    reject(new Error(`Error al iniciar proceso Python: ${err.message}. ¿Está 'python' en el PATH y tiene 'requests' instalado?`));
                 });
             });
 
-            console.log('[TTS] Audio generado correctamente ✅');
-            return { filePath };
+            if (fs.existsSync(filePath)) {
+                return { filePath };
+            } else {
+                console.error('[TTS API] El archivo de salida no fue creado por el script Python.');
+                return null;
+            }
         } catch (err) {
-            console.error('[TTS] Falló generación Coqui TTS:', err.message);
+            console.error('[TTS API] Falló generación TTS:', err.message);
             return null;
         }
     });

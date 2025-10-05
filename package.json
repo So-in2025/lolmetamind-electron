@@ -46,28 +46,37 @@
     "rimraf": "^6.0.1"
   },
   "build": {
-    "appId": "com.lolmetamind.app",
-    "productName": "LoL MetaMind",
+    "appId": "com.lolmetamind.coach",
+    "productName": "MetaMind Coach",
+    
     "files": [
       "main.js",
       "preload.js",
-      "static/**/*",
       "out/**/*",
-      "node_modules/**/*",
       "lol-client-api.js",
-      "lol-strategic-data-fallback.js",
-      ".coqui-venv/**/*" 
+      "package.json",
+      "node_modules/**/*"
     ],
     "directories": {
       "buildResources": "assets",
       "output": "dist"
     },
+    
+    "extraFiles": [
+      {
+        "from": "python_portable",
+        "to": "resources/python",
+        "filter": ["**/*"]
+      },
+      "hf_tts_api_generator.py"
+    ],
+    
     "win": {
       "target": "nsis",
       "icon": "assets/icon.ico"
     },
     "extraMetadata": {
-      "description": "Incluye Coqui TTS embebido para TTS offline sin instalación extra"
+      "description": "Incluye TTS vía API de Hugging Face para audio estable y ligero."
     }
   }
 }
