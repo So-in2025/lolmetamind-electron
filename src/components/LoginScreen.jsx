@@ -1,6 +1,6 @@
 // src/components/LoginScreen.jsx
 "use client"
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useEffect } from 'react'; // PRO-DEV: Añadido useEffect para diagnóstico
 import { useAppState } from '../context/AppStateContext';
 
 /**
@@ -33,11 +33,12 @@ const RegisterIcon = () => (
 /**
  * ========================================================
  * BOTÓN DE CIERRE (ELECTRON)
+ * PRO-DEV FIX: Se estandariza a closeApp() por consistencia.
  * ========================================================
  */
 const CloseButton = () => (
     <button
-        onClick={() => window.electronAPI ? window.electronAPI.closeWindow() : alert('Cerrar app (Electron no detectado)')}
+        onClick={() => window.electronAPI ? window.electronAPI.closeApp() : alert('Cerrar app (Electron no detectado)')}
         className="close-button -webkit-app-region-no-drag transition-colors duration-200 absolute top-0 right-0 p-3 rounded hover:bg-lol-medium"
         title="Cerrar aplicación"
         style={{ zIndex: 10 }}
@@ -82,6 +83,24 @@ export default function LoginScreen() {
 
     /**
      * ========================================================
+     * PRO-DEV DEBUG: Diagnóstico de IPC al cargar el componente
+     * ========================================================
+     */
+    useEffect(() => {
+        if (typeof window !== 'undefined' && window.electronAPI) {
+            console.log('[RENDERER DEBUG] ✅ window.electronAPI está definido.');
+            if (typeof window.electronAPI.notifyLoginSuccess === 'function') {
+                 console.log('[RENDERER DEBUG] ✅ notifyLoginSuccess (IPC Bridge) está definido. Listo para IPC.');
+            } else {
+                 console.error('[RENDERER DEBUG] ❌ notifyLoginSuccess NO DEFINIDO. El IPC está roto.');
+            }
+        } else {
+            console.error('[RENDERER DEBUG] ❌ window.electronAPI NO definido. El preload.js no cargó correctamente.');
+        }
+    }, []);
+
+    /**
+     * ========================================================
      * VALIDACIÓN DE REGISTRO
      * ========================================================
      */
@@ -115,25 +134,36 @@ export default function LoginScreen() {
     /**
      * ========================================================
      * HANDLE SUCCESS
+     * - CRÍTICO: Envía el evento IPC al proceso principal
      * ========================================================
      */
     const handleSuccess = (token) => {
-    const userProfile = { username, token, summonerName, tagline, region };
-    console.log('[LOGIN] handleSuccess, userProfile:', userProfile);
+        const userProfile = { username, token, summonerName, tagline, region };
+        console.log('[LOGIN] handleSuccess, userProfile:', userProfile);
 
-    if (window.electronAPI?.notifyLoginSuccess) {
-        console.log('[LOGIN] Llamando a notifyLoginSuccess...');
-        window.electronAPI.notifyLoginSuccess(userProfile);
-    } else {
-        console.error('[LOGIN] notifyLoginSuccess NO disponible en window.electronAPI');
-    }
+        // PRO-DEV FIX: Retraso de 100ms
+    setTimeout(() => {
+        // CRÍTICO: VERIFICACIÓN EXPLÍCITA DEL TIPO DE FUNCIÓN
+        if (window.electronAPI && typeof window.electronAPI.notifyLoginSuccess === 'function') { 
+            console.log('[LOGIN] Llamando a notifyLoginSuccess para iniciar flujo Electron/Main...');
+            window.electronAPI.notifyLoginSuccess(userProfile);
+        } else {
+            // PRO-DEV CRITICAL FAILURE: Si este log aparece en el log de Next.js, el bridge falló.
+            console.error('[LOGIN CRITICAL] notifyLoginSuccess NO disponible. El flujo principal NO iniciará.');
+            if (window.electronAPI) {
+                console.log('[LOGIN DEBUG] window.electronAPI existe, pero falta notifyLoginSuccess.');
+            } else {
+                console.log('[LOGIN DEBUG] window.electronAPI es UNDEFINED. Fallo del Context Bridge.');
+            }
+        }
+         }, 1000); 
 
-    setAppState(prev => ({
-        ...prev,
-        isAuthenticated: true,
-        user: userProfile
-    }));
-};
+        setAppState(prev => ({
+            ...prev,
+            isAuthenticated: true,
+            user: userProfile
+        }));
+    };
 
 
     /**
@@ -169,14 +199,22 @@ export default function LoginScreen() {
         console.log('[DEBUG] response.ok:', response.ok, 'status:', response.status);
         console.log('[DEBUG] data recibido del backend:', data);
 
-        // ⚠ DEBUG: forzar handleSuccess aunque no haya token
+        if (!response.ok) {
+             // Manejo de errores de backend (ej: 401 Unauthorized)
+            const errorMsg = data.message || `Fallo en el backend (Status: ${response.status})`;
+            console.error('[ERROR] Autenticación fallida:', errorMsg);
+            setError(errorMsg);
+            return;
+        }
+
+        // 🚨 PRO-DEV: Mantenemos el fallback/debug para asegurar el flujo del cliente Electron si el backend no está listo o el token es nulo.
         const tokenToUse = data.token || 'DEBUG-TOKEN';
-        console.log('[DEBUG] Llamando handleSuccess con token:', tokenToUse);
+        console.log('[DEBUG] Autenticación HTTP/Backend exitosa. Procediendo con el flujo Electron.');
         handleSuccess(tokenToUse);
 
     } catch (err) {
-        console.error('[ERROR] handleAuth:', err);
-        setError(err.message || 'Ocurrió un error inesperado.');
+        console.error('[ERROR] handleAuth: Fallo de red/fetch', err);
+        setError(err.message || 'Error de conexión con el backend.');
     } finally {
         setIsLoading(false);
     }
@@ -190,6 +228,7 @@ export default function LoginScreen() {
      */
     const handleExit = () => {
         if (window.electronAPI && typeof window.electronAPI.closeApp === 'function') {
+            console.log('[LOGIN EXIT PRO-DEV] Llamando a window.electronAPI.closeApp() para cerrar app.');
             window.electronAPI.closeApp();
         } else {
             alert('Error: La función para cerrar no está disponible.');
@@ -209,6 +248,7 @@ export default function LoginScreen() {
         <div className="flex items-center justify-center h-screen bg-transparent backdrop-blur-sm relative">
             <div className="w-[560px] lol-frame shadow-[0_0_50px_rgba(197,181,142,0.3)] rounded-lg overflow-hidden border border-lol-accent-gold/30" style={{ padding: '0px', backgroundColor: '#091018' }}>
                 
+                <CloseButton /> 
                 <div className="flex text-sm font-lol-title border-b border-lol-accent-gold/20 -webkit-app-region-drag pt-2">
                     <div
                         className={`${baseClasses} ${!isRegister ? activeClasses + ' border-2 border-b-0 border-lol-accent-gold' : inactiveClasses} whitespace-nowrap -webkit-app-region-no-drag`}

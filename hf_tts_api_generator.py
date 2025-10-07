@@ -1,56 +1,82 @@
-import requests
 import sys
 import os
+import torch
+import scipy.io.wavfile as wavfile
+import numpy as np
+from transformers import VitsModel, AutoTokenizer
 
 # ====================================================================
-# CONFIGURACIÓN DEL MODELO Y TOKEN
+# CONFIGURACIÓN DEL MODELO
 # ====================================================================
 
-API_TOKEN = os.environ.get("HUGGING_FACE_TOKEN", "").strip()
+MODEL_ID = "facebook/mms-tts-spa"
+DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 
-# 🔊 Modelo TTS público y activo en español
-API_URL = "https://api-inference.huggingface.co/models/facebook/mms-tts-spa"
+# Variables globales para almacenar el modelo y evitar recargas
+model = None
+tokenizer = None
+SAMPLING_RATE = None
 
 # ====================================================================
-# FUNCIÓN DE LLAMADA A LA API
+# FUNCIÓN DE INICIALIZACIÓN (Carga el modelo una sola vez por proceso)
 # ====================================================================
+def initialize_model():
+    """Carga el modelo y el tokenizer globalmente si aún no están cargados."""
+    global model, tokenizer, SAMPLING_RATE
+    if model is None:
+        try:
+            sys.stderr.write(f"[TTS INIT] Iniciando carga de modelo VITS/MMS-TTS en {DEVICE}...\n")
+            model = VitsModel.from_pretrained(MODEL_ID).to(DEVICE)
+            tokenizer = AutoTokenizer.from_pretrained(MODEL_ID)
+            SAMPLING_RATE = model.config.sampling_rate
+            sys.stderr.write(f"[TTS INIT] ✅ Modelo cargado correctamente con Sampling Rate: {SAMPLING_RATE}.\n")
+        except Exception as e:
+            sys.stderr.write(f"❌ ERROR CRÍTICO AL CARGAR MODELO: {e}\n")
+            sys.exit(1)
 
-def generate_audio(text_to_speak, output_path):
-    """Llama a la API de Hugging Face y guarda el audio WAV."""
+# ====================================================================
+# FUNCIÓN DE GENERACIÓN DE AUDIO
+# ====================================================================
+def generate_audio_local(text_to_speak, output_path):
+    """Genera audio TTS localmente usando la librería Hugging Face Transformers."""
     
-    if not API_TOKEN:
-        sys.stderr.write("❌ ERROR: Token de Hugging Face no configurado.\n")
-        return 1
+    # 1. Asegurarse de que el modelo esté cargado (la carga real solo ocurre la primera vez)
+    initialize_model()
 
-    headers = {"Authorization": f"Bearer {API_TOKEN}"}
-    payload = {"inputs": text_to_speak}
+    if not text_to_speak or len(text_to_speak.strip()) == 0:
+        sys.stderr.write("❌ ERROR: Texto vacío o solo espacios.\n")
+        return 1
 
     try:
-        sys.stderr.write(f"[HF_API] Solicitando audio TTS para: {text_to_speak[:60]}...\n")
-        response = requests.post(API_URL, headers=headers, json=payload, timeout=60)
-        response.raise_for_status()
+        sys.stderr.write(f"[TTS GEN] Tokenizando y generando audio para: {text_to_speak[:60]}...\n")
+        
+        # Generación usando el modelo global
+        inputs = tokenizer(text_to_speak, return_tensors="pt").to(DEVICE)
+        
+        with torch.no_grad():
+            output = model(**inputs).waveform
+        
+        # Convertir y guardar el audio WAV
+        audio_data = output.cpu().numpy().squeeze()
+        # Escalar a INT16 (formato estándar WAV)
+        audio_data_int = (audio_data * 32767).astype(np.int16) 
+        
+        wavfile.write(output_path, rate=SAMPLING_RATE, data=audio_data_int)
 
-        # Guardar el audio recibido
-        with open(output_path, "wb") as f:
-            f.write(response.content)
-
-        sys.stderr.write(f"[HF_API] ✅ Audio generado correctamente: {output_path}\n")
+        sys.stderr.write(f"[TTS GEN] ✅ Audio guardado correctamente en: {output_path}\n")
         return 0
 
-    except requests.exceptions.RequestException as e:
-        sys.stderr.write(f"❌ ERROR API: {e}\n")
-        if hasattr(e, "response") and e.response is not None:
-            sys.stderr.write(f"⚠️ Código de estado: {e.response.status_code}\n")
-            if e.response.status_code == 503:
-                sys.stderr.write("El modelo está cargándose. Reintento necesario.\n")
+    except Exception as e:
+        sys.stderr.write(f"❌ ERROR DE GENERACIÓN: {e}\n")
         return 1
-
 
 if __name__ == "__main__":
     if len(sys.argv) < 3:
-        sys.stderr.write("Uso: python tts_hf.py '<texto>' '<ruta_salida.wav>'\n")
+        sys.stderr.write("Uso: python hf_tts_api_generator.py '<texto>' '<ruta_salida.wav>'\n")
         sys.exit(1)
 
     text = sys.argv[1]
     output_path = sys.argv[2]
-    sys.exit(generate_audio(text, output_path))
+    
+    # El modelo se inicializa dentro de generate_audio_local()
+    sys.exit(generate_audio_local(text, output_path))

@@ -88,6 +88,9 @@ let pollingInterval = null;        // Polling de LCU
 let hasRunInitialLogin = false;    // Evita login duplicado
 let latestRiotApiData = null;      // Últimos datos de Riot API
 
+// PRO-DEV FIX: Variable para pausar el polling y debuggear el Overlay
+let isLcuPollingPaused = false; 
+
 // -------------------------------
 // IPC helper para enviar datos al renderer
 // -------------------------------
@@ -209,6 +212,10 @@ function createLoginWindow() {
         console.log('[WINDOW] Login window ya existe, haciendo focus');
         return loginWindow.focus();
     }
+    
+    // PRO-DEV CRITICAL DEBUG: Verificamos la ruta de preload.js antes de la creación.
+    const preloadPath = path.join(__dirname, 'preload.js');
+    console.log(`[WINDOW DEBUG] Ruta de preload.js inyectada: ${preloadPath}`);
 
     loginWindow = new BrowserWindow({
         width: 600,
@@ -219,7 +226,7 @@ function createLoginWindow() {
         frame: false,
         transparent: true,
         webPreferences: {
-            preload: path.join(__dirname, 'preload.js'), // 🔹 asegúrate que ruta sea correcta
+            preload: preloadPath, // 🔹 Usamos la ruta verificada
             nodeIntegration: false,
             contextIsolation: true,
         },
@@ -290,6 +297,7 @@ function createMainWindow() {
             preload: path.join(__dirname, 'preload.js'),
             nodeIntegration: false,
             contextIsolation: true,
+            devTools: true, // Se habilita devTools para consistencia en debug
         },
     });
 
@@ -330,8 +338,12 @@ function createOverlayWindow() {
             contextIsolation: true,
             enableRemoteModule: false,
             webSecurity: false,
+            //devTools: true, // PRO-DEV FIX: Forzar DevTools para Overlay
         }
     });
+
+    // CRÍTICO: Abrir DevTools inmediatamente
+    //overlayWindow.webContents.openDevTools({ mode: 'detach' });
 
     const OVERLAY_PATH = isDevMode
         ? `${FRONTEND_BASE_URL}/overlay`
@@ -377,7 +389,228 @@ app.on('ready', () => {
     console.log('[APP] Ventanas iniciales creadas ✅');
 
 // ===============================
-// ETAPA 3: POLLING DE RIOT API Y LCU
+// ETAPA 3: IPC IA, HUGGING FACE TTS y Shortcuts (Handlers Registrados Primero)
+// ===============================
+
+// -------------------------------
+// Helper para requests a backend IA
+// -------------------------------
+    const makeAIRequest = async (endpoint, payload = {}) => {
+        const token = store.get('userToken');
+        if (!token) return { error: 'Usuario no autenticado.' };
+
+        try {
+            const response = await axios.post(
+                `${BACKEND_BASE_URL}${endpoint}`,
+                payload,
+                { headers: { 'Authorization': `Bearer ${token}` }, httpsAgent: backendAgent, timeout: 30000 }
+            );
+            console.log(`[AI REQUEST] ${endpoint} ✅ Respuesta recibida`);
+            return response.data;
+        } catch (error) {
+            console.error(`[AI REQUEST] ${endpoint} ❌ Error: ${error.message}`);
+            return { error: error.response?.data?.message || `Error al contactar backend IA: ${error.message}` };
+        }
+    };
+
+    // -------------------------------
+    // Handlers IPC IA
+    // -------------------------------
+    ipcMain.handle('get-meta-analysis', (e, payload) => makeAIRequest('/api/ai/get-meta', payload));
+    ipcMain.handle('get-recommendations', (e, payload) => makeAIRequest('/api/ai/get-recommendations', payload));
+    ipcMain.handle('get-weekly-challenges', (e, payload) => makeAIRequest('/api/ai/get-weekly-challenges', payload));
+    ipcMain.handle('analyze-matches', (e, payload) => makeAIRequest('/api/ai/analyze-matches', payload));
+    ipcMain.handle('get-strategic-advice', (e, payload) => makeAIRequest('/api/ai/strategy-coach', payload));
+    ipcMain.handle('get-live-coaching', (e, payload) => makeAIRequest('/api/ai/live-coach', payload));
+
+    // -------------------------------
+    // IPC LCU (Comandos directos al cliente de LoL)
+    // -------------------------------
+    ipcMain.handle('lcu-command', async (event, method, endpoint, payload) => {
+        try {
+            const creds = getLcuCredentials();
+            if (!creds) return { error: 'LCU OFFLINE. Inyección fallida.' };
+
+            const result = await sendLcuCommand(creds, method, endpoint, payload);
+            console.log(`[LCU COMMAND] ${method} ${endpoint} ✅ Comando ejecutado`);
+            return { success: result };
+        } catch (error) {
+            console.error(`[LCU COMMAND FAIL] ${method} ${endpoint} ❌ Error: ${error.message}`);
+            return { error: `Comando LCU fallido: ${error.message}` };
+        }
+    });
+
+    // =======================================================
+    // === IPC STORE HANDLERS (Acceso seguro a Store) ===
+    // =======================================================
+    ipcMain.handle('get-store-value', (e, key) => {
+        console.log(`[IPC Store] Obteniendo valor para la clave: ${key}`);
+        try { 
+            return store.get(key); 
+        } catch (err) { 
+            console.error(`[IPC Store] ❌ Error al obtener la clave ${key}: ${err.message}`);
+            return null; 
+        }
+    });
+    ipcMain.handle('set-store-value', (e, { key, value }) => {
+        console.log(`[IPC Store] Estableciendo valor para la clave: ${key}`);
+        try { 
+            store.set(key, value); 
+            return true; 
+        } catch (err) { 
+            console.error(`[IPC Store] ❌ Error al establecer la clave ${key}: ${err.message}`);
+            return false; 
+        }
+    });
+
+    // --------------------------------------------------------
+    // ☁️ IPC HUGGING FACE TTS (Text-to-Speech vía API)
+    // --------------------------------------------------------
+    ipcMain.handle('coqui-tts', async (event, { text, rate = 1.0, pitch = 1.0 }) => {
+        // Mantenemos el nombre del canal 'coqui-tts' por compatibilidad con useTTS.js
+        console.log('[TTS API] IPC coqui-tts recibido, usando Hugging Face API.');
+
+        if (!text) {
+            console.warn('[TTS API] Texto vacío recibido. Abortando generación');
+            return null;
+        }
+        
+        // 1. Definir la ruta del script Python (debe estar en la raíz del proyecto)
+        const pythonScriptPath = path.join(__dirname, 'hf_tts_api_generator.py');
+        const filePath = path.join(TTS_TEMP_DIR, `tts-hf-${Date.now()}.wav`);
+
+        // La variable isDevMode (Línea 51) determina si estamos en desarrollo
+        const pythonExecutable = isDevMode 
+            ? 'python' // <--- Usa 'python' del PATH durante el desarrollo (tu entorno requests)
+            : path.join(
+                process.resourcesPath, // Ruta interna del .exe compilado
+                'python',
+                'python.exe'
+            ); 
+
+        // 3. 🚨 CLAVE PLUG AND PLAY: Configurar el Token de Hugging Face en el entorno del proceso Python
+        const token = store.get('hfApiToken') || 'TU_TOKEN_DE_HUGGING_FACE_AQUÍ'; // Usar Store o un fallback
+        // ************** DEBUGGING CRÍTICO AÑADIDO **************
+        //    console.log(`[TTS API][DEBUG] Token Check (First 8 chars): ${token.substring(0, 8)}...`); // <-- Muestra la clave en la terminal
+        // *******************************************************
+
+        const env = { 
+            ...process.env, 
+            HUGGING_FACE_TOKEN: token
+        };
+
+        // ************** DEBUGGING CRÍTICO AÑADIDO **************
+        //console.log(`[TTS API][DEBUG] Token Check (First 8 chars): ${token.substring(0, 8)}...`);
+        // *******************************************************
+
+        console.log(`[TTS API] Usando Python: ${pythonExecutable}`);
+        console.log(`[TTS API] Archivo de salida: ${filePath}`);
+        if (token === 'TU_TOKEN_DE_HUGGING_FACE_AQUÍ') console.error('[TTS API] ❌ ADVERTENCIA: Usando token de prueba/vacío. Revisa la Store.');
+
+        try {
+            // 4. Ejecutar el script Python que llama a la API (solo pasamos texto y ruta de salida)
+            const pythonProcess = spawn(pythonExecutable, [
+                pythonScriptPath,
+                text,
+                filePath
+            ], { env: env }); // Pasa el token de forma segura en el entorno
+
+            // Logs detallados para PRO-DEV
+            pythonProcess.stdout.on('data', (data) => console.log('[TTS API][stdout]', data.toString().trim()));
+            pythonProcess.stderr.on('data', (data) => console.error('[TTS API][stderr]', data.toString().trim()));
+
+            await new Promise((resolve, reject) => {
+                pythonProcess.on('close', (code) => {
+                    if (code === 0) {
+                        console.log('[TTS API] Audio generado correctamente ✅');
+                        resolve();
+                    }
+                    else {
+                        console.error(`[TTS API] ❌ ERROR CRÍTICO: Proceso Python terminó con código ${code}.`);
+                        reject(new Error(`Hugging Face TTS (Python) exited with code ${code}. Revise los logs [TTS API][stderr] para más detalles.`));
+                    }
+                });
+                pythonProcess.on('error', (err) => {
+                    reject(new Error(`Error al iniciar proceso Python: ${err.message}. ¿Está 'python' en el PATH?`));
+                });
+            });
+
+            if (fs.existsSync(filePath)) {
+                return { filePath };
+            } else {
+                console.error('[TTS API] El archivo de salida no fue creado por el script Python.');
+                return null;
+            }
+        } catch (err) {
+            console.error('[TTS API] Falló generación TTS:', err.message);
+            return null;
+        }
+    });
+    // =======================================================
+
+    // -------------------------------
+    // IPC para guardar Riot API Key
+    // -------------------------------
+    ipcMain.on('set-riot-api-key', async (event, apiKey) => {
+        store.set('riotApiKey', apiKey);
+        console.log('[MAIN-STORE] ✅ Riot API Key guardada. Reiniciando flujo polling.');
+        if (mainWindow) await executeInitialRiotApiFetchAndStartPolling();
+    });
+
+    // -------------------------------
+    // SHORTCUTS GLOBALES
+    // -------------------------------
+    try {
+        // F1 → Modo interactivo (overlay recibe clicks)
+        globalShortcut.register('CommandOrControl+F1', () => {
+            if (overlayWindow) {
+                overlayWindow.setIgnoreMouseEvents(false);
+                console.log('[Shortcut] Modo Interactivo activado');
+            }
+        });
+
+        // F2 → Modo click-through (overlay ignora clicks)
+        globalShortcut.register('CommandOrControl+F2', () => {
+            if (overlayWindow) {
+                overlayWindow.setIgnoreMouseEvents(true, { forward: true });
+                console.log('[Shortcut] Modo Click-Through activado');
+            }
+        });
+
+        // F3 → Toggle visibilidad overlay
+        globalShortcut.register('CommandOrControl+F3', () => {
+            if (overlayWindow) {
+                overlayWindow.isVisible() ? overlayWindow.hide() : overlayWindow.show();
+                console.log('[Shortcut] Toggle Overlay Visibility');
+            }
+        });
+        
+        // F4 → Toggle pausa de Polling LCU (Debug)
+        globalShortcut.register('CommandOrControl+F4', () => {
+            isLcuPollingPaused = !isLcuPollingPaused;
+            console.log(`[Shortcut] Polling LCU: ${isLcuPollingPaused ? 'PAUSADO ⏸️' : 'REANUDADO ▶️'}`);
+        });
+
+        console.log('[SHORTCUTS] Global shortcuts registradas correctamente');
+    } catch (err) {
+        console.error('[SHORTCUTS] Error registrando global shortcuts:', err.message);
+    }
+
+    // -------------------------------
+    // IPC para control de ventana principal y login
+    // -------------------------------
+    ipcMain.on('close-app', () => {
+        console.log('[IPC] Cierre de aplicación solicitado');
+        app.quit();
+    });
+    ipcMain.on('minimizeWindow', () => {
+        if (mainWindow) mainWindow.minimize();
+        else if (loginWindow) loginWindow.minimize();
+        console.log('[IPC] Minimizar ventana ejecutado');
+    });
+
+// ===============================
+// ETAPA 4: POLLING DE RIOT API Y LCU (Flujo de aplicación)
 // ===============================
 
 
@@ -464,6 +697,11 @@ app.on('ready', () => {
         };
 
         const performPoll = async () => {
+            // PRO-DEV FIX: Pausa la ejecución si el modo Debug está activo (Shortcut F4)
+            if (isLcuPollingPaused) {
+                console.log('[LCU POLLING] ⏸️ Polling pausado por Debug Shortcut (F4).');
+                return; 
+            }
             try {
                 if (!latestRiotApiData) {
                     console.warn('[LCU POLLING] ⚠️ No hay datos base de Riot API. Deteniendo polling.');
@@ -505,35 +743,42 @@ app.on('ready', () => {
     // -------------------------------
     // Logs generales desde el renderer
     ipcMain.on('overlay-log', (event, msg) => {
-        console.log('[IPC LOG desde renderer]:', msg);
+        console.log('[IPC LOG desde renderer (via safeLog)]:', msg);
     });
 
     ipcMain.on('user-logged-in', async (event, userData) => {
-        console.log(`[IPC] 'user-logged-in' recibido para: ${userData.username}`);
+        console.log(`\n======================================================`);
+        console.log(`[IPC] 'user-logged-in' recibido para: ${userData.username} - INICIANDO SESIÓN.`);
+        console.log(`======================================================\n`);
 
         if (hasRunInitialLogin) {
             console.warn('[IPC] Evento login duplicado ignorado');
             return;
         }
 
-    // Guardar token siempre
+    // 1. Guardar token inmediatamente
     store.set('userToken', userData.token);
+    console.log('[MAIN-FLOW DEBUG] Token guardado en Store. Procediendo a crear ventanas.');
 
-    const profileFetchSuccess = await fetchAndStoreUserProfile(userData.username, userData.token);
-
-    // Creamos ventanas **siempre**, aunque falten datos críticos
+    // 2. Marcar como autenticado y crear ventanas (Dashboard & Overlay) INMEDIATAMENTE
     hasRunInitialLogin = true;
     console.log('[MAIN-FLOW] ✅ Abriendo Dashboard y Overlay');
     createMainWindow();
     createOverlayWindow();
 
+    // 3. Iniciar fetch asíncrono de perfil completo y API data en background (puede ser lento)
+    console.log('[MAIN-FLOW] Iniciando fetchAndStoreUserProfile en background...');
+    const profileFetchSuccess = await fetchAndStoreUserProfile(userData.username, userData.token);
+
     if (profileFetchSuccess) {
-        console.log('[MAIN-FLOW] ✅ Perfil completo cargado, iniciando flujo Riot/LCU');
+        console.log('[MAIN-FLOW] ✅ Perfil completo cargado. Iniciando flujo Riot/LCU');
     } else {
-        console.warn('[MAIN-FLOW] ⚠️ Perfil incompleto, algunas funcionalidades pueden no estar disponibles');
+        console.warn('[MAIN-FLOW] ⚠️ Perfil incompleto o fallo de fetch. Funcionalidades dependientes pueden fallar');
     }
 
+    // 4. Iniciar el Polling de Riot/LCU (Depende de los datos obtenidos)
     executeInitialRiotApiFetchAndStartPolling();
+    console.log('[MAIN-FLOW] Flujo de login y carga inicial completado.');
 });
 
 
@@ -554,199 +799,8 @@ app.on('ready', () => {
             return null;
         }
     });
+}); // Cierre de app.on('ready')
 
-// ===============================
-// ETAPA 4: IPC IA, HUGGING FACE TTS y Shortcuts
-// ===============================
-
-// -------------------------------
-// Helper para requests a backend IA
-// -------------------------------
-    const makeAIRequest = async (endpoint, payload = {}) => {
-        const token = store.get('userToken');
-        if (!token) return { error: 'Usuario no autenticado.' };
-
-        try {
-            const response = await axios.post(
-                `${BACKEND_BASE_URL}${endpoint}`,
-                payload,
-                { headers: { 'Authorization': `Bearer ${token}` }, httpsAgent: backendAgent, timeout: 30000 }
-            );
-            console.log(`[AI REQUEST] ${endpoint} ✅ Respuesta recibida`);
-            return response.data;
-        } catch (error) {
-            console.error(`[AI REQUEST] ${endpoint} ❌ Error: ${error.message}`);
-            return { error: error.response?.data?.message || `Error al contactar backend IA: ${error.message}` };
-        }
-    };
-
-    // -------------------------------
-    // Handlers IPC IA
-    // -------------------------------
-    ipcMain.handle('get-meta-analysis', (e, payload) => makeAIRequest('/api/ai/get-meta', payload));
-    ipcMain.handle('get-recommendations', (e, payload) => makeAIRequest('/api/ai/get-recommendations', payload));
-    ipcMain.handle('get-weekly-challenges', (e, payload) => makeAIRequest('/api/ai/get-weekly-challenges', payload));
-    ipcMain.handle('analyze-matches', (e, payload) => makeAIRequest('/api/ai/analyze-matches', payload));
-    ipcMain.handle('get-strategic-advice', (e, payload) => makeAIRequest('/api/ai/strategy-coach', payload));
-    ipcMain.handle('get-live-coaching', (e, payload) => makeAIRequest('/api/ai/live-coach', payload));
-
-    // -------------------------------
-    // IPC LCU (Comandos directos al cliente de LoL)
-    // -------------------------------
-    ipcMain.handle('lcu-command', async (event, method, endpoint, payload) => {
-        try {
-            const creds = getLcuCredentials();
-            if (!creds) return { error: 'LCU OFFLINE. Inyección fallida.' };
-
-            const result = await sendLcuCommand(creds, method, endpoint, payload);
-            console.log(`[LCU COMMAND] ${method} ${endpoint} ✅ Comando ejecutado`);
-            return { success: result };
-        } catch (error) {
-            console.error(`[LCU COMMAND FAIL] ${method} ${endpoint} ❌ Error: ${error.message}`);
-            return { error: `Comando LCU fallido: ${error.message}` };
-        }
-    });
-
-    // -------------------------------
-    // IPC HUGGING FACE TTS (Text-to-Speech vía API - Plug and Play)
-    // -------------------------------
-    ipcMain.handle('coqui-tts', async (event, { text, rate = 1.0, pitch = 1.0 }) => {
-        // Mantenemos el nombre del canal 'coqui-tts' por compatibilidad con useTTS.js
-        console.log('[TTS API] IPC coqui-tts recibido, usando Hugging Face API.');
-
-        if (!text) {
-            console.warn('[TTS API] Texto vacío recibido. Abortando generación');
-            return null;
-        }
-        
-        // 1. Definir la ruta del script Python (debe estar en la raíz del proyecto)
-        const pythonScriptPath = path.join(__dirname, 'hf_tts_api_generator.py');
-        const filePath = path.join(TTS_TEMP_DIR, `tts-hf-${Date.now()}.wav`);
-
-        // La variable isDevMode (Línea 51) determina si estamos en desarrollo
-        const pythonExecutable = isDevMode 
-            ? 'python' // <--- Usa 'python' del PATH durante el desarrollo (tu entorno requests)
-            : path.join(
-                process.resourcesPath, // Ruta interna del .exe compilado
-                'python',
-                'python.exe'
-            ); 
-
-        // 3. 🚨 CLAVE PLUG AND PLAY: Configurar el Token de Hugging Face en el entorno del proceso Python
-        // Esto mantiene el secreto fuera del código y lo pasa al script hf_tts_api_generator.py
-        const token = store.get('hfApiToken') || 'TU_TOKEN_DE_HUGGING_FACE_AQUÍ'; // Usar Store o un fallback
-        
-        const env = { 
-            ...process.env, 
-            HUGGING_FACE_TOKEN: token
-        };
-
-        console.log(`[TTS API] Usando Python: ${pythonExecutable}`);
-        console.log(`[TTS API] Archivo de salida: ${filePath}`);
-        if (token === 'TU_TOKEN_DE_HUGGING_FACE_AQUÍ') console.error('[TTS API] ❌ ADVERTENCIA: Usando token de prueba/vacío. Revisa la Store.');
-
-        try {
-            // 4. Ejecutar el script Python que llama a la API (solo pasamos texto y ruta de salida)
-            const pythonProcess = spawn(pythonExecutable, [
-                pythonScriptPath,
-                text,
-                filePath
-            ], { env: env }); // Pasa el token de forma segura en el entorno
-
-            // Logs detallados para PRO-DEV
-            pythonProcess.stdout.on('data', (data) => console.log('[TTS API][stdout]', data.toString().trim()));
-            pythonProcess.stderr.on('data', (data) => console.error('[TTS API][stderr]', data.toString().trim()));
-
-            await new Promise((resolve, reject) => {
-                pythonProcess.on('close', (code) => {
-                    if (code === 0) {
-                        console.log('[TTS API] Audio generado correctamente ✅');
-                        resolve();
-                    }
-                    else {
-                        reject(new Error(`Hugging Face TTS (Python) exited with code ${code}`));
-                    }
-                });
-                pythonProcess.on('error', (err) => {
-                    reject(new Error(`Error al iniciar proceso Python: ${err.message}. ¿Está 'python' en el PATH y tiene 'requests' instalado?`));
-                });
-            });
-
-            if (fs.existsSync(filePath)) {
-                return { filePath };
-            } else {
-                console.error('[TTS API] El archivo de salida no fue creado por el script Python.');
-                return null;
-            }
-        } catch (err) {
-            console.error('[TTS API] Falló generación TTS:', err.message);
-            return null;
-        }
-    });
-
-    // -------------------------------
-    // IPC para guardar Riot API Key
-    // -------------------------------
-    ipcMain.on('set-riot-api-key', async (event, apiKey) => {
-        store.set('riotApiKey', apiKey);
-        console.log('[MAIN-STORE] ✅ Riot API Key guardada. Reiniciando flujo polling.');
-        if (mainWindow) await executeInitialRiotApiFetchAndStartPolling();
-    });
-
-    // -------------------------------
-    // IPC para cerrar ventana (legacy)
-    // -------------------------------
-    ipcMain.on('closeWindow', () => {
-        console.log('[IPC] Cierre de ventana solicitado (legacy closeWindow)');
-        app.quit();
-    });
-
-    // -------------------------------
-    // SHORTCUTS GLOBALES
-    // -------------------------------
-    try {
-        // F1 → Modo interactivo (overlay recibe clicks)
-        globalShortcut.register('CommandOrControl+F1', () => {
-            if (overlayWindow) {
-                overlayWindow.setIgnoreMouseEvents(false);
-                console.log('[Shortcut] Modo Interactivo activado');
-            }
-        });
-
-        // F2 → Modo click-through (overlay ignora clicks)
-        globalShortcut.register('CommandOrControl+F2', () => {
-            if (overlayWindow) {
-                overlayWindow.setIgnoreMouseEvents(true, { forward: true });
-                console.log('[Shortcut] Modo Click-Through activado');
-            }
-        });
-
-        // F3 → Toggle visibilidad overlay
-        globalShortcut.register('CommandOrControl+F3', () => {
-            if (overlayWindow) {
-                overlayWindow.isVisible() ? overlayWindow.hide() : overlayWindow.show();
-                console.log('[Shortcut] Toggle Overlay Visibility');
-            }
-        });
-
-        console.log('[SHORTCUTS] Global shortcuts registradas correctamente');
-    } catch (err) {
-        console.error('[SHORTCUTS] Error registrando global shortcuts:', err.message);
-    }
-
-    // -------------------------------
-    // IPC para control de ventana principal y login
-    // -------------------------------
-    ipcMain.on('close-app', () => {
-        console.log('[IPC] Cierre de aplicación solicitado');
-        app.quit();
-    });
-    ipcMain.on('minimizeWindow', () => {
-        if (mainWindow) mainWindow.minimize();
-        else if (loginWindow) loginWindow.minimize();
-        console.log('[IPC] Minimizar ventana ejecutado');
-    });
-});
 app.on('window-all-closed', () => {
     if (process.platform !== 'darwin') {
         stopLiveGamePolling();

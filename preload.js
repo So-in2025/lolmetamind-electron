@@ -1,29 +1,39 @@
-// preload.js - VERSIÓN FINAL PRO-DEV ✅
+// preload.js - VERSIÓN FINAL ESTABLE Y BLINDADA
 // Electron 26+ | Next.js | ContextBridge + IPC
 
 const { contextBridge, ipcRenderer } = require('electron');
-const path = require('path');
-const os = require('os');
+// PRO-DEV FIX: Se eliminan todos los requires de Node.js de alto nivel (path, os, Store) 
+// para evitar el CRASH SILENCIOSO en el Context Bridge. Solo se mantienen los esenciales de Electron.
 
-// ========================================================
-// 🔹 Directorio temporal para TTS
-// ========================================================
-const TTS_TEMP_DIR = path.join(os.tmpdir(), 'metaMind-tts');
+// --------------------------------------------------------
+// Helpers PRO-DEV (Se mantiene la función safeLog)
+// --------------------------------------------------------
 
-// ========================================================
-// 🔹 safeLog: envío de logs al main process y consola
-// ========================================================
+// Función utilitaria que envía logs al main process (visible en la terminal)
 const safeLog = (...args) => {
-    console.log(...args);
     try {
+        // PRO-DEV CRITICAL: Envía el log al main process para diagnóstico.
         ipcRenderer.send('overlay-log', args.map(a => (typeof a === 'object' ? JSON.stringify(a) : a)).join(' '));
     } catch (err) {
-        console.error('[safeLog] Error enviando overlay-log:', err);
+        // En caso de un fallo en ipcRenderer.send (lo que indica un crash total), este log es inútil, 
+        // pero se mantiene por estructura.
+        console.error('[safeLog - CRITICAL ERROR] Fallo al intentar enviar log al main:', err); 
     }
 };
 
+// Función asíncrona para obtener valores de la Store desde el Main Process
+async function getStoreValue(key) {
+  try {
+    return await ipcRenderer.invoke('get-store-value', key);
+  } catch (err) {
+    safeLog('[PRELOAD ERROR] getStoreValue falló:', err.message);
+    return null;
+  }
+}
+
 // ========================================================
-// 🔹 API expuesta al renderer
+// 🔹 API expuesta al renderer (Context Bridge)
+// CRÍTICO: Esta es la parte que debe ejecutarse.
 // ========================================================
 contextBridge.exposeInMainWorld('electronAPI', {
 
@@ -31,14 +41,25 @@ contextBridge.exposeInMainWorld('electronAPI', {
     // Usuario / Login
     // --------------------------------------------------------
     notifyLoginSuccess: (userData) => {
-        console.log('[LOGIN] window.electronAPI:', window.electronAPI);
-        safeLog('[preload] notifyLoginSuccess invocado con:', userData);
+        // PRO-DEV CRITICAL: Log antes de enviar el IPC. Si este log no llega, el fallo es en el require de electron-store.
+        safeLog('[PRELOAD CRITICAL] Intentando IPC: user-logged-in'); 
+        safeLog('[PRELOAD DEBUG] Datos de usuario a enviar:', userData.username); 
+
         try {
-            ipcRenderer.send('user-logged-in', userData);
-            safeLog('[preload] ipcRenderer.send ejecutado correctamente');
+            // CRÍTICO: El canal debe coincidir exactamente con el listener en main.js
+            ipcRenderer.send('user-logged-in', userData); 
+            safeLog('[PRELOAD CRITICAL] ✅ ipcRenderer.send(user-logged-in) ejecutado correctamente');
         } catch (err) {
-            safeLog('[preload] ❌ Error enviando user-logged-in:', err);
+            safeLog('[PRELOAD CRITICAL] ❌ Error enviando user-logged-in:', err.message);
         }
+    },
+
+    // --------------------------------------------------------
+    // Control de Ventanas y Configuración (Todos usan ipcRenderer.send)
+    // --------------------------------------------------------
+    closeWindow: () => {
+        safeLog('[preload] closeWindow invocado (Redirigido a close-app)');
+        ipcRenderer.send('close-app');
     },
 
     closeApp: () => {
@@ -50,8 +71,11 @@ contextBridge.exposeInMainWorld('electronAPI', {
         }
     },
 
+    minimizeWindow: () => ipcRenderer.send('minimizeWindow'),
+    setRiotApiKey: (apiKey) => ipcRenderer.send('set-riot-api-key', apiKey),
+
     // --------------------------------------------------------
-    // Overlay y LCU
+    // Overlay y LCU (Implementación usando solo IPC nativo)
     // --------------------------------------------------------
     setIgnoreMouseEvents: (ignore, forward) => {
         safeLog('[preload] setIgnoreMouseEvents', ignore, forward);
@@ -71,12 +95,21 @@ contextBridge.exposeInMainWorld('electronAPI', {
         };
         ipcRenderer.on('lcu-state-update', listener);
 
-        // Desuscripción
-        return () => {
-            safeLog('[preload] onLcuStateUpdate desuscribiendo listener');
-            ipcRenderer.removeListener('lcu-state-update', listener);
-        };
+        return () => ipcRenderer.removeListener('lcu-state-update', listener);
     },
+    
+    onRiotProfileData: (callback) => {
+        safeLog('[preload] onRiotProfileData registrado');
+        ipcRenderer.removeAllListeners('riot-profile-data');
+        const listener = (event, value) => {
+            safeLog('[preload] riot-profile-data recibido:', value);
+            callback(value);
+        };
+        ipcRenderer.on('riot-profile-data', listener);
+
+        return () => ipcRenderer.removeListener('riot-profile-data', listener);
+    },
+
 
     getUserData: () => {
         safeLog('[preload] getUserData invocado');
@@ -89,13 +122,13 @@ contextBridge.exposeInMainWorld('electronAPI', {
     },
 
     // --------------------------------------------------------
-    // IA / Meta análisis
+    // IA / Meta análisis (Todos usan ipcRenderer.invoke)
     // --------------------------------------------------------
     getMetaAnalysis: (payload) => {
         safeLog('[preload] getMetaAnalysis', payload);
         return ipcRenderer.invoke('get-meta-analysis', payload);
     },
-
+    
     getRecommendations: (payload) => {
         safeLog('[preload] getRecommendations', payload);
         return ipcRenderer.invoke('get-recommendations', payload);
@@ -131,20 +164,20 @@ contextBridge.exposeInMainWorld('electronAPI', {
             return {};
         }
         try {
-            const token = store.get('hfApiToken') || 'TU_TOKEN_DE_HUGGING_FACE_AQUÍ';
-            const filePath = path.join(TTS_TEMP_DIR, `tts-hf-${Date.now()}.wav`);
-            safeLog('[preload TTS API] Archivo de salida:', filePath);
-
-            const result = await ipcRenderer.invoke('coqui-tts', { text, rate, pitch, filePath, token });
+            // ¡ELIMINADO! NO INTENTAMOS LEER EL TOKEN AQUÍ.
+            // La responsabilidad de obtener la clave hfApiToken de la Store
+            // recae COMPLETAMENTE en el proceso Main (main.js).
+            
+            const result = await ipcRenderer.invoke('coqui-tts', { text, rate, pitch }); 
 
             if (result?.filePath) {
-                safeLog('[preload TTS API] Archivo generado:', result.filePath);
+                safeLog('[preload TTS API] Archivo generado por Main:', result.filePath);
             } else {
-                safeLog('[preload TTS API] ⚠ No se generó archivo de audio');
+                safeLog('[preload TTS API] ❌ Fallo en la generación o el proceso Python devolvió un error.');
             }
             return result;
         } catch (err) {
-            safeLog('[preload TTS API] ❌ Error en IPC TTS:', err);
+            safeLog(`[preload TTS API] ❌ Error en IPC TTS: ${err.message}`);
             return {};
         }
     },

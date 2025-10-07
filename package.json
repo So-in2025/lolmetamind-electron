@@ -48,7 +48,6 @@
   "build": {
     "appId": "com.lolmetamind.coach",
     "productName": "MetaMind Coach",
-    
     "files": [
       "main.js",
       "preload.js",
@@ -61,16 +60,16 @@
       "buildResources": "assets",
       "output": "dist"
     },
-    
     "extraFiles": [
       {
         "from": "python_portable",
         "to": "resources/python",
-        "filter": ["**/*"]
+        "filter": [
+          "**/*"
+        ]
       },
       "hf_tts_api_generator.py"
     ],
-    
     "win": {
       "target": "nsis",
       "icon": "assets/icon.ico"

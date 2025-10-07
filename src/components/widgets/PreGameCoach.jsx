@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { FaSync, FaBrain, FaMicrophoneAlt, FaExclamationTriangle, FaRedo, FaHandPaper } from 'react-icons/fa';
 import { useWebSocketCoach } from '@/hooks/useWebSocketCoach';
 import { useTTS } from '@/hooks/useTTS';
@@ -28,12 +28,16 @@ export default function PreGameCoach({ LCU_STATUS, userData }) {
   const [adviceSpoken, setAdviceSpoken] = useState(false);
   const [isLoadingAdvice, setIsLoadingAdvice] = useState(true);
   const [isTimedOut, setIsTimedOut] = useState(false);
-  const [lastSpokenAdvice, setLastSpokenAdvice] = useState(null);
+  
+  // 🛑 CORRECCIÓN CLAVE: Usamos useRef para la guardia de audio.
+  // Esto evita que los re-renders repetidos vuelvan a llamar a speak().
+  const lastSpokenIdentifierRef = useRef(null); 
 
   // ------------------------------
   // Enviar solicitud al WS una sola vez cuando conecta
   // ------------------------------
   useEffect(() => {
+    // La lógica es correcta: solo se envía una vez si el WS está CONECTADO y no se ha solicitado antes.
     if (wsStatus === 'CONNECTED' && !adviceSpoken && userData) {
       console.log('[PreGameCoach] WS conectado y userData disponible. Enviando solicitud de consejo...');
       sendQueueUpdate();
@@ -75,23 +79,32 @@ export default function PreGameCoach({ LCU_STATUS, userData }) {
 
   // ------------------------------
   // Reproducir el consejo vía TTS (solo si es nuevo)
+  // 🛑 ESTE ES EL HOOK CORREGIDO CON LA GUARDIA DE REF
   // ------------------------------
   useEffect(() => {
     const preGameAnalysis = aiAdvice?.preGameAnalysis;
-    const currentAdviceIdentifier = preGameAnalysis?.astralMantra || null;
+    // Creamos un identificador único basado en el contenido del consejo
+    const currentAdviceIdentifier = preGameAnalysis?.astralMantra + preGameAnalysis?.technicalFocus || null;
 
-    if (preGameAnalysis && currentAdviceIdentifier !== lastSpokenAdvice) {
+    // 🔑 GUARDIA DE AUDIO: Solo reproducir si tenemos un análisis Y el identificador es diferente al último reproducido
+    if (preGameAnalysis && currentAdviceIdentifier && currentAdviceIdentifier !== lastSpokenIdentifierRef.current) {
       console.log('[PreGameCoach] 🎤 Nuevo consejo recibido. Reproduciendo TTS...', preGameAnalysis);
-      setLastSpokenAdvice(currentAdviceIdentifier);
-
+      
+      // 1. Construir el texto
       const ttsText = `${preGameAnalysis.title}. ${preGameAnalysis.astralMantra}. Foco técnico: ${preGameAnalysis.technicalFocus}.`;
+      
+      // 2. Llamar a la reproducción
       speak(ttsText);
+      
+      // 3. Actualizar la referencia mutable (NO el estado)
+      lastSpokenIdentifierRef.current = currentAdviceIdentifier;
+      
       setIsLoadingAdvice(false);
     } else if (aiAdvice && !preGameAnalysis) {
       setIsLoadingAdvice(false);
       console.warn('[PreGameCoach] ⚠️ AI Advice recibido pero sin preGameAnalysis.');
     }
-  }, [aiAdvice, speak, lastSpokenAdvice]);
+  }, [aiAdvice, speak]); // Se eliminó lastSpokenAdvice de las dependencias
 
   // ------------------------------
   // Renderizado
@@ -143,6 +156,8 @@ export default function PreGameCoach({ LCU_STATUS, userData }) {
               setAdviceSpoken(false);
               setIsLoadingAdvice(true);
               setIsTimedOut(false);
+              // Limpiar la referencia de control para permitir el reintento
+              lastSpokenIdentifierRef.current = null;
             }}
             className="w-full mt-2 py-1 bg-lol-blue-accent hover:bg-lol-blue-medium text-lol-blue-dark font-bold text-xs rounded transition-colors"
             style={{ WebkitAppRegion: 'no-drag' }}
@@ -159,6 +174,7 @@ export default function PreGameCoach({ LCU_STATUS, userData }) {
 
           <button
             onClick={() => {
+              // El botón de repetición debe llamar a speak() sin ninguna guardia
               if (preGameAnalysis) {
                 const fullAdviceText = `${preGameAnalysis.title}. ${preGameAnalysis.astralMantra}. Foco técnico: ${preGameAnalysis.technicalFocus}.`;
                 console.log('[PreGameCoach] Reproduciendo TTS manual:', fullAdviceText);
