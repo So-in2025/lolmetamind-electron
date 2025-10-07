@@ -9,6 +9,8 @@ from transformers import VitsModel, AutoTokenizer
 # CONFIGURACIÓN DEL MODELO
 # ====================================================================
 
+# Se recomienda un modelo más actual si la calidad de la prosodia es clave.
+# MODEL_ID = "lince-ai/whisper-large-v2-spanish-speech-synthesis" 
 MODEL_ID = "facebook/mms-tts-spa"
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 
@@ -17,11 +19,12 @@ model = None
 tokenizer = None
 SAMPLING_RATE = None
 
+
 # ====================================================================
 # FUNCIÓN DE INICIALIZACIÓN (Carga el modelo una sola vez por proceso)
 # ====================================================================
 def initialize_model():
-    "Carga el modelo y el tokenizer globalmente si aún no están cargados."
+    """Carga el modelo y el tokenizer globalmente si aún no están cargados."""
     global model, tokenizer, SAMPLING_RATE
     if model is None:
         try:
@@ -38,12 +41,12 @@ def initialize_model():
 # FUNCIÓN DE GENERACIÓN DE AUDIO
 # ====================================================================
 def generate_audio_local(text_to_speak, output_path):
-    "Genera audio TTS localmente usando la librería Hugging Face Transformers."
+    """Genera audio TTS localmente usando la librería Hugging Face Transformers."""
     
     # 1. Asegurarse de que el modelo esté cargado (la carga real solo ocurre la primera vez)
     initialize_model()
 
-    if not text_to_speak or len(text_to_speak.strip()) == 0:
+    if not text_to_speak or not text_to_speak.strip():
         sys.stderr.write("❌ ERROR: Texto vacío o solo espacios.\n")
         return 1
 
@@ -70,13 +73,24 @@ def generate_audio_local(text_to_speak, output_path):
         sys.stderr.write(f"❌ ERROR DE GENERACIÓN: {e}\n")
         return 1
 
+# ====================================================================
+# PUNTO DE ENTRADA PRINCIPAL
+# ====================================================================
 if __name__ == "__main__":
+    # OPTIMIZACIÓN: Añadimos un modo 'init' para pre-cargar el modelo sin generar audio.
+    # Esto se llama desde main.js cuando la app de Electron arranca.
+    if len(sys.argv) == 2 and sys.argv[1] == 'init':
+        initialize_model()
+        sys.exit(0)
+
+    # Validación de argumentos para la generación de audio
     if len(sys.argv) < 3:
         sys.stderr.write("Uso: python hf_tts_api_generator.py '<texto>' '<ruta_salida.wav>'\n")
+        sys.stderr.write("Uso alternativo para precarga: python hf_tts_api_generator.py init\n")
         sys.exit(1)
 
     text = sys.argv[1]
     output_path = sys.argv[2]
     
-    # El modelo se inicializa dentro de generate_audio_local()
+    # El modelo se inicializará automáticamente si no fue pre-cargado
     sys.exit(generate_audio_local(text, output_path))

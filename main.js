@@ -91,6 +91,46 @@ let latestRiotApiData = null;      // Últimos datos de Riot API
 // PRO-DEV FIX: Variable para pausar el polling y debuggear el Overlay
 let isLcuPollingPaused = false; 
 
+
+// Función de Pre-carga del Modelo TTS (devuelve una Promesa)
+const prewarmTtsModel = () => {
+    return new Promise((resolve, reject) => {
+        if (splashWindow) {
+            splashWindow.webContents.send('tts-status', 'Cargando modelo de voz...');
+        }
+        console.log('[TTS INIT] Iniciando pre-carga del modelo de Hugging Face...');
+
+        const pythonExecutable = isDevMode ? 'python' : path.join(process.resourcesPath, 'python', 'python.exe');
+        const pythonScriptPath = path.join(__dirname, 'hf_tts_api_generator.py');
+        const token = store.get('hfApiToken') || 'TU_TOKEN_DE_HUGGING_FACE_AQUÍ';
+        const env = { ...process.env, HUGGING_FACE_TOKEN: token };
+
+        const pythonProcess = spawn(pythonExecutable, [pythonScriptPath, 'init'], { env });
+
+        pythonProcess.stderr.on('data', (data) => {
+            console.error('[TTS INIT][stderr]', data.toString().trim());
+        });
+
+        pythonProcess.on('close', (code) => {
+            if (code === 0) {
+                console.log('[TTS INIT] ✅ Modelo TTS pre-cargado exitosamente.');
+                if (splashWindow) splashWindow.webContents.send('tts-status', '¡Modelo listo!');
+                resolve();
+            } else {
+                console.error(`[TTS INIT] ❌ Error al pre-cargar el modelo TTS. Código de salida: ${code}.`);
+                if (splashWindow) splashWindow.webContents.send('tts-status', 'Error al cargar el modelo.');
+                reject(new Error(`El proceso de carga del modelo TTS falló con código ${code}`));
+            }
+        });
+
+        pythonProcess.on('error', (err) => {
+            console.error('[TTS INIT] ❌ Fallo al iniciar el proceso de Python:', err);
+            if (splashWindow) splashWindow.webContents.send('tts-status', 'Error crítico.');
+            reject(err);
+        });
+    });
+};
+
 // -------------------------------
 // IPC helper para enviar datos al renderer
 // -------------------------------
@@ -195,14 +235,8 @@ function createSplashWindow() {
             contextIsolation: true,
         },
     });
-
-    splashWindow.loadURL(`file://${path.join(__dirname, 'splash.html')}`);
-    console.log('[WINDOW] Splash window cargada');
-
-    splashWindow.on('closed', () => {
-        splashWindow = null;
-        console.log('[WINDOW] Splash window cerrada');
-    });
+    splashWindow.loadFile(path.join(__dirname, 'splash.html'));
+    console.log('[WINDOW] Splash window creada.');
 }
 
 function createLoginWindow() {
@@ -210,10 +244,9 @@ function createLoginWindow() {
 
     if (loginWindow) {
         console.log('[WINDOW] Login window ya existe, haciendo focus');
-        return loginWindow.focus();
+        return loginWindow; // CORRECCIÓN: Devolver el objeto de la ventana, no el focus().
     }
     
-    // PRO-DEV CRITICAL DEBUG: Verificamos la ruta de preload.js antes de la creación.
     const preloadPath = path.join(__dirname, 'preload.js');
     console.log(`[WINDOW DEBUG] Ruta de preload.js inyectada: ${preloadPath}`);
 
@@ -226,37 +259,22 @@ function createLoginWindow() {
         frame: false,
         transparent: true,
         webPreferences: {
-            preload: preloadPath, // 🔹 Usamos la ruta verificada
+            preload: preloadPath,
             nodeIntegration: false,
             contextIsolation: true,
         },
     });
 
-    // Intento de carga con fallback
     loginWindow.loadURL(LOGIN_PATH)
         .then(() => console.log('[WINDOW] Login window cargada URL:', LOGIN_PATH))
         .catch(err => console.error('[WINDOW ERROR] No se pudo cargar LOGIN_PATH:', err));
 
-    // Detectar cuando la ventana termina de cargar contenido
     loginWindow.webContents.once('did-finish-load', () => {
         console.log('[WINDOW] webContents did-finish-load fired');
     });
 
-    loginWindow.once('ready-to-show', () => {
-        console.log('[WINDOW] ready-to-show disparado');
-        const splashDuration = 3000;
-
-        setTimeout(() => {
-            if (splashWindow) {
-                console.log('[WINDOW] Cerrando splash window');
-                splashWindow.close();
-            }
-
-            loginWindow.show();
-            loginWindow.center();
-            console.log('[WINDOW] Login window mostrada y centrada');
-        }, splashDuration);
-    });
+    // SE ELIMINÓ EL BLOQUE 'ready-to-show' CON EL SETTIMEOUT.
+    // ESTA LÓGICA AHORA ESTÁ EN app.on('ready').
 
     loginWindow.on('closed', () => {
         console.log('[WINDOW] Login window cerrada');
@@ -380,13 +398,34 @@ function createOverlayWindow() {
 // ===============================
 // ETAPA 2B: APP READY
 // ===============================
-app.on('ready', () => {
-    console.log('[APP] Electron listo, creando ventanas iniciales...');
+// ✅ 1. MARCAMOS EL EVENTO 'ready' COMO ASÍNCRONO
+app.on('ready', async () => {
+    console.log('[APP] Electron listo. Iniciando secuencia de arranque...');
 
+    // 1. Mostramos la pantalla de carga
     createSplashWindow();
-    createLoginWindow();
 
-    console.log('[APP] Ventanas iniciales creadas ✅');
+    try {
+        // 2. ESPERAMOS a que el modelo de voz termine de cargar
+        await prewarmTtsModel(); // 'prewarmTtsModel' debe estar definida antes de este bloque
+        console.log('[APP] Pre-calentamiento de TTS completado.');
+
+    } catch (error) {
+        console.error('[APP] FALLO CRÍTICO: No se pudo cargar el modelo TTS.', error);
+    }
+
+    // 3. Una vez que el modelo cargó, creamos la ventana de login
+    const loginWin = createLoginWindow();
+    
+    // 4. Cuando la ventana de login esté lista, cerramos la de carga y la mostramos.
+    loginWin.once('ready-to-show', () => {
+        if (splashWindow) {
+            splashWindow.close();
+        }
+        loginWin.show();
+        loginWin.center();
+        console.log('[APP] Secuencia de arranque completada. Mostrando Login.');
+    });
 
 // ===============================
 // ETAPA 3: IPC IA, HUGGING FACE TTS y Shortcuts (Handlers Registrados Primero)

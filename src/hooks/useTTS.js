@@ -1,54 +1,89 @@
-// ===========================================
-// 🧠 useTTS Hook (Versión PRO-DEV, TTS API)
-// ===========================================
-// Este hook centraliza el control de Text-To-Speech en el front React
-// - Usa exclusivamente TTS API vía Electron IPC (Hugging Face)
-// - Implementa cola de reproducción y evita superposición de audios
-// - Permite personalización de velocidad y pitch (aunque la API lo ignora, se mantiene la estructura)
-// - Todos los logs detallados para desarrollo
-// ===========================================
+// ============================================================
+// 🧠 useTTS Hook (v3.2 – Optimizado para facebook/mms-tts)
+// ============================================================
+// 🔍 PROPÓSITO:
+// Hook React responsable del control completo de síntesis de voz (TTS)
+// en la capa de frontend de la app Electron (entorno de coaching IA).
+//
+// 💡 OBJETIVOS DE ESTA VERSIÓN (v3.2):
+// 1. Mejorar fluidez y naturalidad de la voz generada por facebook/mms-tts.
+// 2. Simular prosodia humana mediante pausas sintéticas y puntuación extendida.
+// 3. Evitar superposición de audios y solapamientos entre frases.
+// 4. Controlar dinámicamente velocidad y pitch con límites seguros.
+// 5. Fragmentar texto largo en frases manejables para el modelo TTS.
+// 6. Introducir micro-pauses entre audios (300 ms) para respiración perceptible.
+//
+// 📦 DEPENDENCIAS:
+// - Requiere que `window.electronAPI.coquiTtsSpeak(text, rate, pitch)` esté expuesto
+//   vía preload.js y conectado al backend Hugging Face TTS (facebook/mms-tts).
+//
+// 🧩 ARQUITECTURA DE EJECUCIÓN:
+//   speak(text) → preprocessText() → splitIntoChunks()
+//       → encolado → playNext() (llama a coquiTtsSpeak) → reproduce secuencialmente
+//
+// ============================================================
 
 import { useCallback, useRef } from 'react';
 
 export const useTTS = () => {
-  // -----------------------------
-  // ESTADOS INTERNOS Y REFERENCIAS
-  // -----------------------------
+  // ============================================================
+  // 🧩 REFERENCIAS INTERNAS (Persisten entre renders)
+  // ============================================================
+  const queueRef = useRef([]);          // Cola FIFO de mensajes pendientes
+  const isPlayingRef = useRef(false);   // Bandera de reproducción activa
+  const currentAudioRef = useRef(null); // Instancia actual de Audio en uso
 
-  // Cola de mensajes pendientes
-  const queueRef = useRef([]);
-  // Bandera: ¿hay un audio reproduciéndose?
-  const isPlayingRef = useRef(false);
-  // Audio actual (archivo generado por la TTS API)
-  const currentAudioRef = useRef(null);
+  // ============================================================
+  // 🧹 PREPROCESAMIENTO DE TEXTO (Simula prosodia humana)
+  // ============================================================
+  // Añade pausas lógicas donde el modelo suele hablar de corrido.
+  // Ejemplo: "Vamos a analizar, tu build actual." → pausa corta tras coma.
+  const preprocessText = (text) => {
+    return text
+      .replace(/([,;])/g, '$1 ...')               // pausa corta (~300 ms)
+      .replace(/([.?!])\s*/g, '$1 ... ')          // pausa larga (~600 ms)
+      .replace(/\b(y|pero|aunque|sin embargo)\b/gi, '... $1') // respiración previa a conector
+      .trim();
+  };
 
-  // =====================================================
-  // ▶️ FUNCIÓN PRINCIPAL: Reproducir siguiente texto en la cola
-  // =====================================================
+  // ============================================================
+  // ✂️ DIVISIÓN DE TEXTO EN FRASES
+  // ============================================================
+  // facebook/mms-tts rinde mejor con frases cortas (<10 s cada una).
+  // Esta función separa por puntuación principal para mantener ritmo natural.
+  const splitIntoChunks = (text) => {
+    const chunks = text.match(/[^.!?]+[.!?]+/g);
+    return chunks ? chunks.map(c => c.trim()) : [text.trim()];
+  };
+
+  // ============================================================
+  // ▶️ playNext(): Reproduce siguiente frase en la cola
+  // ============================================================
   const playNext = useCallback(async () => {
-    if (isPlayingRef.current) return; // Ya hay un audio activo
+    if (isPlayingRef.current) return; // Evita solapamientos
     const next = queueRef.current.shift();
-
     if (!next) {
-      console.log('[TTS HOOK] 🔕 Cola vacía. Nada por reproducir.');
       isPlayingRef.current = false;
       return;
     }
 
-    console.log(`[TTS HOOK] ▶ Reproduciendo: "${next.text}"`);
     isPlayingRef.current = true;
+    console.log(`[TTS] ▶ Reproduciendo: "${next.text}"`);
 
     try {
-      // Intentamos usar la TTS API vía Electron IPC
+      // Validación de disponibilidad del puente IPC
       if (!window.electronAPI?.coquiTtsSpeak) {
-        throw new Error('TTS API (coquiTtsSpeak) no disponible en preload.js');
+        throw new Error('API TTS no disponible: window.electronAPI.coquiTtsSpeak');
       }
 
-      // La llamada se mantiene para compatibilidad, aunque rate/pitch son ignorados por la API
-      const result = await window.electronAPI.coquiTtsSpeak(next.text, next.rate, next.pitch);
+      // 🔧 Clamps de seguridad: evita valores extremos no soportados
+      const rate = Math.min(Math.max(next.rate || 1.0, 0.8), 1.2);
+      const pitch = Math.min(Math.max(next.pitch || 1.0, 0.8), 1.2);
+
+      // Llamada a la API TTS (facebook/mms-tts vía backend Electron)
+      const result = await window.electronAPI.coquiTtsSpeak(next.text, rate, pitch);
 
       if (result?.filePath) {
-        console.log('[TTS HOOK] 🔊 Audio API recibido:', result.filePath);
         const audio = new Audio(result.filePath);
         currentAudioRef.current = audio;
 
@@ -58,56 +93,60 @@ export const useTTS = () => {
           audio.play().catch(reject);
         });
       } else {
-        console.warn('[TTS HOOK] ⚠ No se generó archivo de audio. Reproducción cancelada.');
+        console.warn('[TTS] ⚠ No se generó archivo de audio. Reproducción omitida.');
       }
-    } catch (error) {
-      console.error('[TTS HOOK] ❌ Error al usar TTS API:', error);
+    } catch (err) {
+      console.error('[TTS] ❌ Error durante síntesis o reproducción:', err);
     } finally {
       isPlayingRef.current = false;
       currentAudioRef.current = null;
-      // Continuar con siguiente mensaje en la cola
-      playNext();
+
+      // 🔁 Delay natural entre frases (~300 ms)
+      setTimeout(() => playNext(), 300);
     }
   }, []);
 
-  // =====================================================
-  // 🗣️ FUNCIÓN PÚBLICA: speak()
-  // =====================================================
+  // ============================================================
+  // 🗣️ speak(): Agrega texto a la cola y lanza reproducción
+  // ============================================================
   const speak = useCallback((text, rate = 1.0, pitch = 1.0) => {
     if (!text || typeof text !== 'string') {
-      console.warn('[TTS HOOK] Texto inválido recibido para speak():', text);
+      console.warn('[TTS] Texto inválido recibido para speak():', text);
       return;
     }
 
-    // Agregar a la cola
-    queueRef.current.push({ text, rate, pitch });
-    console.log(`[TTS HOOK] ➕ Añadido a la cola (${queueRef.current.length} items):`, text);
+    // Preprocesamiento + fragmentación
+    const processed = preprocessText(text);
+    const chunks = splitIntoChunks(processed);
 
-    // Si nada se está reproduciendo, iniciar reproducción
-    playNext();
+    // Encolado
+    chunks.forEach(chunk => queueRef.current.push({ text: chunk, rate, pitch }));
+    console.log(`[TTS] ➕ ${chunks.length} frases añadidas a la cola.`);
+
+    // Si nada está reproduciéndose, iniciar ciclo
+    if (!isPlayingRef.current) playNext();
   }, [playNext]);
 
-  // =====================================================
-  // ⏹ FUNCIÓN PÚBLICA: stop()
-  // =====================================================
+  // ============================================================
+  // ⏹ stop(): Detiene reproducción y limpia recursos
+  // ============================================================
   const stop = useCallback(() => {
-    console.log('[TTS HOOK] ⏹ Deteniendo TTS y limpiando cola.');
+    console.log('[TTS] ⏹ Deteniendo síntesis y limpiando cola.');
 
-    // Vaciar cola
     queueRef.current = [];
     isPlayingRef.current = false;
 
-    // Si hay audio reproduciéndose, pausar y liberar
     if (currentAudioRef.current) {
       currentAudioRef.current.pause();
+      currentAudioRef.current.src = ''; // libera memoria
       currentAudioRef.current = null;
     }
-
-    // Ya no es necesario llamar a un IPC de stop, el Hook maneja la pausa.
   }, []);
 
-  // =====================================================
-  // Retornamos API pública del hook
-  // =====================================================
+  // ============================================================
+  // 📤 API Pública del Hook
+  // ============================================================
+  // - speak(text, rate?, pitch?): sintetiza voz con control de velocidad/tono
+  // - stop(): detiene cualquier audio en curso y vacía la cola
   return { speak, stop };
 };

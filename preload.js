@@ -2,7 +2,7 @@
 // Electron 26+ | Next.js | ContextBridge + IPC
 
 const { contextBridge, ipcRenderer } = require('electron');
-// PRO-DEV FIX: Se eliminan todos los requires de Node.js de alto nivel (path, os, Store) 
+// PRO-DEV FIX: Se eliminan todos los requires de Node.js de alto nivel (path, os, Store)
 // para evitar el CRASH SILENCIOSO en el Context Bridge. Solo se mantienen los esenciales de Electron.
 
 // --------------------------------------------------------
@@ -15,9 +15,9 @@ const safeLog = (...args) => {
         // PRO-DEV CRITICAL: Envía el log al main process para diagnóstico.
         ipcRenderer.send('overlay-log', args.map(a => (typeof a === 'object' ? JSON.stringify(a) : a)).join(' '));
     } catch (err) {
-        // En caso de un fallo en ipcRenderer.send (lo que indica un crash total), este log es inútil, 
+        // En caso de un fallo en ipcRenderer.send (lo que indica un crash total), este log es inútil,
         // pero se mantiene por estructura.
-        console.error('[safeLog - CRITICAL ERROR] Fallo al intentar enviar log al main:', err); 
+        console.error('[safeLog - CRITICAL ERROR] Fallo al intentar enviar log al main:', err);
     }
 };
 
@@ -42,12 +42,12 @@ contextBridge.exposeInMainWorld('electronAPI', {
     // --------------------------------------------------------
     notifyLoginSuccess: (userData) => {
         // PRO-DEV CRITICAL: Log antes de enviar el IPC. Si este log no llega, el fallo es en el require de electron-store.
-        safeLog('[PRELOAD CRITICAL] Intentando IPC: user-logged-in'); 
-        safeLog('[PRELOAD DEBUG] Datos de usuario a enviar:', userData.username); 
+        safeLog('[PRELOAD CRITICAL] Intentando IPC: user-logged-in');
+        safeLog('[PRELOAD DEBUG] Datos de usuario a enviar:', userData.username);
 
         try {
             // CRÍTICO: El canal debe coincidir exactamente con el listener en main.js
-            ipcRenderer.send('user-logged-in', userData); 
+            ipcRenderer.send('user-logged-in', userData);
             safeLog('[PRELOAD CRITICAL] ✅ ipcRenderer.send(user-logged-in) ejecutado correctamente');
         } catch (err) {
             safeLog('[PRELOAD CRITICAL] ❌ Error enviando user-logged-in:', err.message);
@@ -154,6 +154,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
         return ipcRenderer.invoke('get-live-coaching', payload);
     },
 
+    
     // --------------------------------------------------------
     // ☁️ TTS API (Hugging Face)
     // --------------------------------------------------------
@@ -185,5 +186,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
     coquiTtsStop: () => {
         safeLog('[preload TTS API] Stop invocado (No-Op)');
         // La pausa la maneja el hook de React
-    }
+    },
+
+    // ✅ CORRECCIÓN: Se añade el canal que faltaba para la comunicación del Splash Screen.
+    onTtsStatusUpdate: (callback) => ipcRenderer.on('tts-status', (event, ...args) => callback(...args))
 });
