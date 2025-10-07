@@ -9,12 +9,13 @@ import { useInteractiveWidget } from '@/hooks/useInteractiveWidget';
 /**
  * PreGameCoach
  * Widget que analiza la cola antes de la partida (Lobby/Matchmaking/ReadyCheck).
- * - Recibe LCU_STATUS y userData desde el hook central (useLcuData)
+ * - Recibe LCU_STATUS, userData, y gamePhase (CRÍTICO) desde el hook central (useLcuData)
  * - Envía solicitudes a WebSocket para obtener consejos
  * - Maneja TTS para leer los consejos al jugador
  * - Controla timeout y reintentos
  */
-export default function PreGameCoach({ LCU_STATUS, userData }) {
+// 🛑 CRÍTICO: El componente debe recibir la fase actual del juego como prop
+export default function PreGameCoach({ LCU_STATUS, userData, gamePhase }) { 
  // 🚨 NUEVO LOG CLAVE
   console.log(`[PreGameCoach] --- RENDERIZANDO --- UserData: ${!!userData}, WS Status: ...`);
   const { aiAdvice, wsStatus, sendQueueUpdate } = useWebSocketCoach({
@@ -29,22 +30,24 @@ export default function PreGameCoach({ LCU_STATUS, userData }) {
   const [isLoadingAdvice, setIsLoadingAdvice] = useState(true);
   const [isTimedOut, setIsTimedOut] = useState(false);
   
-  // 🛑 CORRECCIÓN CLAVE: Usamos useRef para la guardia de audio.
-  // Esto evita que los re-renders repetidos vuelvan a llamar a speak().
+  // 🛑 CORRECCIÓN CLAVE: Usamos useRef para la guardia de audio (evita doble reproducción).
   const lastSpokenIdentifierRef = useRef(null); 
 
   // ------------------------------
   // Enviar solicitud al WS una sola vez cuando conecta
   // ------------------------------
   useEffect(() => {
-    // La lógica es correcta: solo se envía una vez si el WS está CONECTADO y no se ha solicitado antes.
-    if (wsStatus === 'CONNECTED' && !adviceSpoken && userData) {
+    const isQueuePhase = gamePhase === 'Lobby' || gamePhase === 'Matchmaking' || gamePhase === 'ReadyCheck';
+
+    // 🔑 CORRECCIÓN REPETICIÓN: Solo solicitar si está CONECTADO Y en la fase correcta
+    if (wsStatus === 'CONNECTED' && isQueuePhase && !adviceSpoken && userData) {
       console.log('[PreGameCoach] WS conectado y userData disponible. Enviando solicitud de consejo...');
       sendQueueUpdate();
       setIsLoadingAdvice(true);
       setAdviceSpoken(true);
     }
-  }, [wsStatus, adviceSpoken, sendQueueUpdate, userData]);
+    // Añadida gamePhase a las dependencias para resetear si la fase cambia
+  }, [wsStatus, adviceSpoken, sendQueueUpdate, userData, gamePhase]); 
 
   // ------------------------------
   // Manejo de timeout (15s) o caída de conexión
@@ -79,7 +82,7 @@ export default function PreGameCoach({ LCU_STATUS, userData }) {
 
   // ------------------------------
   // Reproducir el consejo vía TTS (solo si es nuevo)
-  // 🛑 ESTE ES EL HOOK CORREGIDO CON LA GUARDIA DE REF
+  // 🛑 ESTE HOOK CON LA GUARDIA DE REF ES LA ÚNICA FUENTE DE AUDIO
   // ------------------------------
   useEffect(() => {
     const preGameAnalysis = aiAdvice?.preGameAnalysis;
@@ -109,6 +112,15 @@ export default function PreGameCoach({ LCU_STATUS, userData }) {
   // ------------------------------
   // Renderizado
   // ------------------------------
+  const RELEVANT_PHASES = ['Lobby', 'Matchmaking', 'ReadyCheck', 'ChampSelect']; 
+  const isRelevantPhase = RELEVANT_PHASES.includes(gamePhase);
+
+  // 🔑 CORRECCIÓN VISIBILIDAD: Si no estamos en una fase relevante, no renderizar el widget.
+  if (!isRelevantPhase) {
+      // Nota: El logging del log de depuración debe ir en el componente padre.
+      return null; 
+  }
+
   const isReady = !!aiAdvice && LCU_STATUS === 'ONLINE';
   const preGameAnalysis = aiAdvice?.preGameAnalysis;
 

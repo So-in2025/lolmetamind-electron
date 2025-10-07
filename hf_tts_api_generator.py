@@ -21,7 +21,7 @@ SAMPLING_RATE = None
 # FUNCIÓN DE INICIALIZACIÓN (Carga el modelo una sola vez por proceso)
 # ====================================================================
 def initialize_model():
-    """Carga el modelo y el tokenizer globalmente si aún no están cargados."""
+    "Carga el modelo y el tokenizer globalmente si aún no están cargados."
     global model, tokenizer, SAMPLING_RATE
     if model is None:
         try:
@@ -38,7 +38,7 @@ def initialize_model():
 # FUNCIÓN DE GENERACIÓN DE AUDIO
 # ====================================================================
 def generate_audio_local(text_to_speak, output_path):
-    """Genera audio TTS localmente usando la librería Hugging Face Transformers."""
+    "Genera audio TTS localmente usando la librería Hugging Face Transformers."
     
     # 1. Asegurarse de que el modelo esté cargado (la carga real solo ocurre la primera vez)
     initialize_model()

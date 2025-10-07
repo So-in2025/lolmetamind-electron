@@ -16,81 +16,71 @@ import { useTTS } from '@/hooks/useTTS'; // <-- Hook TTS personalizado
 // COMPONENTE PRINCIPAL DEL OVERLAY (COACH CONTAINER)
 // =======================================================
 function CoachContainer() {
-    const { gamePhase, draftData, LCU_STATUS, userData, liveData } = useLcuData();
+    // 🛑 CRÍTICO: gamePhase viene de useLcuData
+    const { gamePhase, draftData, LCU_STATUS, userData, liveData } = useLcuData(); 
     const { isInteractive, setInteractive } = useInteractiveWidget(false);
-    const { speak } = useTTS(); // Hook TTS (ahora es la API de Hugging Face)
+    const { speak } = useTTS(); 
 
     // ---------------------------------------------------
-    // 🎙️ Reproducir mensajes TTS según la fase de partida
+    // 🎙️ SE ELIMINA EL TTS AUTOMÁTICO AL CAMBIAR DE FASE (Audio Artefacto)
     // ---------------------------------------------------
+    /* // ELIMINAR ESTE BLOQUE COMPLETO DE TTS AUTOMÁTICO DEL ARCHIVO ORIGINAL
     useEffect(() => {
-        if (!gamePhase) return; // evitamos TTS vacío
-
-        console.log('[OverlayPage] 🔄 Fase de partida actualizada:', gamePhase);
-
-        // Mensaje de inicio de fase (TTS)
-        let ttsMessage = '';
-        switch (gamePhase) {
-            case 'Lobby':
-            case 'Matchmaking':
-            case 'ReadyCheck':
-                ttsMessage = 'Analizando tu cola. Preparando consejos de perfil.';
-                break;
-            case 'ChampSelect':
-                ttsMessage = 'Atención, fase de selección de campeones. Analizando el draft.';
-                break;
-            case 'InProgress':
-                ttsMessage = 'Partida en curso. El coach en vivo está activado.';
-                break;
-            case 'WaitingForStats':
-            case 'EndOfGame':
-                ttsMessage = 'Partida terminada. Desactivando coach en vivo.';
-                break;
-            default:
-                break;
-        }
-
-        if (ttsMessage) {
-            // 🎤 LOG PRO-DEV: Reproducción automática al cambiar de fase
-            console.log(`[OverlayPage] 🔊 Reproduciendo mensaje de fase: ${ttsMessage}`);
-            speak(ttsMessage);
-        }
-
+        // ... Lógica que llama a speak(ttsMessage)
     }, [gamePhase, speak]);
+    */
 
 
     // ---------------------------------------------------
     // 🖥️ Determinar qué widget renderizar
     // ---------------------------------------------------
     const CurrentWidget = useMemo(() => {
+        // Definir las fases donde el Coach Pre-Game debe estar visible y activo
+        const PRE_GAME_PHASES = ['Lobby', 'Matchmaking', 'ReadyCheck'];
+        
         switch (gamePhase) {
             case 'ChampSelect':
                 return <ChampSelectCoach draftData={draftData} LCU_STATUS={LCU_STATUS} userData={userData} />;
             case 'InProgress':
                 return <InGameCoach liveData={liveData} LCU_STATUS={LCU_STATUS} userData={userData} />;
+                
+            // Fases donde se espera el consejo PRE-GAME (Lobby, Matchmaking, ReadyCheck)
             case 'Lobby':
             case 'Matchmaking':
             case 'ReadyCheck':
-            case 'None': // Si estamos fuera de partida, pero en el cliente
-                // Renderizar el coach de pre-juego si hay datos del cliente, si no, un estado vacío.
+                // 🔑 CORRECCIÓN REPETICIÓN: Se pasa gamePhase como prop para el reset en PreGameCoach
+                return <PreGameCoach LCU_STATUS={LCU_STATUS} userData={userData} gamePhase={gamePhase} />;
+            
+            // Fases donde NO debe haber un widget de juego activo
+            case 'None': // Pantalla principal del cliente
+            case 'EndOfGame':
+            case 'WaitingForStats':
+                // Si la fase es irrelevante, no mostramos nada (return null)
+                // A menos que LCU_STATUS esté OFFLINE, que se maneja abajo.
                 if (LCU_STATUS === 'ONLINE') {
-                    return <PreGameCoach LCU_STATUS={LCU_STATUS} userData={userData} />;
+                    return (
+                        <div className="text-center p-4 rounded-xl bg-lol-blue-dark max-w-xs text-lol-gold-light border border-lol-gold-dark">
+                            <FaSync className="animate-spin mx-auto mb-2" size={24} />
+                            <p className="font-bold">Cliente en línea</p>
+                            <p className="text-xs">Esperando a que inicies una cola o selección de campeón.</p>
+                        </div>
+                    );
                 }
-                return (
-                    <div className="text-center p-4 rounded-xl bg-lol-blue-dark max-w-xs text-lol-gold-light border border-lol-gold-dark">
-                        <FaSync className="animate-spin mx-auto mb-2" size={24} />
-                        <p className="font-bold">Esperando al cliente de LoL</p>
-                        <p className="text-xs">Abre el cliente para activar el coach.</p>
-                    </div>
-                );
+                return null; // Ocultar el widget completamente si no hay fase de juego activa
+                
             default:
-                return (
-                    <div className="text-center p-4 rounded-xl bg-lol-blue-dark max-w-xs text-lol-gold-light border border-lol-gold-dark">
-                        <FaSync className="animate-spin mx-auto mb-2" size={24} />
-                        <p className="font-bold">Fase {gamePhase} desconocida.</p>
-                        <p className="text-xs">Coach en modo de espera.</p>
-                    </div>
-                );
+                // Si el LCU está OFFLINE, mostrar el estado de error/espera del cliente.
+                if (LCU_STATUS === 'OFFLINE') {
+                    return (
+                        <div className="text-center p-4 rounded-xl bg-lol-blue-dark max-w-xs text-lol-gold-light border border-lol-gold-dark">
+                            <FaSync className="animate-spin mx-auto mb-2" size={24} />
+                            <p className="font-bold">Esperando al cliente de LoL</p>
+                            <p className="text-xs">Abre el cliente para activar el coach.</p>
+                        </div>
+                    );
+                }
+                // Manejar cualquier otra fase desconocida
+                return null;
         }
     }, [gamePhase, draftData, LCU_STATUS, userData, liveData]);
 
