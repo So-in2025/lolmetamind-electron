@@ -9,3 +9,5 @@ export const ScaleProvider = ({ children }) => {
 };
 
 export const useScale = () => useContext(ScaleContext);
+
+

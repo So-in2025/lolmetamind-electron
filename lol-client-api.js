@@ -189,65 +189,63 @@ async function fetchLiveGameData() {
 }
 
 // -------------------------
-// Polling LCU -> Dashboard & Overlay
-// - Detecta transiciones ONLINE->OFFLINE y OFFLINE->ONLINE
-// - Envía OFFLINE inmediato al overlay cuando detecta salida de fase activa
-// - Usa lastKnown* para evitar perder la última fase conocida
+// Polling LCU -> Dashboard & Overlay (versión corregida)
 // -------------------------
 async function pollLcuDataAndSend(initialRiotApiData, BACKEND_BASE_URL, LIVE_GAME_UPDATE_ENDPOINT, ipcSender, overlaySender) {
-  console.log('\n--- INICIO DE CICLO DE POLLING ---');
+  console.log('\n--- INICIO DE CICLO DE POLLING ULTRA-ROBUST ---');
+
   let consolidatedData = { ...initialRiotApiData };
   let lcuModeActive = false;
-  let foundCreds = false;
   let gameflowResponse = null;
-  let treatAsImmediateOffline = false; // flag para enviar OFFLINE inmediato si detectamos transición
+  let treatAsImmediateOffline = false;
 
-  // 1) Leer credenciales (actualiza lastReadCreds)
+  // Leer credenciales LCU
   const creds = await readLoLCreds();
   if (creds?.port && creds?.password) {
-    foundCreds = true;
-    console.log(`[POLLING] Credenciales encontradas. Intentando conectar a LCU en puerto ${creds.port}...`);
-
+    console.log(`[POLLING] Credenciales LCU detectadas en puerto ${creds.port}.`);
     const token = Buffer.from(`riot:${creds.password}`).toString('base64');
     const LCU_BASE_URL = `https://127.0.0.1:${creds.port}`;
-    const options = { headers: { 'Authorization': `Basic ${token}` }, httpsAgent: lcuAgent, timeout: 3000 };
+    const options = { headers: { Authorization: `Basic ${token}` }, httpsAgent: lcuAgent, timeout: 3000 };
 
-    // Intentos con pequeño backoff para evitar marcar OFFLINE por fallo transitorio
-    const MAX_ATTEMPTS = 2;
-    let attempt = 0;
-    while (attempt < MAX_ATTEMPTS) {
-      attempt++;
-      try {
-        console.log(`[POLLING] Intento ${attempt}/${MAX_ATTEMPTS} para /lol-gameflow/v1/session`);
-        const resp = await axios.get(`${LCU_BASE_URL}/lol-gameflow/v1/session`, options);
-        gameflowResponse = resp;
-        if (resp.status === 200 && resp.data) {
-          // Si viene phase válida la consideramos candidata a ONLINE (evaluación abajo según activePhases)
-          console.log('[POLLING] Respuesta gameflow recibida:', resp.data.phase || 'NO-PHASE');
+    try {
+      // Intento principal de obtener gameflow
+      gameflowResponse = await axios.get(`${LCU_BASE_URL}/lol-gameflow/v1/session`, options);
+      const phase = gameflowResponse.data?.phase;
+      console.log(`[POLLING] Gameflow obtenido (intento 1): ${phase || 'SIN FASE'}`);
+
+      // Si es ChampSelect, esperar si está incompleto (picks/bans)
+      if (phase === 'ChampSelect') {
+        const MAX_CS_RETRIES = 5;
+        for (let csAttempt = 1; csAttempt <= MAX_CS_RETRIES; csAttempt++) {
+          const picks = gameflowResponse.data?.gameData?.playerChampionSelections ?? [];
+          const bans = gameflowResponse.data?.gameData?.bans ?? [];
+          if ((picks && picks.length > 0) || (bans && bans.length > 0)) {
+            console.log('[POLLING] ChampSelect parece tener datos. Saliendo de retries.');
+            break;
+          }
+          console.log(`[POLLING] ChampSelect incompleto (retry ${csAttempt})`);
+          await delay(300);
+
+          // re-poll lightweight (no crash if fails)
+          try {
+            gameflowResponse = await axios.get(`${LCU_BASE_URL}/lol-gameflow/v1/session`, options);
+          } catch (e) {
+            // si el recheck falla, lo logeamos y seguimos (no abortamos la función)
+            console.warn('[POLLING] Recheck ChampSelect falló:', e.message);
+          }
         }
-        break;
-      } catch (err) {
-        console.warn(`[POLLING] Intento ${attempt} falló: ${err.message}`);
-        if (attempt < MAX_ATTEMPTS) await delay(150);
-        else console.warn('[POLLING] Todos los intentos para gameflow fallaron.');
       }
-    }
 
-    // Procesar gameflow si vino
-    if (gameflowResponse?.status === 200 && gameflowResponse.data?.phase) {
-      const phase = gameflowResponse.data.phase;
-      console.log(`[POLLING] Fase detectada: ${phase}`);
+      // Evaluar si la fase es "activa"
+      const phaseNow = gameflowResponse.data?.phase;
       const activePhases = ['Lobby', 'Matchmaking', 'ReadyCheck', 'ChampSelect', 'InProgress'];
-
-      if (activePhases.includes(phase)) {
-        // Fase activa -> marcar ONLINE y obtener liveData si corresponde
+      if (phaseNow && activePhases.includes(phaseNow)) {
         lcuModeActive = true;
-        console.log(`[POLLING] Fase activa (${phase}). Entrando en modo Realtime.`);
+        console.log(`[POLLING] Fase activa (${phaseNow}). Entrando en modo Realtime.`);
 
-        const liveClientData = (phase === 'InProgress') ? await fetchLiveGameData().catch(e => {
-          console.warn('[POLLING] fetchLiveGameData fallo:', e?.message);
-          return null;
-        }) : null;
+        const liveClientData = (phaseNow === 'InProgress')
+          ? await fetchLiveGameData().catch((e) => { console.warn('[POLLING] fetchLiveGameData fallo:', e?.message); return null; })
+          : null;
 
         consolidatedData = {
           ...consolidatedData,
@@ -256,108 +254,84 @@ async function pollLcuDataAndSend(initialRiotApiData, BACKEND_BASE_URL, LIVE_GAM
           liveData: liveClientData || { status: 'NotAvailable', reason: 'Live client data no disponible' },
         };
 
-        // Actualizamos memoria de último estado
-        lastKnownGameFlowPhase = phase;
+        lastKnownGameFlowPhase = phaseNow;
         lastKnownLCUStatus = 'ONLINE';
         consecutiveLcuFailures = 0;
       } else {
-        // Gameflow presente pero fase no considerada "activa".
-        // Esto puede indicar transición fuera de cola (Ready -> None) o pantalla intermedia.
-        // Si antes estábamos ONLINE, tratamos esto como salida inmediata y forzamos OFFLINE en overlay.
-        console.log(`[POLLING] Gameflow presente pero fase NO activa: ${phase}`);
-        consolidatedData.mode = 'Realtime';
-        consolidatedData.gameflow = gameflowResponse.data;
-        // Si veníamos ONLINE, forzamos envío inmediato de OFFLINE al overlay (transición)
+        console.log(`[POLLING] Gameflow presente pero fase NO activa: ${phaseNow || 'NONE'}`);
+        // Si veníamos ONLINE, forzamos OFFLINE inmediato
         if (lastKnownLCUStatus === 'ONLINE') {
           console.log('[POLLING] Detectada transición desde ONLINE a fase no-activa. FORZANDO overlay OFFLINE inmediato.');
           treatAsImmediateOffline = true;
         }
-        // Mantenemos lastKnown* (no sobreescribimos con fase menor)
         consecutiveLcuFailures = 0;
       }
-    } else {
-      // No obtuvimos gameflow válido: tratar según tipo de error (conn refused -> probable cierre)
-      // Si no se obtuvo y antes estábamos ONLINE, forzamos OFFLINE inmediato
-      console.log('[POLLING] No se obtuvo gameflow válido en este ciclo.');
-      if (lastKnownLCUStatus === 'ONLINE') {
-        console.log('[POLLING] Veníamos ONLINE pero ahora no hay gameflow -> FORZAR OFFLINE inmediato.');
-        treatAsImmediateOffline = true;
-      }
-      // Incrementar contador de fallos solo si sí había credenciales detectadas
-      // (esto da smoothing si MAX_LCU_FAILURES > 0)
+    } catch (err) {
+      console.warn('[POLLING] No se pudo obtener gameflow:', err.message);
+      if (lastKnownLCUStatus === 'ONLINE') treatAsImmediateOffline = true;
       consecutiveLcuFailures++;
-      console.log(`[POLLING] Incrementando consecutiveLcuFailures a ${consecutiveLcuFailures}`);
     }
   } else {
-    // No hay credenciales -> cliente no abierto/instanciado
-    console.log('[POLLING] ℹ️ Cliente de LoL no detectado en este ciclo (no se encontraron credenciales).');
-    // Si antes estábamos ONLINE, forzamos OFFLINE inmediato
+    console.log('[POLLING] ⚠️ Cliente LoL no detectado en este ciclo (no se encontraron credenciales).');
     if (lastKnownLCUStatus === 'ONLINE') {
       console.log('[POLLING] Veníamos ONLINE pero LCU no existe -> FORZAR OFFLINE inmediato.');
       treatAsImmediateOffline = true;
     }
-    // Resetear contador: ausencia de cliente no es "fallo de conexión" del cliente en ejecución
     consecutiveLcuFailures = 0;
   }
 
-  // Evaluación final consideredOnline:
-  // - Si detectamos treatAsImmediateOffline lo forzamos a false
+  // Smoothing / decisión de consideredOnline
   const smoothingAllowsOnline = consecutiveLcuFailures <= MAX_LCU_FAILURES;
   const consideredOnline = (!treatAsImmediateOffline) && (lcuModeActive || smoothingAllowsOnline);
-
-  // Ajustar modo del consolidatedData
   consolidatedData.mode = consideredOnline ? (consolidatedData.mode || 'Realtime') : 'Strategic_API_Profile';
   console.log(`[POLLING] Modo final: ${consolidatedData.mode} (lcuModeActive=${lcuModeActive}, consecutiveFailures=${consecutiveLcuFailures}, treatImmediateOffline=${treatAsImmediateOffline})`);
 
-  // Enviar al Dashboard (IPC principal)
+  // Enviar datos al Dashboard (IPC principal)
   if (ipcSender) {
     try {
       console.log('[POLLING] Enviando datos al DASHBOARD...');
       ipcSender(consolidatedData);
     } catch (err) {
-      console.warn('[POLLING] Error enviando al Dashboard:', err.message);
+      console.warn('[POLLING] Error enviando al Dashboard:', err?.message || err);
     }
   } else {
     console.warn('[POLLING] ⚠️ ipcSender no válido.');
   }
 
-  // Preparar payload para overlay: usar lastKnownGameFlowPhase como fallback
+  // Preparar payload para overlay (usar lastKnownGameFlowPhase como fallback)
   const gameFlowPhase = consolidatedData.gameflow?.phase || lastKnownGameFlowPhase || 'None';
   const overlayPayload = {
     LCU_STATUS: consideredOnline ? 'ONLINE' : 'OFFLINE',
-    lcuStatus: consideredOnline ? 'ONLINE' : 'OFFLINE', // legacy
+    lcuStatus: consideredOnline ? 'ONLINE' : 'OFFLINE',
     gamePhase: consideredOnline ? (gameFlowPhase || 'Unknown') : 'None',
     draftData: (gameFlowPhase === 'ChampSelect') ? (consolidatedData.gameflow || null) : null,
     liveData: (gameFlowPhase === 'InProgress') ? (consolidatedData.liveData || null) : null,
   };
 
-  // Si detectamos una transición forzada a OFFLINE la enviamos inmediatamente
+  // Envío inmediato si detectamos transición OFFLINE forzada
   if (overlaySender) {
-    if (!consideredOnline && (treatAsImmediateOffline || lastKnownLCUStatus === 'ONLINE')) {
-      console.log('[POLLING] (IMMEDIATE) Enviando payload OFFLINE al OVERLAY:', overlayPayload);
-      try {
-        overlaySender(overlayPayload);
-      } catch (err) {
-        console.error('[POLLING] Error enviando overlay immediate:', err.message);
+    try {
+      if (!consideredOnline && (treatAsImmediateOffline || lastKnownLCUStatus === 'ONLINE')) {
+        console.log('[POLLING] (IMMEDIATE) Enviando payload OFFLINE al OVERLAY:', overlayPayload);
+      } else {
+        console.log('[POLLING] Enviando payload al OVERLAY:', overlayPayload);
       }
-    } else {
-      console.log('[POLLING] Enviando payload al OVERLAY:', overlayPayload);
-      try {
-        overlaySender(overlayPayload);
-      } catch (err) {
-        console.error('[POLLING] Error enviando overlay:', err.message);
-      }
+      overlaySender(overlayPayload);
+    } catch (err) {
+      console.error('[POLLING] Error enviando overlay:', err?.message || err);
     }
   } else {
     console.warn('[POLLING] ⚠️ overlaySender no válido.');
   }
 
-  // Persistir al backend si hay userToken
+  // Enviar al backend si hay token
   const userToken = store.get('userToken');
   if (userToken) {
     try {
       await axios.post(`${BACKEND_BASE_URL}${LIVE_GAME_UPDATE_ENDPOINT}`, consolidatedData, {
-        headers: { 'Authorization': `Bearer ${userToken}` }, httpsAgent: lcuAgent, timeout: 5000
+        headers: { Authorization: `Bearer ${userToken}` },
+        httpsAgent: lcuAgent,
+        timeout: 5000
       });
     } catch (backendError) {
       console.error('[POLLING] ❌ Error enviando datos al backend:', backendError.message);
@@ -370,9 +344,8 @@ async function pollLcuDataAndSend(initialRiotApiData, BACKEND_BASE_URL, LIVE_GAM
   lastKnownGameFlowPhase = overlayPayload.gamePhase === 'None' ? lastKnownGameFlowPhase : overlayPayload.gamePhase;
   lastKnownLCUStatus = overlayPayload.LCU_STATUS;
 
-  console.log('--- FIN DE CICLO DE POLLING ---\n');
+  console.log('--- FIN DE CICLO DE POLLING ULTRA-ROBUST ---\n');
 }
-
 // -------------------------
 // sendLcuCommand: envío genérico al LCU
 // - Acepta creds con token o con password (genera token si hace falta)

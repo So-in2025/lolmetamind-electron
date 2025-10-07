@@ -1,172 +1,185 @@
 // src/hooks/useWebSocketCoach.js
-// Hook definitivo para comunicación WS (Soporte Local y Render)
-// Autor: Jonathan
-// Objetivo: Conexión WebSocket con el servidor de IA para recibir consejos
-// y enviar actualizaciones de estado del juego en tiempo real.
+// ============================================================
+// 🔥 Versión definitiva del hook WebSocket Coach
+// Mantiene conexión estable con ping/pong, reconexión inteligente,
+// logs pro-dev y envío de actualizaciones de juego a la IA.
+//
+// Autor: Jonathan + revisión ingeniería avanzada (GPT-5)
+// ============================================================
 
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useTTS } from './useTTS';
 
-/**
- * getWsUrl
- * Devuelve la URL correcta del WebSocket según entorno:
- * - Render (producción): variable de entorno NEXT_PUBLIC_WS_URL
- * - Desarrollo local: ws://localhost:8080
- */
+// ============================================================
+// Determinar URL WS según entorno
+// ============================================================
 const getWsUrl = () => {
-      if (process.env.NODE_ENV === 'production' && process.env.NEXT_PUBLIC_WS_URL) {
-            console.log('[useWebSocketCoach] Usando URL de Render:', process.env.NEXT_PUBLIC_WS_URL);
-            return process.env.NEXT_PUBLIC_WS_URL; 
-      }
-      console.log('[useWebSocketCoach] Usando URL local de desarrollo: ws://localhost:8080');
-      return 'ws://localhost:8080';
+  if (process.env.NODE_ENV === 'production' && process.env.NEXT_PUBLIC_WS_URL) {
+    console.log('[WS:CLIENT] 🌐 Usando WS de producción:', process.env.NEXT_PUBLIC_WS_URL);
+    return process.env.NEXT_PUBLIC_WS_URL;
+  }
+  console.log('[WS:CLIENT] 💻 Usando WS local: ws://localhost:8080');
+  return 'ws://localhost:8080';
 };
 
 const WS_URL = getWsUrl();
+const HEARTBEAT_INTERVAL = 25000; // 25s cliente → servidor
 
-/**
- * useWebSocketCoach
- * Hook que centraliza la lógica de conexión, envío y recepción de consejos de IA.
- * * Props:
- * - userData: objeto con info del usuario (summonerName, region, token, etc)
- * - targetEvent: evento esperado desde el WS (ej. "PRE_GAME_ANALYSIS")
- * - fallbackTTS: booleano para reproducir audio si hay consejos importantes
- */
+// ============================================================
+// Hook principal
+// ============================================================
 export function useWebSocketCoach({ userData, targetEvent, fallbackTTS = true }) {
-   const [aiAdvice, setAiAdvice] = useState(null);         // Consejo IA actual
-   const [wsStatus, setWsStatus] = useState('WAITING_FOR_USER'); // Estado del WS
-   const wsRef = useRef(null);                                       // Referencia a la conexión WS
-   const { speak } = useTTS();                                       // Función TTS del hook
-   const timeoutRef = useRef(null);                               // Timeout para respuesta WS
+  const [aiAdvice, setAiAdvice] = useState(null);
+  const [wsStatus, setWsStatus] = useState('WAITING_FOR_USER');
 
-   // -----------------------------
-   // Conexión WebSocket
-   // -----------------------------
-   useEffect(() => {
-      // Sin datos de usuario, no conectamos
-      if (!userData) {
-         console.log('[useWebSocketCoach] Esperando datos de usuario...');
-         setWsStatus('WAITING_FOR_USER');
-         return;
+  const wsRef = useRef(null);
+  const reconnectTimeoutRef = useRef(null);
+  const heartbeatRef = useRef(null);
+  const reconnectAttemptsRef = useRef(0);
+
+  const { speak } = useTTS();
+
+  // ============================================================
+  // Conectar al servidor WebSocket
+  // ============================================================
+  const connectWebSocket = useCallback(() => {
+    if (!userData) {
+      console.warn('[WS:CLIENT] ⚠️ userData ausente, no se conecta WS.');
+      return;
+    }
+
+    // Cerrar WS previo si existía
+    if (wsRef.current) {
+      console.log('[WS:CLIENT] 🔄 Cerrando WS previo antes de reconectar.');
+      wsRef.current.close(1000, 'Reconnection');
+    }
+
+    console.log(`[WS:CLIENT] 🔌 Conectando a ${WS_URL}...`);
+    setWsStatus('CONNECTING');
+
+    const ws = new WebSocket(WS_URL);
+    wsRef.current = ws;
+
+    // ------------------------------
+    // Eventos WS
+    // ------------------------------
+    ws.onopen = () => {
+      console.log('[WS:CLIENT] ✅ Conectado al servidor.');
+      setWsStatus('CONNECTED');
+      reconnectAttemptsRef.current = 0;
+
+      // Iniciar heartbeat
+      if (heartbeatRef.current) clearInterval(heartbeatRef.current);
+      heartbeatRef.current = setInterval(() => {
+        if (ws.readyState === WebSocket.OPEN) {
+          ws.send(JSON.stringify({ eventType: 'PING' }));
+          //console.log('[WS:CLIENT] 💓 PING enviado');
+        }
+      }, HEARTBEAT_INTERVAL);
+    };
+
+    ws.onmessage = (event) => {
+      try {
+        const message = JSON.parse(event.data);
+        const { eventType, data } = message;
+
+        if (eventType === 'PONG') {
+          //console.log('[WS:CLIENT] 💓 PONG recibido');
+          return;
+        }
+
+        if (eventType === targetEvent) {
+          console.log('[WS:CLIENT] 🎯 Evento esperado recibido:', eventType);
+          setAiAdvice(data);
+
+          // Reproducir TTS si se desea
+          if (fallbackTTS && data?.fullText) {
+            speak(data.fullText);
+          }
+        } else if (eventType === 'ERROR') {
+          console.error('[WS:CLIENT] 🚨 Error desde servidor:', data?.message);
+        } else {
+          console.log('[WS:CLIENT] ⚙️ Evento ignorado:', eventType);
+        }
+      } catch (err) {
+        console.error('[WS:CLIENT] ❌ Error parseando mensaje WS:', err, event.data);
+      }
+    };
+
+    ws.onclose = (ev) => {
+      console.warn(`[WS:CLIENT] ⚠️ WS cerrado. Code=${ev.code}, Reason=${ev.reason}`);
+      setWsStatus('DISCONNECTED');
+
+      if (heartbeatRef.current) {
+        clearInterval(heartbeatRef.current);
+        heartbeatRef.current = null;
       }
 
-      console.log(`[useWebSocketCoach] 🔑 Iniciando conexión WS. userData presente:`, userData);
-
-      // Cerrar WS previo si existía
-      if (wsRef.current) {
-         console.log('[useWebSocketCoach] Cerrando conexión WS previa.');
-         wsRef.current.close();
+      // Intentar reconexión si no fue cierre voluntario
+      if (ev.code !== 1000) {
+        reconnectAttemptsRef.current += 1;
+        const delay = Math.min(30000, 1000 * 2 ** reconnectAttemptsRef.current);
+        console.log(`[WS:CLIENT] ⏱ Intentando reconexión en ${delay}ms (intento ${reconnectAttemptsRef.current})`);
+        reconnectTimeoutRef.current = setTimeout(connectWebSocket, delay);
       }
+    };
 
-      console.log(`[useWebSocketCoach] 🔌 Conectando a WS: ${WS_URL} para evento ${targetEvent}...`);
-      setWsStatus('CONNECTING');
+    ws.onerror = (err) => {
+      console.error('[WS:CLIENT] ❌ Error crítico WS:', err);
+      setWsStatus('ERROR');
+    };
+  }, [userData, targetEvent, fallbackTTS, speak]);
 
-      const ws = new WebSocket(WS_URL);
-      wsRef.current = ws;
+  // ============================================================
+  // Montaje y limpieza
+  // ============================================================
+  useEffect(() => {
+    if (userData) connectWebSocket();
 
-      // -----------------------------------------
-      // Manejo de eventos WS
-      // -----------------------------------------
-      ws.onopen = () => {
-         console.log('[useWebSocketCoach] ✅ WebSocket conectado con éxito.');
-         setWsStatus('CONNECTED');
-      };
+    return () => {
+      console.log('[WS:CLIENT] 🧹 Limpiando WS y timers...');
+      if (wsRef.current) wsRef.current.close(1000, 'Unmount');
+      if (reconnectTimeoutRef.current) clearTimeout(reconnectTimeoutRef.current);
+      if (heartbeatRef.current) clearInterval(heartbeatRef.current);
+    };
+  }, [userData, targetEvent, connectWebSocket]);
 
-      ws.onmessage = (event) => {
-         try {
-            const message = JSON.parse(event.data);
-
-            // Solo procesamos mensajes del evento esperado
-            if (message.eventType === targetEvent) {
-               console.log('[useWebSocketCoach] ✅ Mensaje recibido del evento esperado:', message.data);
-               setAiAdvice(message.data);
-
-               // 🛑 CORRECCIÓN CLAVE: SE ELIMINÓ LA LLAMADA DUPLICADA A speak()
-               // La reproducción de TTS ahora es manejada EXCLUSIVAMENTE por el
-               // useEffect con la guardia de useRef en PreGameCoach.jsx.
-               
-               /*
-               if (fallbackTTS && message.data?.preGameAnalysis) {
-                  const { title, astralMantra, technicalFocus } = message.data.preGameAnalysis;
-                  const ttsText = `${title}. ${astralMantra}. Foco técnico: ${technicalFocus}.`;
-                  console.log('[useWebSocketCoach] 🔊 Reproduciendo TTS para consejo pre-game:', ttsText);
-                  speak(ttsText); // ESTA ERA LA LLAMADA DUPLICADA
-               }
-               */
-            } else {
-               console.log('[useWebSocketCoach] ⚠️ Evento WS recibido ignorado:', message.eventType);
-            }
-         } catch (err) {
-            console.error('[useWebSocketCoach] ❌ Error parseando mensaje WS:', err, event.data);
-         }
-      };
-
-      ws.onclose = () => {
-         console.warn('[useWebSocketCoach] ⚠️ WebSocket cerrado por el servidor o desconexión.');
-         setWsStatus('DISCONNECTED');
-      };
-
-      ws.onerror = (err) => {
-         console.error('[useWebSocketCoach] ❌ Error crítico en WebSocket:', err);
-         setWsStatus('ERROR');
-      };
-
-      // Limpieza de efectos: cerrar WS y limpiar timeout
-      return () => {
-         console.log('[useWebSocketCoach] ⚡ Limpiando efecto WS...');
-         if (wsRef.current) wsRef.current.close();
-         if (timeoutRef.current) clearTimeout(timeoutRef.current);
-      };
-   }, [targetEvent, userData, speak, fallbackTTS]); // 'speak' se mantiene en dependencias por la referencia al hook useTTS
-
-   // -----------------------------
-   // Función para enviar mensajes al WS
-   // -----------------------------
-   const sendMessage = useCallback((eventType, data = {}) => {
-      if (wsStatus === 'CONNECTED' && userData) {
-         const message = { eventType, data, userData };
-         console.log(`[useWebSocketCoach] 📤 Enviando mensaje WS: ${eventType}`, message);
-         wsRef.current.send(JSON.stringify(message));
-         setAiAdvice(null); // Limpiar consejo previo
-         return true;
+  // ============================================================
+  // Función de envío genérica
+  // ============================================================
+  const sendMessage = useCallback(
+    (eventType, data = {}) => {
+      const ws = wsRef.current;
+      if (ws && ws.readyState === WebSocket.OPEN) {
+        const message = { eventType, data, userData };
+        ws.send(JSON.stringify(message));
+        console.log(`[WS:CLIENT] 📤 Enviado evento: ${eventType}`, message);
+        return true;
       }
-      console.warn(`[useWebSocketCoach] ⚠️ No se pudo enviar mensaje WS. Estado actual: ${wsStatus}`);
+      console.warn('[WS:CLIENT] ⚠️ No se pudo enviar mensaje, WS no conectado.');
       return false;
-   }, [wsStatus, userData]);
+    },
+    [userData]
+  );
 
-   // Funciones específicas de cada widget / evento
-   const sendQueueUpdate = useCallback(() => sendMessage('QUEUE_UPDATE'), [sendMessage]);
-   const sendChampSelectUpdate = useCallback(
-      (draftData) => sendMessage('CHAMP_SELECT_UPDATE', draftData),
-      [sendMessage]
-   );
-   const sendInGameUpdate = useCallback(
-      (liveGameData) => sendMessage('LIVE_COACHING_UPDATE', { liveGameData }),
-      [sendMessage]
-   );
+  // ============================================================
+  // Wrappers específicos para eventos del juego
+  // ============================================================
+  const sendQueueUpdate = useCallback(() => sendMessage('QUEUE_UPDATE'), [sendMessage]);
+  const sendChampSelectUpdate = useCallback(
+    (draftData) => sendMessage('CHAMP_SELECT_UPDATE', draftData),
+    [sendMessage]
+  );
+  const sendInGameUpdate = useCallback(
+    (liveGameData) => sendMessage('LIVE_COACHING_UPDATE', { liveGameData }),
+    [sendMessage]
+  );
 
-   // -----------------------------
-   // Timeout: si no llega respuesta del WS
-   // -----------------------------
-   useEffect(() => {
-      if (aiAdvice !== null || wsStatus !== 'CONNECTED') return;
-
-      timeoutRef.current = setTimeout(() => {
-         console.warn('[useWebSocketCoach] ⏱ Timeout: No se recibió respuesta WS en 15s.');
-         // El widget padre debe manejar la UI de timeout
-      }, 10000);
-
-      return () => clearTimeout(timeoutRef.current);
-   }, [wsStatus, aiAdvice]);
-
-   // -----------------------------
-   // Retorno del hook
-   // -----------------------------
-   return {
-      aiAdvice,
-      wsStatus,
-      sendQueueUpdate,
-      sendChampSelectUpdate,
-      sendInGameUpdate
-   };
+  return {
+    aiAdvice,
+    wsStatus,
+    sendQueueUpdate,
+    sendChampSelectUpdate,
+    sendInGameUpdate
+  };
 }

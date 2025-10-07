@@ -356,12 +356,12 @@ function createOverlayWindow() {
             contextIsolation: true,
             enableRemoteModule: false,
             webSecurity: false,
-            //devTools: true, // PRO-DEV FIX: Forzar DevTools para Overlay
+            devTools: true, // PRO-DEV FIX: Forzar DevTools para Overlay
         }
     });
 
     // CRÍTICO: Abrir DevTools inmediatamente
-    //overlayWindow.webContents.openDevTools({ mode: 'detach' });
+    overlayWindow.webContents.openDevTools({ mode: 'detach' });
 
     const OVERLAY_PATH = isDevMode
         ? `${FRONTEND_BASE_URL}/overlay`

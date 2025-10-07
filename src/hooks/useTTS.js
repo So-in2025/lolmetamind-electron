@@ -16,7 +16,7 @@ import { useCallback, useEffect, useRef } from 'react';
 // ---------------------------
 // CONFIG
 // ---------------------------
-const DEFAULT_CACHE_TTL_MS = 10 * 60 * 1000; // 10 minutos
+const DEFAULT_CACHE_TTL_MS = 20 * 60 * 1000; // 10 minutos
 const CACHE_CLEAN_INTERVAL_MS = 60 * 1000; // limpieza cada minuto
 const ELECTRON_TTS_FN = 'coquiTtsSpeak'; // nombre de la API IPC esperada en window.electronAPI
 
@@ -67,8 +67,8 @@ async function generateTtsViaElectron(text, rate, pitch) {
   }
 
   // coquiTtsSpeak puede devolver { filePath } o { audioBase64 } (optativo)
-  const clampedRate = Math.min(Math.max(rate || 1.0, 0.8), 1.2);
-  const clampedPitch = Math.min(Math.max(pitch || 1.0, 0.8), 1.2);
+const clampedRate = Math.min(Math.max(rate || 0.85, 0.7), 1.1);
+const clampedPitch = Math.min(Math.max(pitch || 0.95, 0.8), 1.1);
 
   console.log('[useTTS] Llamando IPC TTS (electronAPI)...');
   const result = await window.electronAPI[ELECTRON_TTS_FN](text, clampedRate, clampedPitch);
