@@ -8,14 +8,18 @@ import { useWebSocketCoach } from '@/hooks/useWebSocketCoach';
 import { useTTS } from '@/hooks/useTTS';
 
 /**
- * InGameCoach
+ * InGameCoach (v4.2 - Optimización de Fluidez TTS)
  * ============================
  * Widget para fase InProgress (partida en vivo)
- * - Recibe liveData y userData desde useLcuData
- * - Analiza estado de partida y genera consejos en tiempo real
- * - Utiliza TTS API (Hugging Face) para lectura de consejos
- * - Maneja timeout, reintentos, logs y renderizado interactivo
- * - Evita reprocesar datos repetidos usando hash de liveData
+ *
+ * 💡 OBJETIVOS DE ESTA VERSIÓN:
+ * 1. Asegurar la fluidez del TTS pasando un 'rate' de 1.2 al hook useTTS.
+ * 2. Mantiene la estabilidad del TTS provista por useTTS v4.2.
+ * 3. Recibe liveData y userData desde useLcuData.
+ * 4. Analiza estado de partida y genera consejos en tiempo real.
+ * 5. Utiliza TTS API (Hugging Face) para lectura de consejos.
+ * 6. Maneja timeout, reintentos, logs y renderizado interactivo.
+ * 7. Evita reprocesar datos repetidos usando hash de liveData.
  * ============================
  */
 export default function InGameCoach({ liveData, userData, LCU_STATUS }) {
@@ -91,9 +95,11 @@ export default function InGameCoach({ liveData, userData, LCU_STATUS }) {
     if (!isLoadingAdvice || aiAdvice) return;
 
     const timer = setTimeout(() => {
-      console.warn('[InGameCoach] ⚠️ Timeout: WS no respondió a tiempo.');
-      setIsTimedOut(true);
-      setIsLoadingAdvice(false);
+      if (!aiAdvice) {
+        console.warn('[InGameCoach] ⚠️ Timeout: WS no respondió a tiempo.');
+        setIsTimedOut(true);
+        setIsLoadingAdvice(false);
+      }
     }, 15000);
 
     return () => clearTimeout(timer);
@@ -108,7 +114,8 @@ export default function InGameCoach({ liveData, userData, LCU_STATUS }) {
     const adviceText = aiAdvice.tips.join('. ');
     console.log('[InGameCoach] 🎤 Reproduciendo TTS automático (via API):', adviceText);
 
-    speak(adviceText); // Llama al hook useTTS que usa la API
+    // PRO-DEV: Se añade velocidad 1.2 para mayor fluidez (igual que en PreGameCoach)
+    speak(adviceText, 1.2); 
   }, [aiAdvice, speak]);
 
   // ------------------------------
@@ -184,7 +191,8 @@ export default function InGameCoach({ liveData, userData, LCU_STATUS }) {
               if (aiAdvice?.tips?.length) {
                 const adviceText = aiAdvice.tips.join('. ');
                 console.log('[InGameCoach] 🎤 Reproduciendo TTS manual:', adviceText);
-                speak(adviceText);
+                // PRO-DEV: Se añade velocidad 1.2 para mayor fluidez
+                speak(adviceText, 1.2);
               }
             }}
             className="w-full py-1 bg-lol-gold-dark hover:bg-lol-gold/80 text-lol-blue-dark font-bold text-xs rounded transition-colors"
