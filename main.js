@@ -95,6 +95,37 @@ let latestRiotApiData = null;      // Últimos datos de Riot API
 let isLcuPollingPaused = false; 
 
 
+// -------------------------------
+// Función para despertar el Host de Render
+// -------------------------------
+async function pingRenderHost() {
+    console.log('[COLD START] Pinging Render host para despertar...');
+    
+    try {
+        const startTime = Date.now();
+        
+        // Enviamos una petición GET simple (la ruta raíz del backend)
+        const response = await axios.get(BACKEND_BASE_URL, { 
+            // 🚨 Importante: NO usar headers ni httpsAgent aquí, solo la URL base
+            timeout: 15000 // 15 segundos para dar tiempo al Cold Start
+        });
+        
+        const duration = Date.now() - startTime;
+        
+        if (response.status === 200 || response.status === 404) { // 404 es aceptable si la ruta raíz no existe
+            console.log(`[COLD START] ✅ Host respondio. Latencia: ${duration}ms`);
+            return true;
+        }
+        console.warn(`[COLD START] Host respondió con status ${response.status}.`);
+        return true; // Consideramos que el host está activo
+        
+    } catch (error) {
+        console.warn(`[COLD START] ⚠️ Host ping falló o agotó el tiempo de espera (15s). Error: ${error.message}`);
+        // Permitimos el fallo; el login lo reintentará.
+        return false; 
+    }
+}
+
 // Función de Pre-carga del Modelo TTS (devuelve una Promesa)
 const prewarmTtsModel = () => {
     return new Promise((resolve, reject) => {
@@ -420,27 +451,41 @@ app.on('ready', async () => {
 
     // =======================================================
     // === FIX CRÍTICO: Anulación de Error de Certificado WSS ===
+    // (Este bloque se mantiene para forzar confianza WSS)
     // =======================================================
     session.defaultSession.on('certificate-error', (event, webContents, url, error, certificate, callback) => {
         const RENDER_WS_DOMAIN = 'lolmetamind-ws.onrender.com';
 
-        // CRÍTICO: Permite la conexión solo si es nuestro servidor WSS
         if (url.includes(RENDER_WS_DOMAIN)) {
-            event.preventDefault(); // Previene la ventana de error por defecto
-            callback(true); // Acepta el certificado (lo trata como confiable)
+            event.preventDefault(); 
+            callback(true); 
             console.log(`[WSS FIX] ✅ Forzando confianza para el certificado de ${RENDER_WS_DOMAIN}.`);
         } else {
-            callback(false); // Rechaza todos los demás certificados
+            callback(false); 
         }
     });
 
-    try {
-        // 2. ESPERAMOS a que el modelo de voz termine de cargar (SOLO UNA EJECUCIÓN)
-        await prewarmTtsModel(); 
-        console.log('[APP] Pre-calentamiento de TTS completado.');
+    // 🚨 CORRECCIÓN: Ejecución concurrente del TTS local y el Ping remoto
+    console.log('[APP] Iniciando carga concurrente (TTS Local + Ping Remoto)...');
 
-    } catch (error) {
-        console.error('[APP] FALLO CRÍTICO: No se pudo cargar el modelo TTS.', error);
+    const [ttsResult, pingResult] = await Promise.all([
+        // Ejecución 1: Carga local del modelo TTS
+        prewarmTtsModel().catch(err => err), 
+        
+        // Ejecución 2: Despertar el host de Render
+        pingRenderHost().catch(err => err)
+    ]);
+    
+    if (ttsResult instanceof Error) {
+        console.error('[APP] FALLO CRÍTICO: No se pudo cargar el modelo TTS. La voz estará deshabilitada.', ttsResult);
+    } else {
+        console.log('[APP] ✅ Pre-calentamiento de TTS completado.');
+    }
+
+    if (pingResult instanceof Error) {
+        console.warn('[APP] ⚠️ Fallo en el ping inicial a Render. El host puede estar durmiendo.');
+    } else {
+        console.log('[APP] ✅ Host de Render inicializado/despierto.');
     }
     
     // 3. Una vez que el modelo cargó, creamos la ventana de login
@@ -455,7 +500,7 @@ app.on('ready', async () => {
         loginWin.center();
         console.log('[APP] Secuencia de arranque completada. Mostrando Login.');
     });
-
+    
 // ===============================
 // ETAPA 3: IPC IA, HUGGING FACE TTS y Shortcuts (Handlers Registrados Primero)
 // ===============================
@@ -533,65 +578,56 @@ app.on('ready', async () => {
     });
 
     // --------------------------------------------------------
-    // ☁️ IPC HUGGING FACE TTS (Text-to-Speech vía API)
+    // ☁️ IPC HUGGING FACE TTS (Text-to-Speech vía Base64/Streaming)
     // --------------------------------------------------------
     ipcMain.handle('coqui-tts', async (event, { text, rate = 1.0, pitch = 1.0 }) => {
         // Mantenemos el nombre del canal 'coqui-tts' por compatibilidad con useTTS.js
-        console.log('[TTS API] IPC coqui-tts recibido, usando Hugging Face API.');
+        console.log('[TTS API] IPC coqui-tts recibido, usando Base64 Streaming (sin disco).'); 
 
         if (!text) {
             console.warn('[TTS API] Texto vacío recibido. Abortando generación');
             return null;
         }
         
-        // 1. Definir la ruta del script Python (debe estar en la raíz del proyecto)
+        // 1. Definir la ruta del script Python 
         const pythonScriptPath = path.join(__dirname, 'hf_tts_api_generator.py');
-        const filePath = path.join(TTS_TEMP_DIR, `tts-hf-${Date.now()}.wav`);
 
-        // La variable isDevMode (Línea 51) determina si estamos en desarrollo
         const pythonExecutable = isDevMode 
-            ? 'python' // <--- Usa 'python' del PATH durante el desarrollo (tu entorno requests)
-            : path.join(
-                process.resourcesPath, // Ruta interna del .exe compilado
-                'python',
-                'python.exe'
-            ); 
+            ? 'python' 
+            : path.join(process.resourcesPath, 'python', 'python.exe'); 
 
-        // 3. 🚨 CLAVE PLUG AND PLAY: Configurar el Token de Hugging Face en el entorno del proceso Python
-        const token = store.get('hfApiToken') || 'TU_TOKEN_DE_HUGGING_FACE_AQUÍ'; // Usar Store o un fallback
-        // ************** DEBUGGING CRÍTICO AÑADIDO **************
-        //    console.log(`[TTS API][DEBUG] Token Check (First 8 chars): ${token.substring(0, 8)}...`); // <-- Muestra la clave en la terminal
-        // *******************************************************
-
+        // 2. CLAVE PLUG AND PLAY: Configurar el Token de Hugging Face en el entorno del proceso Python
+        const token = store.get('hfApiToken') || 'TU_TOKEN_DE_HUGGING_FACE_AQUÍ'; 
         const env = { 
             ...process.env, 
             HUGGING_FACE_TOKEN: token
         };
 
-        // ************** DEBUGGING CRÍTICO AÑADIDO **************
-        //console.log(`[TTS API][DEBUG] Token Check (First 8 chars): ${token.substring(0, 8)}...`);
-        // *******************************************************
-
         console.log(`[TTS API] Usando Python: ${pythonExecutable}`);
-        console.log(`[TTS API] Archivo de salida: ${filePath}`);
         if (token === 'TU_TOKEN_DE_HUGGING_FACE_AQUÍ') console.error('[TTS API] ❌ ADVERTENCIA: Usando token de prueba/vacío. Revisa la Store.');
 
         try {
-            // 4. Ejecutar el script Python que llama a la API (solo pasamos texto y ruta de salida)
+            // 3. Ejecutar el script Python (solo pasamos texto)
+            // CRÍTICO: Python escribe el Base64 directamente al stdout.
             const pythonProcess = spawn(pythonExecutable, [
                 pythonScriptPath,
-                text,
-                filePath
-            ], { env: env }); // Pasa el token de forma segura en el entorno
+                text
+            ], { env: env }); 
+
+            let base64Data = ''; // Recolector para el stream de Base64
+
+            // 4. Capturar el output del Python (que es la cadena Base64)
+            pythonProcess.stdout.on('data', (data) => {
+                base64Data += data.toString();
+            });
 
             // Logs detallados para PRO-DEV
-            pythonProcess.stdout.on('data', (data) => console.log('[TTS API][stdout]', data.toString().trim()));
             pythonProcess.stderr.on('data', (data) => console.error('[TTS API][stderr]', data.toString().trim()));
 
             await new Promise((resolve, reject) => {
                 pythonProcess.on('close', (code) => {
                     if (code === 0) {
-                        console.log('[TTS API] Audio generado correctamente ✅');
+                        console.log('[TTS API] Audio generado en memoria y Base64 capturado. ✅'); 
                         resolve();
                     }
                     else {
@@ -604,10 +640,14 @@ app.on('ready', async () => {
                 });
             });
 
-            if (fs.existsSync(filePath)) {
-                return { filePath };
+            // 5. Construir Data URI y devolver al renderer
+            if (base64Data.length > 0) {
+                 const dataUri = `data:audio/wav;base64,${base64Data.trim()}`;
+                 console.log('[TTS API] ✅ Data URI listo para reproducción en el Renderer.');
+                 // CRÍTICO: Se devuelve { dataUri }
+                 return { dataUri: dataUri }; 
             } else {
-                console.error('[TTS API] El archivo de salida no fue creado por el script Python.');
+                console.error('[TTS API] ❌ El script Python no devolvió Base64.'); 
                 return null;
             }
         } catch (err) {
