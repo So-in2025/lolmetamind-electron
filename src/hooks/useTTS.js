@@ -1,14 +1,11 @@
 // src/hooks/useTTS.js
 // ============================================================
-// 🧠 useTTS Hook (v4.6 – Preload, Reuse de Audio, Cache en memoria, soporte Base64)
+// 🧠 useTTS Hook (v4.7 – SOPORTE DATA-URI SIN DISCO/BLOB)
 // ============================================================
-// OBJETIVOS v4.6:
-// - Reproducción instantánea siempre que el audio esté en cache/preloaded.
-// - Reutilizar instancias Audio para evitar recargas de disco/IO.
-// - Soportar respuesta del backend tanto filePath (ruta) como audioBase64 (buffer).
-// - Exponer API: speak(), stop(), pause(), resume(), preload(), clearCache().
-// - TTL simple para cache y limpieza periódica.
-// - Logs PRO-DEV para trazabilidad y debugging.
+// OBJETIVOS v4.7:
+// - Reproducción instantánea usando Data URI directo (sin I/O de disco).
+// - Eliminación de la lógica compleja de conversión Base64 -> Blob URL.
+// - Reutilizar instancias Audio y cachear la Data URI.
 // ============================================================
 
 import { useCallback, useEffect, useRef } from 'react';
@@ -16,16 +13,16 @@ import { useCallback, useEffect, useRef } from 'react';
 // ---------------------------
 // CONFIG
 // ---------------------------
-const DEFAULT_CACHE_TTL_MS = 20 * 60 * 1000; // 10 minutos
+const DEFAULT_CACHE_TTL_MS = 20 * 60 * 1000; // 20 minutos
 const CACHE_CLEAN_INTERVAL_MS = 60 * 1000; // limpieza cada minuto
 const ELECTRON_TTS_FN = 'coquiTtsSpeak'; // nombre de la API IPC esperada en window.electronAPI
 
 // ---------------------------
 // Caches globales (persisten entre instancias del hook)
 // ---------------------------
-// audioMetaCache: key -> { filePath?, blobUrl?, expiresAt }
-// audioElementCache: key -> { audio: HTMLAudioElement, inUseCount: number }
+// audioMetaCache: key -> { dataUri?, expiresAt } 🚨 CAMBIO: Ahora guarda dataUri
 const audioMetaCache = new Map();
+// audioElementCache: key -> { audio: HTMLAudioElement, inUseCount: number }
 const audioElementCache = new Map();
 
 function now() { return Date.now(); }
@@ -40,11 +37,10 @@ setInterval(() => {
   for (const [key, meta] of audioMetaCache.entries()) {
     if (meta.expiresAt && meta.expiresAt < t) {
       console.log(`[useTTS][GC] Expiring cache meta key=${key}`);
-      // liberar blobUrl si existe
-      if (meta.blobUrl) {
-        try { URL.revokeObjectURL(meta.blobUrl); } catch (e) { /* ignore */ }
-      }
+      // 🚨 IMPORTANTE: Ya no se llama URL.revokeObjectURL porque usamos Data URI directo,
+      // no Blob URLs que necesitan ser revocadas.
       audioMetaCache.delete(key);
+      
       // también limpiar elemento de audio si existe y no está en uso
       const el = audioElementCache.get(key);
       if (el && el.inUseCount === 0) {
@@ -66,30 +62,33 @@ async function generateTtsViaElectron(text, rate, pitch) {
     throw new Error(`API TTS no disponible (window.electronAPI.${ELECTRON_TTS_FN})`);
   }
 
-  // coquiTtsSpeak puede devolver { filePath } o { audioBase64 } (optativo)
+// 🚨 CAMBIO: La API Electron ahora SOLO devuelve dataUri
 const clampedRate = Math.min(Math.max(rate || 0.85, 0.7), 1.1);
 const clampedPitch = Math.min(Math.max(pitch || 0.95, 0.8), 1.1);
 
-  console.log('[useTTS] Llamando IPC TTS (electronAPI)...');
-  const result = await window.electronAPI[ELECTRON_TTS_FN](text, clampedRate, clampedPitch);
-  if (!result || (!result.filePath && !result.audioBase64)) {
-    throw new Error('La API TTS no devolvió filePath ni audioBase64');
+  console.log('[useTTS] Llamando IPC TTS (electronAPI) para obtener Data URI...'); // 🚨 LOG PRO-DEV
+  const result = await window.electronAPI[ELECTRON_TTS_FN]({ text, rate: clampedRate, pitch: clampedPitch });
+  
+  // 🚨 CAMBIO CRÍTICO: Validar que contenga dataUri
+  if (!result || !result.dataUri) {
+    throw new Error('La API TTS no devolvió un Data URI válido.');
   }
-  return result;
+  return result; // result: { dataUri: 'data:audio/wav;base64,....' }
 }
 
 function createAudioFromMeta(meta) {
-  // meta: { filePath?, blobUrl? }
-  const src = meta.blobUrl || meta.filePath;
+  // 🚨 CAMBIO: Usa directamente el dataUri como src
+  const src = meta.dataUri;
   const audio = new Audio(src);
   audio.preload = 'auto';
   return audio;
 }
 
-function storeMetaInCache(cacheKey, { filePath = null, blobUrl = null }, ttl = DEFAULT_CACHE_TTL_MS) {
+// 🚨 CAMBIO: La función de cache solo guarda el Data URI
+function storeMetaInCache(cacheKey, { dataUri = null }, ttl = DEFAULT_CACHE_TTL_MS) {
   const expiresAt = now() + ttl;
-  audioMetaCache.set(cacheKey, { filePath, blobUrl, expiresAt });
-  console.log(`[useTTS] Cache meta SET key=${cacheKey} ttl=${ttl}ms (filePath=${Boolean(filePath)}, blob=${Boolean(blobUrl)})`);
+  audioMetaCache.set(cacheKey, { dataUri, expiresAt });
+  console.log(`[useTTS] Cache meta SET key=${cacheKey} ttl=${ttl}ms (dataUri=${Boolean(dataUri)})`); // 🚨 LOG PRO-DEV
 }
 
 function getMetaFromCache(cacheKey) {
@@ -148,16 +147,14 @@ export const useTTS = ({ defaultTTL = DEFAULT_CACHE_TTL_MS } = {}) => {
   }, []);
 
   // ---------------------------
-  // stop(): detiene reproducción actual pero NO elimina cache meta (para permitir repeats rápidos)
+  // stop(): detiene reproducción actual
   // ---------------------------
   const stop = useCallback(() => {
-    console.log('[useTTS] ⏹ stop() llamado');
+    console.log('[useTTS] ⏹ stop() llamado'); // 🚨 LOG PRO-DEV
     if (currentAudioRef.current) {
       try {
         currentAudioRef.current.pause();
       } catch (e) { /* ignore */ }
-      // No limpiar src aquí si queremos permitir replay instantáneo del mismo audio.
-      // Pero liberamos la referencia activa para evitar solapamientos.
       currentAudioRef.current = null;
     }
     isPlayingRef.current = false;
@@ -166,7 +163,7 @@ export const useTTS = ({ defaultTTL = DEFAULT_CACHE_TTL_MS } = {}) => {
   // pause / resume (utils)
   const pause = useCallback(() => {
     if (currentAudioRef.current) {
-      try { currentAudioRef.current.pause(); console.log('[useTTS] pausa audio'); } catch (e) {}
+      try { currentAudioRef.current.pause(); console.log('[useTTS] pausa audio'); } catch (e) {} // 🚨 LOG PRO-DEV
       isPlayingRef.current = false;
     }
   }, []);
@@ -176,35 +173,34 @@ export const useTTS = ({ defaultTTL = DEFAULT_CACHE_TTL_MS } = {}) => {
       try {
         await currentAudioRef.current.play();
         isPlayingRef.current = true;
-        console.log('[useTTS] resume audio');
+        console.log('[useTTS] resume audio'); // 🚨 LOG PRO-DEV
       } catch (e) {
-        console.warn('[useTTS] resume fallo play():', e.message);
+        console.warn('[useTTS] resume fallo play():', e.message); // 🚨 LOG PRO-DEV
       }
     }
   }, []);
 
   // ---------------------------
   // preload(): forzar generación y preload del audio en cache
-  // - útil para precaching proactivo en lobby/matchmaking
   // ---------------------------
   const preload = useCallback(async (text, rate = 1.0, pitch = 1.0, { ttl = defaultTTL } = {}) => {
     if (!text || typeof text !== 'string') {
-      console.warn('[useTTS] preload() texto inválido', text);
+      console.warn('[useTTS] preload() texto inválido', text); // 🚨 LOG PRO-DEV
       return null;
     }
     const cacheKey = makeCacheKey(text.trim(), rate, pitch);
     const existing = getMetaFromCache(cacheKey);
     if (existing) {
-      console.log('[useTTS] preload -> ya en cache meta, devolviendo meta existente');
+      console.log('[useTTS] preload -> ya en cache meta, devolviendo meta existente'); // 🚨 LOG PRO-DEV
       // si no hay audio element aún, crearlo en background
       if (!getAudioElement(cacheKey)) {
         try {
           const audio = createAudioFromMeta(existing);
           audio.load();
           setAudioElement(cacheKey, audio);
-          console.log('[useTTS] preload -> audio element creado desde meta existente');
+          console.log('[useTTS] preload -> audio element creado desde meta existente'); // 🚨 LOG PRO-DEV
         } catch (e) {
-          console.warn('[useTTS] preload -> fallo al crear audio element desde meta existente', e.message);
+          console.warn('[useTTS] preload -> fallo al crear audio element desde meta existente', e.message); // 🚨 LOG PRO-DEV
         }
       }
       return existing;
@@ -212,44 +208,28 @@ export const useTTS = ({ defaultTTL = DEFAULT_CACHE_TTL_MS } = {}) => {
 
     // No está en cache -> generar vía electronAPI
     try {
-      console.log('[useTTS] preload -> Cache miss. Llamando backend para generar audio...');
+      console.log('[useTTS] preload -> Cache miss. Llamando Electron para generar Data URI...'); // 🚨 LOG PRO-DEV
       const result = await generateTtsViaElectron(text, rate, pitch);
 
-      let blobUrl = null;
-      let filePath = null;
-      if (result.audioBase64) {
-        // Crear Blob y URL
-        const byteCharacters = atob(result.audioBase64);
-        const byteNumbers = new Array(byteCharacters.length);
-        for (let i = 0; i < byteCharacters.length; i++) {
-          byteNumbers[i] = byteCharacters.charCodeAt(i);
-        }
-        const byteArray = new Uint8Array(byteNumbers);
-        const blob = new Blob([byteArray], { type: 'audio/wav' });
-        blobUrl = URL.createObjectURL(blob);
-        filePath = null;
-        console.log('[useTTS] preload -> recibido audio Base64 y creado blobUrl');
-      } else if (result.filePath) {
-        filePath = result.filePath;
-        console.log('[useTTS] preload -> recibido filePath desde backend:', filePath);
-      }
-
+      // 🚨 CAMBIO: Se almacena directamente el dataUri
+      const dataUri = result.dataUri;
+      
       // almacenar meta + crear audio element preloaded
-      storeMetaInCache(cacheKey, { filePath, blobUrl }, ttl);
+      storeMetaInCache(cacheKey, { dataUri }, ttl);
+      
       try {
         const meta = getMetaFromCache(cacheKey);
         const audio = createAudioFromMeta(meta);
         audio.load();
-        // intentar tocar un poco para precache buffer (puede fallar por políticas autoplay; en Electron normalmente ok)
         setAudioElement(cacheKey, audio);
-        console.log('[useTTS] preload -> audio element preloaded y almacenado en cache element');
+        console.log('[useTTS] preload -> audio element preloaded y almacenado en cache element'); // 🚨 LOG PRO-DEV
       } catch (e) {
-        console.warn('[useTTS] preload -> fallo al crear/preload audio element', e.message);
+        console.warn('[useTTS] preload -> fallo al crear/preload audio element', e.message); // 🚨 LOG PRO-DEV
       }
 
       return getMetaFromCache(cacheKey);
     } catch (err) {
-      console.error('[useTTS] preload -> Error al generar audio:', err.message);
+      console.error('[useTTS] preload -> Error al generar audio:', err.message); // 🚨 LOG PRO-DEV
       throw err;
     }
   }, [defaultTTL]);
@@ -268,26 +248,22 @@ export const useTTS = ({ defaultTTL = DEFAULT_CACHE_TTL_MS } = {}) => {
       const audio = createAudioFromMeta(meta);
       // establecer handlers mínimos
       audio.preload = 'auto';
-      // no tocar play aqui, solo cargar
       audio.load();
       setAudioElement(cacheKey, audio);
-      console.log('[useTTS] ensureAudioElement -> creado nuevo elemento audio para cacheKey');
+      console.log('[useTTS] ensureAudioElement -> creado nuevo elemento audio para cacheKey'); // 🚨 LOG PRO-DEV
       return audio;
     } catch (e) {
-      console.warn('[useTTS] ensureAudioElement -> fallo crear audio element:', e.message);
+      console.warn('[useTTS] ensureAudioElement -> fallo crear audio element:', e.message); // 🚨 LOG PRO-DEV
       return null;
     }
   }
 
   // ---------------------------
-  // speak(): principal (reutiliza cache/meta cuando esté disponible)
-  // - detiene cualquier audio activo (no solapamiento)
-  // - si audio en cache -> reuse y play inmediatamente
-  // - si no -> genera, guarda en cache, crea elemento y reproduce
+  // speak(): principal
   // ---------------------------
   const speak = useCallback(async (text, rate = 1.0, pitch = 1.0, { ttl = defaultTTL } = {}) => {
     if (!text || typeof text !== 'string') {
-      console.warn('[useTTS] speak() texto inválido', text);
+      console.warn('[useTTS] speak() texto inválido', text); // 🚨 LOG PRO-DEV
       return;
     }
 
@@ -302,38 +278,24 @@ export const useTTS = ({ defaultTTL = DEFAULT_CACHE_TTL_MS } = {}) => {
       // 1) intentar meta cache
       let meta = getMetaFromCache(cacheKey);
       if (!meta) {
-        // 2) no está en cache -> generar (sin bloquear hilo principal si quieres precache en background)
-        console.log('[useTTS] speak -> Cache MISS. Generando audio via backend...');
+        // 2) no está en cache -> generar
+        console.log('[useTTS] speak -> Cache MISS. Generando Data URI via Electron...'); // 🚨 LOG PRO-DEV
         const result = await generateTtsViaElectron(trimmed, rate, pitch);
 
-        let blobUrl = null;
-        let filePath = null;
-        if (result.audioBase64) {
-          const byteCharacters = atob(result.audioBase64);
-          const byteNumbers = new Array(byteCharacters.length);
-          for (let i = 0; i < byteCharacters.length; i++) {
-            byteNumbers[i] = byteCharacters.charCodeAt(i);
-          }
-          const byteArray = new Uint8Array(byteNumbers);
-          const blob = new Blob([byteArray], { type: 'audio/wav' });
-          blobUrl = URL.createObjectURL(blob);
-          console.log('[useTTS] speak -> recibido audioBase64 y creado blobUrl');
-        } else if (result.filePath) {
-          filePath = result.filePath;
-          console.log('[useTTS] speak -> recibido filePath:', filePath);
-        }
+        // 🚨 CAMBIO: Almacenar Data URI
+        const dataUri = result.dataUri;
 
-        storeMetaInCache(cacheKey, { filePath, blobUrl }, ttl);
+        storeMetaInCache(cacheKey, { dataUri }, ttl);
         meta = getMetaFromCache(cacheKey);
       } else {
-        console.log('[useTTS] speak -> Cache HIT meta');
+        console.log('[useTTS] speak -> Cache HIT meta'); // 🚨 LOG PRO-DEV
       }
 
       // 3) asegurar audio element
       let audio = await ensureAudioElement(cacheKey);
       if (!audio) {
         // fallback crear de meta manualmente
-        console.warn('[useTTS] speak -> No pudo crearse elemento audio desde meta, intentando crear directamente...');
+        console.warn('[useTTS] speak -> No pudo crearse elemento audio, intentando crear directamente...'); // 🚨 LOG PRO-DEV
         const metaNow = getMetaFromCache(cacheKey);
         if (!metaNow) throw new Error('Meta ausente después de generar audio');
         audio = createAudioFromMeta(metaNow);
@@ -345,7 +307,7 @@ export const useTTS = ({ defaultTTL = DEFAULT_CACHE_TTL_MS } = {}) => {
       currentAudioRef.current = audio;
       isPlayingRef.current = true;
 
-      console.log(`[useTTS] ▶ Reproduciendo audio (cacheKey=${cacheKey})...`);
+      console.log(`[useTTS] ▶ Reproduciendo audio (cacheKey=${cacheKey})...`); // 🚨 LOG PRO-DEV
       await new Promise((resolve, reject) => {
         let settled = false;
         const cleanup = () => {
@@ -364,7 +326,7 @@ export const useTTS = ({ defaultTTL = DEFAULT_CACHE_TTL_MS } = {}) => {
           if (settled) return;
           settled = true;
           cleanup();
-          reject(new Error('Audio playback error'));
+          reject(new Error(`Audio playback error: ${e.message}`));
         };
 
         // Some environments require load() before play if element was reused.
@@ -379,12 +341,12 @@ export const useTTS = ({ defaultTTL = DEFAULT_CACHE_TTL_MS } = {}) => {
         });
       });
 
-      console.log('[useTTS] ✅ Reproducción finalizada.');
+      console.log('[useTTS] ✅ Reproducción finalizada.'); // 🚨 LOG PRO-DEV
       isPlayingRef.current = false;
       currentAudioRef.current = null;
       decAudioInUse(cacheKey);
     } catch (err) {
-      console.error('[useTTS] ❌ Error en speak():', err.message || err);
+      console.error('[useTTS] ❌ Error en speak():', err.message || err); // 🚨 LOG PRO-DEV
       isPlayingRef.current = false;
       currentAudioRef.current = null;
     }
@@ -394,12 +356,8 @@ export const useTTS = ({ defaultTTL = DEFAULT_CACHE_TTL_MS } = {}) => {
   // clearCache(): limpia todo (meta + audio elements)
   // ---------------------------
   const clearCache = useCallback(() => {
-    console.log('[useTTS] clearCache() llamado. Liberando todos los blobs y elementos de audio.');
-    for (const [key, meta] of audioMetaCache.entries()) {
-      if (meta.blobUrl) {
-        try { URL.revokeObjectURL(meta.blobUrl); } catch (e) {}
-      }
-    }
+    console.log('[useTTS] clearCache() llamado. Liberando todos los elementos de audio.'); // 🚨 LOG PRO-DEV
+    // 🚨 CAMBIO: Se eliminó la revocación de Blob URL porque ya no se usan.
     audioMetaCache.clear();
 
     for (const [key, entry] of audioElementCache.entries()) {

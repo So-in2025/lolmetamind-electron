@@ -13,13 +13,28 @@ import { useTTS } from './useTTS';
 // ============================================================
 // Determinar URL WS según entorno
 // ============================================================
-const getWsUrl = () => {
+/*const getWsUrl = () => {
   if (process.env.NODE_ENV === 'production' && process.env.NEXT_PUBLIC_WS_URL) {
     console.log('[WS:CLIENT] 🌐 Usando WS de producción:', process.env.NEXT_PUBLIC_WS_URL);
     return process.env.NEXT_PUBLIC_WS_URL;
   }
   console.log('[WS:CLIENT] 💻 Usando WS local: ws://localhost:8080');
   return 'ws://localhost:8080';
+};*/
+// ============================================================
+// Determinar URL WS según entorno
+// ============================================================
+const getWsUrl = () => {
+  // 🚨 CAMBIO CRÍTICO: Usar la URL de Render para producción/desarrollo remoto
+  const RENDER_WS_URL = 'wss://lolmetamind-ws.onrender.com';
+  
+  if (process.env.NODE_ENV === 'production' || !process.env.NEXT_PUBLIC_WS_URL) {
+    console.log('[WS:CLIENT] 🌐 Usando WS de Render:', RENDER_WS_URL);
+    return RENDER_WS_URL;
+  }
+  // Fallback local si NEXT_PUBLIC_WS_URL está definido (ej. para debug local)
+  console.log('[WS:CLIENT] 💻 Usando WS local (env var):', process.env.NEXT_PUBLIC_WS_URL);
+  return process.env.NEXT_PUBLIC_WS_URL;
 };
 
 const WS_URL = getWsUrl();

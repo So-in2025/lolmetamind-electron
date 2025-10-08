@@ -1,8 +1,12 @@
+# so-in2025/lolmetamind-electron/lolmetamind-electron-0544ff2629c04497534e891234a018ee815c1dd7/hf_tts_api_generator.py
 import sys
 import os
 import torch
 import scipy.io.wavfile as wavfile
 import numpy as np
+# 🚨 PRO-DEV: Imports para manejo de datos en memoria y codificación Base64
+import io
+import base64
 from transformers import VitsModel, AutoTokenizer
 
 # ====================================================================
@@ -38,12 +42,13 @@ def initialize_model():
             sys.exit(1)
 
 # ====================================================================
-# FUNCIÓN DE GENERACIÓN DE AUDIO
+# FUNCIÓN DE GENERACIÓN DE AUDIO (MODIFICADA: A MEMORIA)
 # ====================================================================
-def generate_audio_local(text_to_speak, output_path):
-    """Genera audio TTS localmente usando la librería Hugging Face Transformers."""
+# 🚨 CAMBIO: Se eliminó el argumento 'output_path'
+def generate_audio_local(text_to_speak):
+    """Genera audio TTS localmente usando memoria y lo imprime codificado en Base64."""
     
-    # 1. Asegurarse de que el modelo esté cargado (la carga real solo ocurre la primera vez)
+    # 1. Asegurarse de que el modelo esté cargado
     initialize_model()
 
     if not text_to_speak or not text_to_speak.strip():
@@ -59,14 +64,21 @@ def generate_audio_local(text_to_speak, output_path):
         with torch.no_grad():
             output = model(**inputs).waveform
         
-        # Convertir y guardar el audio WAV
+        # Convertir y escalar el audio
         audio_data = output.cpu().numpy().squeeze()
         # Escalar a INT16 (formato estándar WAV)
         audio_data_int = (audio_data * 32767).astype(np.int16) 
         
-        wavfile.write(output_path, rate=SAMPLING_RATE, data=audio_data_int)
+        # 🚨 CAMBIO CRÍTICO: Usar un buffer en memoria para la salida WAV
+        buffer = io.BytesIO()
+        wavfile.write(buffer, rate=SAMPLING_RATE, data=audio_data_int)
+        buffer.seek(0) # Resetear la posición del buffer
+        
+        # 🚨 CRÍTICO: Codificar y enviar a stdout
+        base64_audio = base64.b64encode(buffer.read()).decode('utf-8')
+        sys.stdout.write(base64_audio)
 
-        sys.stderr.write(f"[TTS GEN] ✅ Audio guardado correctamente en: {output_path}\n")
+        sys.stderr.write(f"[TTS GEN] ✅ Audio generado en memoria y enviado a stdout (Base64).\n") # 🚨 LOG ACTUALIZADO
         return 0
 
     except Exception as e:
@@ -74,7 +86,7 @@ def generate_audio_local(text_to_speak, output_path):
         return 1
 
 # ====================================================================
-# PUNTO DE ENTRADA PRINCIPAL
+# PUNTO DE ENTRADA PRINCIPAL (MODIFICADO)
 # ====================================================================
 if __name__ == "__main__":
     # OPTIMIZACIÓN: Añadimos un modo 'init' para pre-cargar el modelo sin generar audio.
@@ -84,13 +96,13 @@ if __name__ == "__main__":
         sys.exit(0)
 
     # Validación de argumentos para la generación de audio
-    if len(sys.argv) < 3:
-        sys.stderr.write("Uso: python hf_tts_api_generator.py '<texto>' '<ruta_salida.wav>'\n")
+    # 🚨 CAMBIO: Solo se necesita un argumento (el texto)
+    if len(sys.argv) < 2:
+        sys.stderr.write("Uso: python hf_tts_api_generator.py '<texto>'\n")
         sys.stderr.write("Uso alternativo para precarga: python hf_tts_api_generator.py init\n")
         sys.exit(1)
 
     text = sys.argv[1]
-    output_path = sys.argv[2]
     
-    # El modelo se inicializará automáticamente si no fue pre-cargado
-    sys.exit(generate_audio_local(text, output_path))
+    # 🚨 CAMBIO: Se elimina el output_path del argumento
+    sys.exit(generate_audio_local(text))

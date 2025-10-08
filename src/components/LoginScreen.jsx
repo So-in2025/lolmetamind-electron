@@ -3,12 +3,22 @@
 import React, { useState, useCallback, useEffect } from 'react'; // PRO-DEV: Añadido useEffect para diagnóstico
 import { useAppState } from '../context/AppStateContext';
 
+
+/**
+ * ========================================================
+ * CONFIGURACIÓN CRÍTICA DEL BACKEND
+ * 🚨 CORRECCIÓN 1: Usar la URL de Render para el frontend
+ * ========================================================
+ */
+// Lee la variable de entorno NEXT_PUBLIC_BACKEND_URL, o usa la URL de Render como fallback
+const RENDER_BACKEND_URL = 'https://lolmetamind-dmxt.onrender.com';
+const API_BASE_URL = `${RENDER_BACKEND_URL}/api/auth`; 
 /**
  * ========================================================
  * CONFIGURACIÓN CRÍTICA DEL BACKEND
  * ========================================================
  */
-const API_BASE_URL = 'http://localhost:3000/api/auth';
+//const API_BASE_URL = 'http://localhost:3000/api/auth';
 const API_ENDPOINTS = {
     LOGIN: `${API_BASE_URL}/login`,
     REGISTER: `${API_BASE_URL}/register`

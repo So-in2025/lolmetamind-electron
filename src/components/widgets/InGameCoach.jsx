@@ -7,31 +7,17 @@ import { useInteractiveWidget } from '@/hooks/useInteractiveWidget';
 import { useWebSocketCoach } from '@/hooks/useWebSocketCoach';
 import { useTTS } from '@/hooks/useTTS';
 
-/**
- * InGameCoach (v4.2 - Optimización de Fluidez TTS)
- * ============================
- * Widget para fase InProgress (partida en vivo)
- *
- * 💡 OBJETIVOS DE ESTA VERSIÓN:
- * 1. Asegurar la fluidez del TTS pasando un 'rate' de 1.2 al hook useTTS.
- * 2. Mantiene la estabilidad del TTS provista por useTTS v4.2.
- * 3. Recibe liveData y userData desde useLcuData.
- * 4. Analiza estado de partida y genera consejos en tiempo real.
- * 5. Utiliza TTS API (Hugging Face) para lectura de consejos.
- * 6. Maneja timeout, reintentos, logs y renderizado interactivo.
- * 7. Evita reprocesar datos repetidos usando hash de liveData.
- * ============================
- */
+// ... (Resto del componente se mantiene)
+
 export default function InGameCoach({ liveData, userData, LCU_STATUS }) {
   console.log('[InGameCoach] --- RENDERIZANDO --- Props:', { liveData, userData, LCU_STATUS });
 
   const { isInteractive, setInteractive } = useInteractiveWidget(false);
-  const { speak } = useTTS(); // ✅ Hook TTS (API)
+  const { speak } = useTTS();
 
   // ------------------------------
   // Estados internos
   // ------------------------------
-  const [aiAdvice, setAiAdvice] = useState(null); // Consejos de IA
   const [isLoadingAdvice, setIsLoadingAdvice] = useState(true);
   const [isTimedOut, setIsTimedOut] = useState(false);
   const [lastGameHash, setLastGameHash] = useState(null);
@@ -39,7 +25,8 @@ export default function InGameCoach({ liveData, userData, LCU_STATUS }) {
   // ------------------------------
   // Hook WebSocket para IA / Coach
   // ------------------------------
-  const { wsStatus, sendInGameUpdate } = useWebSocketCoach({
+  // Se desestructura 'aiAdvice' y 'wsStatus' del hook
+  const { wsStatus, sendInGameUpdate, aiAdvice } = useWebSocketCoach({
     userData,
     targetEvent: 'LIVE_ADVICE',
   });
@@ -58,10 +45,17 @@ export default function InGameCoach({ liveData, userData, LCU_STATUS }) {
   }, []);
 
   // ------------------------------
-  // Enviar liveData al WS si cambia
+  // Enviar liveData al WS si cambia (CON VERIFICACIÓN DE ESTADO)
   // ------------------------------
   useEffect(() => {
-    if (!liveData || !userData) return;
+    // 🚨 CORRECCIÓN CLAVE 1: Solo procede si el WS está conectado y los datos son válidos.
+    if (wsStatus !== 'CONNECTED' || !liveData || !userData) {
+        // Log solo si los datos están listos pero el WS no
+        if (liveData && userData) {
+            console.log(`[InGameCoach] ⏱ WS no listo. Estado actual: ${wsStatus}. Esperando...`);
+        }
+        return;
+    }
 
     const currentHash = computeLiveHash(liveData);
     if (currentHash === lastGameHash) {
@@ -69,24 +63,24 @@ export default function InGameCoach({ liveData, userData, LCU_STATUS }) {
       return;
     }
 
-    console.log('[InGameCoach] 🛰️ Nueva actualización de liveData. Enviando a WS...', liveData);
+    console.log('[InGameCoach] 🛰️ Nueva actualización de liveData. Enviando a WS...');
     setIsLoadingAdvice(true);
     setIsTimedOut(false);
 
-    sendInGameUpdate(liveData)
-      .then((advice) => {
-        console.log('[InGameCoach] ✅ Consejos recibidos del WS:', advice);
-        setAiAdvice(advice);
-        setIsLoadingAdvice(false);
-      })
-      .catch((err) => {
-        console.error('[InGameCoach] ❌ Error al solicitar consejos:', err);
+    // Envío del mensaje
+    const wasSent = sendInGameUpdate(liveData);
+
+    if (!wasSent) {
+        // Esto solo ocurre si el readyState cambió justo antes de enviar (fallo de red/server)
+        console.error('[InGameCoach] ❌ Fallo al enviar solicitud. WS no abierto (a pesar del status).');
         setIsTimedOut(true);
         setIsLoadingAdvice(false);
-      });
-
+    }
+    
     setLastGameHash(currentHash);
-  }, [liveData, userData, lastGameHash, computeLiveHash, sendInGameUpdate]);
+  // 🚨 CORRECCIÓN CLAVE 2: Se añade wsStatus a la lista de dependencias
+  }, [liveData, userData, lastGameHash, computeLiveHash, sendInGameUpdate, wsStatus]); 
+
 
   // ------------------------------
   // Timeout en caso de que WS no responda
@@ -106,9 +100,15 @@ export default function InGameCoach({ liveData, userData, LCU_STATUS }) {
   }, [isLoadingAdvice, aiAdvice]);
 
   // ------------------------------
-  // Reproducir TTS automáticamente cuando llegan nuevos consejos
+  // Reproducir TTS automáticamente cuando llegan nuevos consejos (se activa con aiAdvice)
   // ------------------------------
   useEffect(() => {
+    if (!aiAdvice) return;
+
+    // Si hay advice, la carga ha terminado.
+    console.log('[InGameCoach] ✅ Consejos recibidos del WS:', aiAdvice);
+    setIsLoadingAdvice(false); 
+
     if (!aiAdvice?.tips?.length) return;
 
     const adviceText = aiAdvice.tips.join('. ');
@@ -162,6 +162,7 @@ export default function InGameCoach({ liveData, userData, LCU_STATUS }) {
           <button
             onClick={() => {
               console.log('[InGameCoach] 🔄 Reintento manual solicitado.');
+              setLastGameHash(null); 
               setIsLoadingAdvice(true);
               setIsTimedOut(false);
             }}

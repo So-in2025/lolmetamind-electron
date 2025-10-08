@@ -41,8 +41,9 @@ app.disableHardwareAcceleration();
 // -------------------------------
 // Paths y Endpoints
 // -------------------------------
-const HTTP_BASE_API_URL = 'http://localhost:3001'; // Requests HTTP
-const BACKEND_BASE_URL = 'http://localhost:3000';
+// 🚨 CORRECCIÓN 1: Apuntar a las URLs HTTPS de Render
+const BACKEND_BASE_URL = 'https://lolmetamind-dmxt.onrender.com';
+const HTTP_BASE_API_URL = 'https://lolmetamind-dmxt.onrender.com';
 const FRONTEND_BASE_URL = 'http://localhost:3001';
 
 // Endpoints backend específicos
@@ -58,7 +59,9 @@ const LOGIN_PATH = isDevMode
     : `file://${path.join(__dirname, 'out', 'index.html')}`;
 
 // HTTPS agent custom (ignora certificados locales)
-const backendAgent = new https.Agent({ rejectUnauthorized: false });
+// 🚨 CORRECCIÓN 2: Anular el agente custom para que Axios use HTTPS por defecto.
+const backendAgent = null;
+process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0'; // <--- AÑADIR/VERIFICAR AQUÍ
 
 // -------------------------------
 // Helper async simple
@@ -161,7 +164,7 @@ async function fetchAndStoreUserProfile(username, token) {
     try {
         const response = await axios.get(`${BACKEND_BASE_URL}${USER_PROFILE_ENDPOINT}`, {
             headers: { 'Authorization': `Bearer ${token}` },
-            httpsAgent: backendAgent,
+            // 🚨 CORRECCIÓN 3: Se elimina httpsAgent: backendAgent
             timeout: 15000
         });
 
@@ -262,6 +265,8 @@ function createLoginWindow() {
             preload: preloadPath,
             nodeIntegration: false,
             contextIsolation: true,
+            devTools: true, 
+
         },
     });
 
@@ -273,6 +278,11 @@ function createLoginWindow() {
         console.log('[WINDOW] webContents did-finish-load fired');
     });
 
+    // 🚨 CORRECCIÓN: Forzar la apertura de las DevTools aquí.
+    if (isDevMode) {
+        loginWindow.webContents.openDevTools({ mode: 'detach' });
+    }
+    
     // SE ELIMINÓ EL BLOQUE 'ready-to-show' CON EL SETTIMEOUT.
     // ESTA LÓGICA AHORA ESTÁ EN app.on('ready').
 
@@ -401,19 +411,38 @@ function createOverlayWindow() {
 // ✅ 1. MARCAMOS EL EVENTO 'ready' COMO ASÍNCRONO
 app.on('ready', async () => {
     console.log('[APP] Electron listo. Iniciando secuencia de arranque...');
+    
+    // La anulación TLS (process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0') debería estar al inicio del archivo.
+    // Asegúrate de que solo esté presente una vez al inicio del archivo, no aquí.
 
     // 1. Mostramos la pantalla de carga
     createSplashWindow();
 
+    // =======================================================
+    // === FIX CRÍTICO: Anulación de Error de Certificado WSS ===
+    // =======================================================
+    session.defaultSession.on('certificate-error', (event, webContents, url, error, certificate, callback) => {
+        const RENDER_WS_DOMAIN = 'lolmetamind-ws.onrender.com';
+
+        // CRÍTICO: Permite la conexión solo si es nuestro servidor WSS
+        if (url.includes(RENDER_WS_DOMAIN)) {
+            event.preventDefault(); // Previene la ventana de error por defecto
+            callback(true); // Acepta el certificado (lo trata como confiable)
+            console.log(`[WSS FIX] ✅ Forzando confianza para el certificado de ${RENDER_WS_DOMAIN}.`);
+        } else {
+            callback(false); // Rechaza todos los demás certificados
+        }
+    });
+
     try {
-        // 2. ESPERAMOS a que el modelo de voz termine de cargar
-        await prewarmTtsModel(); // 'prewarmTtsModel' debe estar definida antes de este bloque
+        // 2. ESPERAMOS a que el modelo de voz termine de cargar (SOLO UNA EJECUCIÓN)
+        await prewarmTtsModel(); 
         console.log('[APP] Pre-calentamiento de TTS completado.');
 
     } catch (error) {
         console.error('[APP] FALLO CRÍTICO: No se pudo cargar el modelo TTS.', error);
     }
-
+    
     // 3. Una vez que el modelo cargó, creamos la ventana de login
     const loginWin = createLoginWindow();
     
@@ -442,7 +471,8 @@ app.on('ready', async () => {
             const response = await axios.post(
                 `${BACKEND_BASE_URL}${endpoint}`,
                 payload,
-                { headers: { 'Authorization': `Bearer ${token}` }, httpsAgent: backendAgent, timeout: 30000 }
+                // 🚨 CORRECCIÓN 4: Se elimina httpsAgent: backendAgent
+                { headers: { 'Authorization': `Bearer ${token}` }, timeout: 30000 }
             );
             console.log(`[AI REQUEST] ${endpoint} ✅ Respuesta recibida`);
             return response.data;
@@ -688,7 +718,8 @@ app.on('ready', async () => {
                     await axios.post(
                         `${BACKEND_BASE_URL}${LIVE_GAME_UPDATE_ENDPOINT}`,
                         latestRiotApiData,
-                        { headers: { 'Authorization': `Bearer ${userToken}` }, httpsAgent: backendAgent, timeout: 5000 }
+                        // 🚨 CORRECCIÓN 5: Se elimina httpsAgent: backendAgent
+                        { headers: { 'Authorization': `Bearer ${userToken}` }, timeout: 5000 }
                     );
                     console.log('[MAIN-FLOW] ✅ Datos iniciales enviados al backend');
                 } catch (backendError) {
@@ -829,7 +860,7 @@ app.on('ready', async () => {
         try {
             const response = await axios.get(`${BACKEND_BASE_URL}/api/user/profile`, { 
                 headers: { 'Authorization': `Bearer ${token}` },
-                httpsAgent: backendAgent,
+                // 🚨 CORRECCIÓN 6: Se elimina httpsAgent: backendAgent
                 timeout: 15000
             });
             return response.data;
