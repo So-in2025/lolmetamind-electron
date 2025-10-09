@@ -1,1 +1,1 @@
-self.__REACT_LOADABLE_MANIFEST="{\"app\\\\page.jsx -> @/components/LoginScreen\":{\"id\":\"app\\\\page.jsx -> @/components/LoginScreen\",\"files\":[\"static/chunks/_app-pages-browser_src_components_LoginScreen_jsx.js\"]}}"
+self.__REACT_LOADABLE_MANIFEST='{"app\\\\page.jsx -> @/components/LoginScreen":{"id":7114,"files":["static/chunks/114.2d5b0bd2d05197e1.js"]}}';

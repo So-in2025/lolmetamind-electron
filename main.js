@@ -1,3 +1,23 @@
+// =================================================================================================
+// 🔥 PROCESO PRINCIPAL DE ELECTRON [VERSIÓN MEJORADA]
+// =================================================================================================
+//
+// CARACTERÍSTICAS CLAVE DE ESTA VERSIÓN:
+// ------------------------------------
+// 1.  **Pre-calentamiento de Servidores (Warm-up)**: Durante la pantalla de carga (splash),
+//     se envían pings de forma concurrente al backend y al servidor WebSocket para despertarlos
+//     de un posible "cold start" en Render.
+// 2.  **Arranque Robusto y Sincronizado**: La ventana de login solo se muestra después de que
+//     los servidores han sido despertados y el TTS local ha sido precargado, asegurando que
+//     la aplicación esté 100% lista para el usuario.
+// 3.  **Manejo de Errores Mejorado**: Si los servidores no responden después de múltiples intentos,
+//     se notifica al usuario con un diálogo de error claro.
+// 4.  **IPC Seguro y Centralizado**: Toda la comunicación entre el proceso principal y las ventanas
+//     (renderer) está gestionada con un `ipcManager` para mayor seguridad y organización.
+//
+// =================================================================================================
+
+
 // ===============================
 // ETAPA 1: IMPORTS, CONFIG Y TTS
 // ===============================
@@ -95,39 +115,68 @@ let latestRiotApiData = null;      // Últimos datos de Riot API
 let isLcuPollingPaused = false; 
 
 
-// -------------------------------
-// Función para despertar el Host de Render
-// -------------------------------
-async function pingRenderHost() {
-    console.log('[COLD START] Pinging Render host para despertar...');
-    
-    try {
-        const startTime = Date.now();
-        
-        // Enviamos una petición GET simple (la ruta raíz del backend)
-        const response = await axios.get(BACKEND_BASE_URL, { 
-            // 🚨 Importante: NO usar headers ni httpsAgent aquí, solo la URL base
-            timeout: 15000 // 15 segundos para dar tiempo al Cold Start
-        });
-        
-        const duration = Date.now() - startTime;
-        
-        if (response.status === 200 || response.status === 404) { // 404 es aceptable si la ruta raíz no existe
-            console.log(`[COLD START] ✅ Host respondio. Latencia: ${duration}ms`);
-            return true;
+// ============================================================
+// 🔥 FUNCIÓN DE PRE-CALENTAMIENTO DE SERVIDORES (NUEVA Y MEJORADA)
+// ============================================================
+/**
+ * Envía pings a todos los servicios de Render para despertarlos de un posible cold start.
+ * Lo hace de forma concurrente para acelerar el proceso.
+ * @returns {Promise<boolean>} - True si todos los servicios respondieron, false si alguno falló.
+ */
+async function pingRenderHosts() {
+  const services = [
+    { name: 'Backend', url: 'https://lolmetamind-dmxt.onrender.com/api/health' },
+    // Hacemos un ping HTTPS al servidor WS para despertarlo. Es suficiente.
+    { name: 'WebSocket Server', url: 'https://lolmetamind-ws.onrender.com' },
+  ];
+
+  const pingService = async ({ name, url }) => {
+    const MAX_RETRIES = 3;
+    const RETRY_DELAY = 10000; // 10 segundos de espera entre reintentos
+    const TIMEOUT = 45000; // 45 segundos de timeout por intento
+
+    for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+      try {
+        console.log(`[COLD START]  ping a ${name}... (Intento ${attempt}/${MAX_RETRIES})`);
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), TIMEOUT);
+
+        // Usamos un User-Agent para identificar estos pings en los logs del servidor si es necesario
+        const response = await fetch(url, { signal: controller.signal, headers: { 'User-Agent': 'MetaMind-Electron-Warmup/1.0' } });
+        clearTimeout(timeoutId);
+
+        if (response.ok || response.status < 500) { // Consideramos cualquier respuesta que no sea un error de servidor como un "despertar"
+          console.log(`[COLD START] ✅ ${name} respondió en el intento ${attempt}.`);
+          return true;
+        } else {
+          console.warn(`[COLD START] ⚠️ ${name} respondió con estado de error ${response.status} en el intento ${attempt}.`);
         }
-        console.warn(`[COLD START] Host respondió con status ${response.status}.`);
-        return true; // Consideramos que el host está activo
-        
-    } catch (error) {
-        console.warn(`[COLD START] ⚠️ Host ping falló o agotó el tiempo de espera (15s). Error: ${error.message}`);
-        // Permitimos el fallo; el login lo reintentará.
-        return false; 
+      } catch (error) {
+        if (error.name === 'AbortError') {
+          console.error(`[COLD START] ❌ Ping a ${name} falló por timeout de ${TIMEOUT / 1000}s en el intento ${attempt}.`);
+        } else {
+          console.error(`[COLD START] ❌ Error de red en ping a ${name} (intento ${attempt}):`, error.message);
+        }
+      }
+
+      if (attempt < MAX_RETRIES) {
+        await new Promise(resolve => setTimeout(resolve, RETRY_DELAY));
+      }
     }
+    console.error(`[COLD START] 🚨 ${name} no respondió después de todos los intentos.`);
+    return false;
+  };
+
+  // Ejecutamos todos los pings en paralelo y esperamos a que todos terminen
+  const results = await Promise.all(services.map(pingService));
+  
+  // Retorna true solo si CADA UNO de los resultados fue true
+  return results.every(Boolean);
 }
 
+
 // Función de Pre-carga del Modelo TTS (devuelve una Promesa)
-const prewarmTtsModel = () => {
+const preloadTTS = () => {
     return new Promise((resolve, reject) => {
         if (splashWindow) {
             splashWindow.webContents.send('tts-status', 'Cargando modelo de voz...');
@@ -448,6 +497,7 @@ app.on('ready', async () => {
 
     // 1. Mostramos la pantalla de carga
     createSplashWindow();
+    console.log('[APP] 🚀 Splash screen mostrada. Iniciando pre-calentamiento...');
 
     // =======================================================
     // === FIX CRÍTICO: Anulación de Error de Certificado WSS ===
@@ -468,25 +518,30 @@ app.on('ready', async () => {
     // 🚨 CORRECCIÓN: Ejecución concurrente del TTS local y el Ping remoto
     console.log('[APP] Iniciando carga concurrente (TTS Local + Ping Remoto)...');
 
-    const [ttsResult, pingResult] = await Promise.all([
-        // Ejecución 1: Carga local del modelo TTS
-        prewarmTtsModel().catch(err => err), 
-        
-        // Ejecución 2: Despertar el host de Render
-        pingRenderHost().catch(err => err)
-    ]);
-    
-    if (ttsResult instanceof Error) {
-        console.error('[APP] FALLO CRÍTICO: No se pudo cargar el modelo TTS. La voz estará deshabilitada.', ttsResult);
-    } else {
-        console.log('[APP] ✅ Pre-calentamiento de TTS completado.');
-    }
+     // Ahora, las promesas manejan su propio estado de éxito/fracaso
+  const [ttsResult, pingResult] = await Promise.all([
+    preloadTTS().then(() => {
+      console.log('[APP] ✅ Pre-calentamiento de TTS completado.');
+      return true;
+    }).catch(err => {
+      console.error('[APP] ❌ Fallo en el pre-calentamiento de TTS.', err);
+      return false; // Indica fallo
+    }),
+    pingRenderHost() // Nuestra nueva función resiliente
+  ]);
 
-    if (pingResult instanceof Error) {
-        console.warn('[APP] ⚠️ Fallo en el ping inicial a Render. El host puede estar durmiendo.');
-    } else {
-        console.log('[APP] ✅ Host de Render inicializado/despierto.');
-    }
+  if (pingResult) {
+    console.log('[APP] ✅ Host de Render inicializado/despierto.');
+  } else {
+    // 🚨 MOSTRAR UN DIÁLOGO DE ERROR SI EL PING FALLA COMPLETAMENTE
+    dialog.showErrorBox(
+      'Error de Conexión',
+      'No se pudo establecer conexión con los servidores de MetaMind. Por favor, verifica tu conexión a internet y reinicia la aplicación.'
+    );
+    // Podrías decidir cerrar la app aquí si la conexión es crítica
+    // app.quit();
+    // return;
+  }
     
     // 3. Una vez que el modelo cargó, creamos la ventana de login
     const loginWin = createLoginWindow();
@@ -500,7 +555,7 @@ app.on('ready', async () => {
         loginWin.center();
         console.log('[APP] Secuencia de arranque completada. Mostrando Login.');
     });
-    
+
 // ===============================
 // ETAPA 3: IPC IA, HUGGING FACE TTS y Shortcuts (Handlers Registrados Primero)
 // ===============================
@@ -610,6 +665,7 @@ app.on('ready', async () => {
             // 3. Ejecutar el script Python (solo pasamos texto)
             // CRÍTICO: Python escribe el Base64 directamente al stdout.
             const pythonProcess = spawn(pythonExecutable, [
+                '-u', // <--- AGREGAR ESTA BANDERA CRÍTICA
                 pythonScriptPath,
                 text
             ], { env: env }); 
